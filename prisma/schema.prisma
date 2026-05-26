@@ -1,0 +1,1553 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ServicePartnerStatus {
+  ACTIVE
+  PENDING
+  REJECTED
+  INACTIVE
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  ON_HOLD
+}
+
+enum VendorStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  REJECTED
+  INACTIVE
+}
+
+enum RoleScope {
+  TENANT
+  PLATFORM
+}
+
+enum AssignmentRole {
+  PM
+  SM
+  TECHNICIAN
+}
+
+enum ServiceRequestStatus {
+  DRAFT
+  RAISED
+  TRIAGED
+  PM_ASSIGNED
+  SM_ASSIGNED
+  QUOTE_PREPARING
+  QUOTE_SUBMITTED
+  QUOTE_APPROVED
+  QUOTE_REJECTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+enum TaskStatus {
+  YET_TO_START
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  REOPENED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVISED
+}
+
+enum RfqStatus {
+  DRAFT
+  PUBLISHED
+  QUOTING
+  CLOSED
+  CANCELLED
+}
+
+enum RfqVendorStatus {
+  INVITED
+  QUOTING
+  QUOTE_SUBMITTED
+  SELECTED
+  REJECTED
+  CANCELLED
+}
+
+enum RateCardStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVAL_PENDING
+  APPROVED
+  REJECTED
+  ISSUED
+  PARTIALLY_FULFILLED
+  FULFILLED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SUBMITTED
+  APPROVAL_PENDING
+  APPROVED
+  REJECTED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  DRAFT
+  REQUESTED
+  APPROVAL_PENDING
+  APPROVED
+  REJECTED
+  PAID
+  PARTIALLY_PAID
+  CANCELLED
+}
+
+enum ExpenseStatus {
+  DRAFT
+  SUBMITTED
+  APPROVAL_PENDING
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
+enum InventoryTxnType {
+  IN
+  OUT
+  PURCHASE
+  RETURN
+  ISSUE
+  ADJUSTMENT
+  TRANSFER
+}
+
+enum OtpPurpose {
+  LOGIN
+  ADMIN_LOGIN
+  PASSWORD_RESET
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+}
+
+enum ActivityEntityType {
+  USER
+  CLIENT
+  CLIENT_USER
+  SERVICE_REQUEST
+  TASK
+  QUOTATION
+  INVENTORY_REQUEST
+  RFQ
+  PURCHASE_ORDER
+  INVOICE
+  PAYMENT
+  EXPENSE
+  VENDOR_PAYMENT
+  CONVERSATION
+  OTHER
+}
+
+enum LedgerSourceType {
+  PAYMENT
+  EXPENSE
+  VENDOR_PAYMENT
+  INVENTORY
+}
+
+model ServicePartner {
+  id          String               @id @default(uuid())
+  code        String               @unique
+  name        String
+  legalName   String?
+  status      ServicePartnerStatus @default(ACTIVE)
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  state       String?
+  country     String?
+  postalCode  String?
+  metadata    Json?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  deletedAt   DateTime?
+
+  users                 User[]
+  roles                 Role[]
+  settings              Setting[]
+  navigationItems       NavigationItem[]
+  clients               Client[]
+  clientUsers           ClientUser[]
+  branches              Branch[]
+  categories            Category[]
+  items                 Item[]
+  rateCards             RateCard[]
+  serviceRequests       ServiceRequest[]
+  assignments           Assignment[]
+  serviceAssignments    ServiceAssignment[]
+  quotations            Quotation[]
+  tasks                 Task[]
+  timeLogs              TimeLog[]
+  activityLogs          ActivityLog[]
+  inventoryItems        InventoryItem[]
+  inventoryTransactions InventoryTransaction[]
+  inventoryRequests     InventoryRequest[]
+  vendors               Vendor[]
+  rfqs                  Rfq[]
+  purchaseOrders        PurchaseOrder[]
+  invoices              Invoice[]
+  payments              Payment[]
+  expenses              Expense[]
+  vendorPayments        VendorPayment[]
+  ledgerEntries         LedgerEntry[]
+  attachments           Attachment[]
+  conversations         Conversation[]
+  messages              Message[]
+  notifications         Notification[]
+  otpChallenges         OtpChallenge[]
+  legacyIdMaps          LegacyIdMap[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model User {
+  id               String     @id @default(uuid())
+  servicePartnerId String
+  name             String?
+  email            String?    @unique
+  emailVerified    DateTime?
+  phone            String?    @unique
+  image            String?
+  passwordHash     String?
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+
+  roles                        UserRole[]
+  clientUserProfile            ClientUser?
+  vendorProfile                Vendor?
+  createdServiceRequests       ServiceRequest[]              @relation("ServiceRequestCreatedByUser")
+  assignments                  Assignment[]
+  taskAssignments              Task[]                        @relation("TaskAssignee")
+  tasksCreated                 Task[]                        @relation("TaskCreator")
+  timeLogs                     TimeLog[]
+  activityLogs                 ActivityLog[]                 @relation("ActivityActor")
+  serviceRequestStatusChanges  ServiceRequestStatusHistory[] @relation("ServiceRequestStatusChangedBy")
+  quotationsPrepared           Quotation[]                   @relation("QuotationPreparedBy")
+  quotationsApproved           Quotation[]                   @relation("QuotationApprovedBy")
+  inventoryRequestsRequested   InventoryRequest[]            @relation("InventoryRequestRequestedBy")
+  inventoryRequestsApproved    InventoryRequest[]            @relation("InventoryRequestApprovedBy")
+  rfqsCreated                  Rfq[]                         @relation("RfqCreatedBy")
+  purchaseOrdersCreated        PurchaseOrder[]               @relation("PurchaseOrderCreatedBy")
+  purchaseOrdersApproved       PurchaseOrder[]               @relation("PurchaseOrderApprovedBy")
+  invoicesCreated              Invoice[]                     @relation("InvoiceCreatedBy")
+  invoicesApproved             Invoice[]                     @relation("InvoiceApprovedBy")
+  paymentRequested             Payment[]                     @relation("PaymentRequestedBy")
+  paymentApproved              Payment[]                     @relation("PaymentApprovedBy")
+  paymentPaid                  Payment[]                     @relation("PaymentPaidBy")
+  expenseRequested             Expense[]                     @relation("ExpenseRequestedBy")
+  expenseApproved              Expense[]                     @relation("ExpenseApprovedBy")
+  vendorPaymentRequested       VendorPayment[]               @relation("VendorPaymentRequestedBy")
+  vendorPaymentApproved        VendorPayment[]               @relation("VendorPaymentApprovedBy")
+  vendorPaymentPaid            VendorPayment[]               @relation("VendorPaymentPaidBy")
+  ledgerEntriesCreated         LedgerEntry[]                 @relation("LedgerEntryCreatedBy")
+  inventoryTransactionsCreated InventoryTransaction[]        @relation("InventoryTransactionCreatedBy")
+  uploadedAttachments          Attachment[]                  @relation("AttachmentUploadedBy")
+  conversationsCreated         Conversation[]                @relation("ConversationCreatedBy")
+  conversationParticipations   ConversationParticipant[]
+  messagesSent                 Message[]                     @relation("MessageSender")
+  notificationsReceived        Notification[]                @relation("NotificationRecipient")
+  notificationsCreated         Notification[]                @relation("NotificationCreatedBy")
+  otpChallenges                OtpChallenge[]
+  accounts                     Account[]
+  sessions                     Session[]
+
+  @@index([servicePartnerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model OtpChallenge {
+  id               String     @id @default(uuid())
+  servicePartnerId String
+  userId           String?
+  purpose          OtpPurpose
+  channel          OtpChannel
+  target           String
+  codeHash         String
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  attemptCount     Int        @default(0)
+  maxAttempts      Int        @default(5)
+  lastAttemptAt    DateTime?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime   @default(now())
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  user           User?          @relation(fields: [userId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([target, purpose, createdAt])
+  @@index([expiresAt])
+}
+
+model Role {
+  id               String    @id @default(uuid())
+  servicePartnerId String
+  name             String
+  key              String
+  description      String?
+  scope            RoleScope @default(TENANT)
+  isSystem         Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  users          UserRole[]
+  permissions    RolePermission[]
+
+  @@unique([servicePartnerId, key])
+  @@index([servicePartnerId])
+  @@index([scope])
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles          RolePermission[]
+  navigationRefs NavigationItemPermission[]
+
+  @@index([module])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+}
+
+model NavigationItem {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  key              String
+  label            String
+  icon             String?
+  href             String
+  parentId         String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  servicePartner ServicePartner   @relation(fields: [servicePartnerId], references: [id])
+  parent         NavigationItem?  @relation("NavigationTree", fields: [parentId], references: [id])
+  children       NavigationItem[] @relation("NavigationTree")
+  permissions    NavigationItemPermission[]
+
+  @@unique([servicePartnerId, key])
+  @@index([servicePartnerId])
+  @@index([parentId])
+  @@index([isActive, sortOrder])
+}
+
+model NavigationItemPermission {
+  navigationItemId String
+  permissionId     String
+
+  navigationItem NavigationItem @relation(fields: [navigationItemId], references: [id], onDelete: Cascade)
+  permission     Permission     @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([navigationItemId, permissionId])
+  @@index([permissionId])
+}
+
+model Setting {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  key              String
+  value            Json
+  isSecret         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+
+  @@unique([servicePartnerId, key])
+  @@index([servicePartnerId])
+}
+
+model Client {
+  id               String       @id @default(uuid())
+  servicePartnerId String
+  code             String
+  name             String
+  legalName        String?
+  email            String?
+  phone            String?
+  status           ClientStatus @default(ACTIVE)
+  address          String?
+  city             String?
+  state            String?
+  country          String?
+  postalCode       String?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner  ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  branches        Branch[]
+  clientUsers     ClientUser[]
+  serviceRequests ServiceRequest[]
+  rateCards       RateCard[]
+  rfqs            Rfq[]
+  payments        Payment[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ClientUser {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  clientId         String
+  userId           String   @unique
+  designation      String?
+  reportingToId    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner         ServicePartner   @relation(fields: [servicePartnerId], references: [id])
+  client                 Client           @relation(fields: [clientId], references: [id])
+  user                   User             @relation(fields: [userId], references: [id])
+  reportingTo            ClientUser?      @relation("ClientUserHierarchy", fields: [reportingToId], references: [id])
+  subordinates           ClientUser[]     @relation("ClientUserHierarchy")
+  createdServiceRequests ServiceRequest[] @relation("ServiceRequestCreatedByClientUser")
+
+  @@index([servicePartnerId])
+  @@index([clientId])
+  @@index([reportingToId])
+}
+
+model Branch {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  clientId         String
+  code             String
+  name             String
+  address          String?
+  city             String?
+  state            String?
+  country          String?
+  postalCode       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner        ServicePartner         @relation(fields: [servicePartnerId], references: [id])
+  client                Client                 @relation(fields: [clientId], references: [id])
+  serviceRequests       ServiceRequest[]
+  inventoryRequests     InventoryRequest[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@unique([clientId, code])
+  @@index([servicePartnerId])
+  @@index([clientId])
+}
+
+model Category {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  code             String
+  name             String
+  description      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  items          Item[]
+  rfqItems       RfqItem[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+}
+
+model Item {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  categoryId       String
+  code             String
+  name             String
+  unit             String
+  description      String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  category       Category       @relation(fields: [categoryId], references: [id])
+
+  rateCardLines             RateCardLine[]
+  quotationItems            QuotationItem[]
+  inventoryItems            InventoryItem[]
+  inventoryRequestItems     InventoryRequestItem[]
+  rfqItems                  RfqItem[]
+  purchaseOrderItems        PurchaseOrderItem[]
+  invoiceItems              InvoiceItem[]
+  serviceAssignmentLines    ServiceAssignmentLine[]
+  taskLines                 TaskLine[]
+  inventoryTransactionLines InventoryTransactionLine[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+  @@index([categoryId])
+  @@index([active])
+}
+
+model RateCard {
+  id               String         @id @default(uuid())
+  servicePartnerId String
+  clientId         String?
+  vendorId         String?
+  code             String
+  name             String
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  status           RateCardStatus @default(DRAFT)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  client         Client?        @relation(fields: [clientId], references: [id])
+  vendor         Vendor?        @relation(fields: [vendorId], references: [id])
+  lines          RateCardLine[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+  @@index([clientId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model RateCardLine {
+  id         String   @id @default(uuid())
+  rateCardId String
+  itemId     String
+  rate       Decimal  @db.Decimal(14, 2)
+  taxPercent Decimal? @db.Decimal(6, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  rateCard RateCard @relation(fields: [rateCardId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id])
+
+  @@unique([rateCardId, itemId])
+  @@index([itemId])
+}
+
+model ServiceRequest {
+  id                    String               @id @default(uuid())
+  servicePartnerId      String
+  clientId              String
+  branchId              String?
+  createdByUserId       String?
+  createdByClientUserId String?
+  serviceNumber         String
+  title                 String
+  description           String?
+  serviceType           String
+  status                ServiceRequestStatus @default(RAISED)
+  requestedAt           DateTime?
+  targetDate            DateTime?
+  completedAt           DateTime?
+  metadata              Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  deletedAt             DateTime?
+
+  servicePartner      ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  client              Client         @relation(fields: [clientId], references: [id])
+  branch              Branch?        @relation(fields: [branchId], references: [id])
+  createdByUser       User?          @relation("ServiceRequestCreatedByUser", fields: [createdByUserId], references: [id])
+  createdByClientUser ClientUser?    @relation("ServiceRequestCreatedByClientUser", fields: [createdByClientUserId], references: [id])
+
+  statusHistory         ServiceRequestStatusHistory[]
+  assignments           Assignment[]
+  serviceAssignment     ServiceAssignment?
+  quotation             Quotation?
+  tasks                 Task[]
+  inventoryRequests     InventoryRequest[]
+  inventoryTransactions InventoryTransaction[]
+  payments              Payment[]
+  expenses              Expense[]
+  vendorPayments        VendorPayment[]
+  ledgerEntries         LedgerEntry[]
+  rfqs                  Rfq[]
+  purchaseOrders        PurchaseOrder[]
+  invoices              Invoice[]
+  conversations         Conversation[]
+  attachments           Attachment[]
+
+  @@unique([servicePartnerId, serviceNumber])
+  @@index([servicePartnerId])
+  @@index([clientId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ServiceRequestStatusHistory {
+  id               String               @id @default(uuid())
+  serviceRequestId String
+  fromStatus       ServiceRequestStatus?
+  toStatus         ServiceRequestStatus
+  remarks          String?
+  changedByUserId  String?
+  changedAt        DateTime             @default(now())
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  changedBy      User?          @relation("ServiceRequestStatusChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([serviceRequestId])
+  @@index([changedAt])
+}
+
+model Assignment {
+  id               String         @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String
+  userId           String
+  role             AssignmentRole
+  assignedAt       DateTime       @default(now())
+  unassignedAt     DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([serviceRequestId, role])
+  @@index([userId])
+}
+
+model ServiceAssignment {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String   @unique
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  lines          ServiceAssignmentLine[]
+
+  @@index([servicePartnerId])
+}
+
+model ServiceAssignmentLine {
+  id                  String   @id @default(uuid())
+  serviceAssignmentId String
+  itemId              String
+  plannedQty          Decimal  @db.Decimal(14, 3)
+  usedQty             Decimal  @db.Decimal(14, 3) @default(0)
+  unitRate            Decimal? @db.Decimal(14, 2)
+  remarks             String?
+
+  serviceAssignment ServiceAssignment @relation(fields: [serviceAssignmentId], references: [id], onDelete: Cascade)
+  item              Item              @relation(fields: [itemId], references: [id])
+
+  @@unique([serviceAssignmentId, itemId])
+  @@index([itemId])
+}
+
+model Quotation {
+  id               String         @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String         @unique
+  quotationNumber  String
+  status           ApprovalStatus @default(PENDING)
+  subtotal         Decimal        @db.Decimal(14, 2) @default(0)
+  taxTotal         Decimal        @db.Decimal(14, 2) @default(0)
+  grandTotal       Decimal        @db.Decimal(14, 2) @default(0)
+  validUntil       DateTime?
+  notes            String?
+  preparedByUserId String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  preparedBy     User?          @relation("QuotationPreparedBy", fields: [preparedByUserId], references: [id])
+  approvedBy     User?          @relation("QuotationApprovedBy", fields: [approvedByUserId], references: [id])
+
+  items       QuotationItem[]
+  attachments Attachment[]
+
+  @@unique([servicePartnerId, quotationNumber])
+  @@index([servicePartnerId])
+  @@index([status])
+}
+
+model QuotationItem {
+  id          String   @id @default(uuid())
+  quotationId String
+  itemId      String
+  description String?
+  quantity    Decimal  @db.Decimal(14, 3)
+  unitRate    Decimal  @db.Decimal(14, 2)
+  taxPercent  Decimal? @db.Decimal(6, 2)
+  amount      Decimal  @db.Decimal(14, 2)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id])
+
+  @@index([quotationId])
+  @@index([itemId])
+}
+
+model Task {
+  id               String     @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String
+  taskNumber       String
+  title            String
+  description      String?
+  status           TaskStatus @default(YET_TO_START)
+  assigneeUserId   String?
+  createdByUserId  String?
+  startDate        DateTime?
+  dueDate          DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  assignee       User?          @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
+  createdBy      User?          @relation("TaskCreator", fields: [createdByUserId], references: [id])
+
+  lines       TaskLine[]
+  timeLogs    TimeLog[]
+  attachments Attachment[]
+
+  @@unique([servicePartnerId, taskNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model TaskLine {
+  id          String   @id @default(uuid())
+  taskId      String
+  itemId      String
+  approvedQty Decimal? @db.Decimal(14, 3)
+  usedQty     Decimal? @db.Decimal(14, 3)
+  unitRate    Decimal? @db.Decimal(14, 2)
+  remarks     String?
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@index([taskId])
+  @@index([itemId])
+}
+
+model TimeLog {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  taskId           String
+  userId           String
+  punchInAt        DateTime
+  punchOutAt       DateTime?
+  punchInLat       Decimal? @db.Decimal(10, 7)
+  punchInLng       Decimal? @db.Decimal(10, 7)
+  punchOutLat      Decimal? @db.Decimal(10, 7)
+  punchOutLng      Decimal? @db.Decimal(10, 7)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  task           Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([taskId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id               String             @id @default(uuid())
+  servicePartnerId String
+  actorUserId      String?
+  action           String
+  module           String
+  entityType       ActivityEntityType
+  entityId         String?
+  message          String?
+  metadata         Json?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime           @default(now())
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  actor          User?          @relation("ActivityActor", fields: [actorUserId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([module, action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model InventoryItem {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  itemId           String
+  sku              String
+  currentQty       Decimal  @db.Decimal(14, 3) @default(0)
+  minQty           Decimal? @db.Decimal(14, 3)
+  maxQty           Decimal? @db.Decimal(14, 3)
+  location         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  item           Item           @relation(fields: [itemId], references: [id])
+
+  transactionLines InventoryTransactionLine[]
+  requestItems     InventoryRequestItem[]
+
+  @@unique([servicePartnerId, sku])
+  @@index([servicePartnerId])
+  @@index([itemId])
+}
+
+model InventoryTransaction {
+  id               String           @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String?
+  branchId         String?
+  vendorId         String?
+  type             InventoryTxnType
+  referenceNo      String?
+  notes            String?
+  txnAt            DateTime
+  createdByUserId  String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  branch         Branch?         @relation(fields: [branchId], references: [id])
+  vendor         Vendor?         @relation(fields: [vendorId], references: [id])
+  createdBy      User?           @relation("InventoryTransactionCreatedBy", fields: [createdByUserId], references: [id])
+
+  lines         InventoryTransactionLine[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([branchId])
+  @@index([vendorId])
+  @@index([type])
+  @@index([txnAt])
+}
+
+model InventoryTransactionLine {
+  id                     String   @id @default(uuid())
+  inventoryTransactionId String
+  inventoryItemId        String
+  itemId                 String
+  quantity               Decimal  @db.Decimal(14, 3)
+  unitRate               Decimal? @db.Decimal(14, 2)
+  amount                 Decimal? @db.Decimal(14, 2)
+
+  inventoryTransaction InventoryTransaction @relation(fields: [inventoryTransactionId], references: [id], onDelete: Cascade)
+  inventoryItem        InventoryItem        @relation(fields: [inventoryItemId], references: [id])
+  item                 Item                 @relation(fields: [itemId], references: [id])
+
+  @@index([inventoryTransactionId])
+  @@index([inventoryItemId])
+  @@index([itemId])
+}
+
+model InventoryRequest {
+  id                String         @id @default(uuid())
+  servicePartnerId  String
+  serviceRequestId  String?
+  branchId          String?
+  requestNumber     String
+  status            ApprovalStatus @default(PENDING)
+  requestedByUserId String?
+  approvedByUserId  String?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  branch         Branch?         @relation(fields: [branchId], references: [id])
+  requestedBy    User?           @relation("InventoryRequestRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy     User?           @relation("InventoryRequestApprovedBy", fields: [approvedByUserId], references: [id])
+
+  items InventoryRequestItem[]
+
+  @@unique([servicePartnerId, requestNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InventoryRequestItem {
+  id                 String   @id @default(uuid())
+  inventoryRequestId String
+  inventoryItemId    String
+  itemId             String
+  requestedQty       Decimal  @db.Decimal(14, 3)
+  approvedQty        Decimal? @db.Decimal(14, 3)
+  remarks            String?
+
+  inventoryRequest InventoryRequest @relation(fields: [inventoryRequestId], references: [id], onDelete: Cascade)
+  inventoryItem    InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  item             Item             @relation(fields: [itemId], references: [id])
+
+  @@index([inventoryRequestId])
+  @@index([inventoryItemId])
+  @@index([itemId])
+}
+
+model Vendor {
+  id               String       @id @default(uuid())
+  servicePartnerId String
+  userId           String?      @unique
+  code             String
+  name             String
+  email            String?
+  phone            String?
+  status           VendorStatus @default(PENDING_VERIFICATION)
+  isVerified       Boolean      @default(false)
+  gstNumber        String?
+  panNumber        String?
+  address          String?
+  city             String?
+  state            String?
+  country          String?
+  postalCode       String?
+  vendorType       String?
+  metadata         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  user           User?          @relation(fields: [userId], references: [id])
+
+  rfqVendors            RfqVendor[]
+  rateCards             RateCard[]
+  purchaseOrders        PurchaseOrder[]
+  invoices              Invoice[]
+  vendorPayments        VendorPayment[]
+  expenses              Expense[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+  @@index([status])
+}
+
+model Rfq {
+  id               String    @id @default(uuid())
+  servicePartnerId String
+  clientId         String?
+  serviceRequestId String?
+  createdByUserId  String?
+  rfqNumber        String
+  title            String
+  description      String?
+  status           RfqStatus @default(DRAFT)
+  dueDate          DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  client         Client?         @relation(fields: [clientId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  createdBy      User?           @relation("RfqCreatedBy", fields: [createdByUserId], references: [id])
+
+  items          RfqItem[]
+  vendorQuotes   RfqVendor[]
+  purchaseOrders PurchaseOrder[]
+  invoices       Invoice[]
+
+  @@unique([servicePartnerId, rfqNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RfqItem {
+  id         String   @id @default(uuid())
+  rfqId      String
+  categoryId String?
+  itemId     String
+  quantity   Decimal  @db.Decimal(14, 3)
+  specs      String?
+  remarks    String?
+
+  rfq      Rfq       @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id])
+  item     Item      @relation(fields: [itemId], references: [id])
+
+  @@index([rfqId])
+  @@index([itemId])
+}
+
+model RfqVendor {
+  id           String          @id @default(uuid())
+  rfqId        String
+  vendorId     String
+  status       RfqVendorStatus @default(INVITED)
+  quotedAmount Decimal?        @db.Decimal(14, 2)
+  notes        String?
+  submittedAt  DateTime?
+  createdAt    DateTime        @default(now())
+
+  rfq    Rfq    @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@unique([rfqId, vendorId])
+  @@index([vendorId])
+  @@index([status])
+}
+
+model PurchaseOrder {
+  id               String              @id @default(uuid())
+  servicePartnerId String
+  rfqId            String?
+  serviceRequestId String?
+  vendorId         String
+  poNumber         String
+  status           PurchaseOrderStatus @default(DRAFT)
+  orderDate        DateTime
+  expectedDate     DateTime?
+  subtotal         Decimal             @db.Decimal(14, 2) @default(0)
+  taxTotal         Decimal             @db.Decimal(14, 2) @default(0)
+  grandTotal       Decimal             @db.Decimal(14, 2) @default(0)
+  notes            String?
+  createdByUserId  String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  rfq            Rfq?            @relation(fields: [rfqId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  createdBy      User?           @relation("PurchaseOrderCreatedBy", fields: [createdByUserId], references: [id])
+  approvedBy     User?           @relation("PurchaseOrderApprovedBy", fields: [approvedByUserId], references: [id])
+
+  items          PurchaseOrderItem[]
+  invoices       Invoice[]
+  vendorPayments VendorPayment[]
+
+  @@unique([servicePartnerId, poNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  purchaseOrderId String
+  itemId          String
+  quantity        Decimal  @db.Decimal(14, 3)
+  unitRate        Decimal  @db.Decimal(14, 2)
+  taxPercent      Decimal? @db.Decimal(6, 2)
+  amount          Decimal  @db.Decimal(14, 2)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([itemId])
+}
+
+model Invoice {
+  id               String        @id @default(uuid())
+  servicePartnerId String
+  vendorId         String
+  purchaseOrderId  String?
+  rfqId            String?
+  serviceRequestId String?
+  invoiceNumber    String
+  status           InvoiceStatus @default(DRAFT)
+  invoiceDate      DateTime
+  dueDate          DateTime?
+  subtotal         Decimal       @db.Decimal(14, 2) @default(0)
+  taxTotal         Decimal       @db.Decimal(14, 2) @default(0)
+  grandTotal       Decimal       @db.Decimal(14, 2) @default(0)
+  notes            String?
+  createdByUserId  String?
+  approvedByUserId String?
+  approvedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  purchaseOrder  PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+  rfq            Rfq?            @relation(fields: [rfqId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  createdBy      User?           @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id])
+  approvedBy     User?           @relation("InvoiceApprovedBy", fields: [approvedByUserId], references: [id])
+
+  items       InvoiceItem[]
+  attachments Attachment[]
+
+  @@unique([servicePartnerId, invoiceNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InvoiceItem {
+  id         String   @id @default(uuid())
+  invoiceId  String
+  itemId     String
+  quantity   Decimal  @db.Decimal(14, 3)
+  unitRate   Decimal  @db.Decimal(14, 2)
+  taxPercent Decimal? @db.Decimal(6, 2)
+  amount     Decimal  @db.Decimal(14, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item    Item    @relation(fields: [itemId], references: [id])
+
+  @@index([invoiceId])
+  @@index([itemId])
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  servicePartnerId  String
+  serviceRequestId  String?
+  clientId          String?
+  paymentNumber     String
+  status            PaymentStatus @default(REQUESTED)
+  amount            Decimal       @db.Decimal(14, 2)
+  approvedAmount    Decimal?      @db.Decimal(14, 2)
+  currency          String        @default("INR")
+  requestedByUserId String?
+  approvedByUserId  String?
+  paidByUserId      String?
+  paidAt            DateTime?
+  remarks           String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  client         Client?         @relation(fields: [clientId], references: [id])
+  requestedBy    User?           @relation("PaymentRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy     User?           @relation("PaymentApprovedBy", fields: [approvedByUserId], references: [id])
+  paidBy         User?           @relation("PaymentPaidBy", fields: [paidByUserId], references: [id])
+
+  ledgerEntries LedgerEntry[]
+
+  @@unique([servicePartnerId, paymentNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([clientId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Expense {
+  id                String        @id @default(uuid())
+  servicePartnerId  String
+  serviceRequestId  String?
+  vendorId          String?
+  expenseNumber     String
+  status            ExpenseStatus @default(SUBMITTED)
+  amount            Decimal       @db.Decimal(14, 2)
+  approvedAmount    Decimal?      @db.Decimal(14, 2)
+  currency          String        @default("INR")
+  requestedByUserId String?
+  approvedByUserId  String?
+  paidAt            DateTime?
+  remarks           String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  vendor         Vendor?         @relation(fields: [vendorId], references: [id])
+  requestedBy    User?           @relation("ExpenseRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy     User?           @relation("ExpenseApprovedBy", fields: [approvedByUserId], references: [id])
+
+  ledgerEntries LedgerEntry[]
+  attachments   Attachment[]
+
+  @@unique([servicePartnerId, expenseNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model VendorPayment {
+  id                String        @id @default(uuid())
+  servicePartnerId  String
+  vendorId          String
+  purchaseOrderId   String?
+  serviceRequestId  String?
+  paymentNumber     String
+  status            PaymentStatus @default(REQUESTED)
+  amount            Decimal       @db.Decimal(14, 2)
+  approvedAmount    Decimal?      @db.Decimal(14, 2)
+  requestedByUserId String?
+  approvedByUserId  String?
+  paidByUserId      String?
+  paidAt            DateTime?
+  remarks           String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  vendor         Vendor          @relation(fields: [vendorId], references: [id])
+  purchaseOrder  PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  requestedBy    User?           @relation("VendorPaymentRequestedBy", fields: [requestedByUserId], references: [id])
+  approvedBy     User?           @relation("VendorPaymentApprovedBy", fields: [approvedByUserId], references: [id])
+  paidBy         User?           @relation("VendorPaymentPaidBy", fields: [paidByUserId], references: [id])
+
+  ledgerEntries LedgerEntry[]
+
+  @@unique([servicePartnerId, paymentNumber])
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model LedgerEntry {
+  id                     String           @id @default(uuid())
+  servicePartnerId       String
+  serviceRequestId       String?
+  sourceType             LedgerSourceType
+  paymentId              String?
+  expenseId              String?
+  vendorPaymentId        String?
+  inventoryTransactionId String?
+  entryDate              DateTime
+  debitAmount            Decimal          @db.Decimal(14, 2) @default(0)
+  creditAmount           Decimal          @db.Decimal(14, 2) @default(0)
+  description            String?
+  createdByUserId        String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  servicePartner       ServicePartner        @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest       ServiceRequest?       @relation(fields: [serviceRequestId], references: [id])
+  payment              Payment?              @relation(fields: [paymentId], references: [id])
+  expense              Expense?              @relation(fields: [expenseId], references: [id])
+  vendorPayment        VendorPayment?        @relation(fields: [vendorPaymentId], references: [id])
+  inventoryTransaction InventoryTransaction? @relation(fields: [inventoryTransactionId], references: [id])
+  createdBy            User?                 @relation("LedgerEntryCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([entryDate])
+  @@index([sourceType])
+  @@index([paymentId])
+  @@index([expenseId])
+  @@index([vendorPaymentId])
+  @@index([inventoryTransactionId])
+}
+
+model Attachment {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  uploadedByUserId String?
+  fileName         String
+  fileUrl          String
+  mimeType         String
+  fileSize         Int
+  createdAt        DateTime @default(now())
+  deletedAt        DateTime?
+
+  serviceRequestId String?
+  taskId           String?
+  quotationId      String?
+  invoiceId        String?
+  expenseId        String?
+  messageId        String?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  uploadedBy     User?          @relation("AttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  task           Task?           @relation(fields: [taskId], references: [id])
+  quotation      Quotation?      @relation(fields: [quotationId], references: [id])
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id])
+  expense        Expense?        @relation(fields: [expenseId], references: [id])
+  message        Message?        @relation(fields: [messageId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([uploadedByUserId])
+  @@index([createdAt])
+  @@index([serviceRequestId])
+  @@index([taskId])
+  @@index([quotationId])
+  @@index([invoiceId])
+  @@index([expenseId])
+  @@index([messageId])
+}
+
+model Conversation {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  serviceRequestId String?
+  title            String?
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  createdBy      User?           @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([servicePartnerId])
+  @@index([serviceRequestId])
+  @@index([createdAt])
+}
+
+model ConversationParticipant {
+  conversationId String
+  userId         String
+  joinedAt       DateTime @default(now())
+  leftAt         DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id               String      @id @default(uuid())
+  servicePartnerId String
+  conversationId   String
+  senderUserId     String?
+  type             MessageType @default(TEXT)
+  body             String?
+  createdAt        DateTime    @default(now())
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User?          @relation("MessageSender", fields: [senderUserId], references: [id])
+  attachments    Attachment[]
+
+  @@index([servicePartnerId])
+  @@index([conversationId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id               String              @id @default(uuid())
+  servicePartnerId String
+  recipientUserId  String
+  createdByUserId  String?
+  channel          NotificationChannel
+  status           NotificationStatus  @default(PENDING)
+  subject          String?
+  body             String
+  templateKey      String?
+  metadata         Json?
+  sentAt           DateTime?
+  readAt           DateTime?
+  createdAt        DateTime            @default(now())
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  recipient      User           @relation("NotificationRecipient", fields: [recipientUserId], references: [id])
+  createdBy      User?          @relation("NotificationCreatedBy", fields: [createdByUserId], references: [id])
+
+  @@index([servicePartnerId])
+  @@index([recipientUserId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model LegacyIdMap {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  legacySource     String
+  legacyCollection String
+  legacyId         String
+  newModel         String
+  newId            String
+  createdAt        DateTime @default(now())
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+
+  @@unique([legacySource, legacyCollection, legacyId])
+  @@index([newModel, newId])
+  @@index([servicePartnerId])
+}
