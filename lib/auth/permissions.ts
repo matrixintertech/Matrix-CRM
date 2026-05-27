@@ -3,6 +3,19 @@ import type { Session } from "next-auth";
 import { prisma } from "@/lib/db/prisma";
 
 export type PermissionKey =
+  | "categories.read"
+  | "categories.create"
+  | "categories.update"
+  | "categories.delete"
+  | "items.read"
+  | "items.create"
+  | "items.update"
+  | "items.delete"
+  | "rate_cards.read"
+  | "rate_cards.create"
+  | "rate_cards.update"
+  | "rate_cards.delete"
+  | "rate_cards.publish"
   | "service_partners.read"
   | "service_partners.create"
   | "service_partners.update"

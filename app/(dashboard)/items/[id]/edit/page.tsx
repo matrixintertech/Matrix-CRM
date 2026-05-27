@@ -1,0 +1,75 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { PageHeader } from "@/components/admin/page-header";
+import { updateItemAction } from "@/features/items/actions/item.actions";
+import { ItemForm } from "@/features/items/components/item-form";
+import { getItemById, listCategoriesForItemForm, listItemServicePartnersForForm } from "@/features/items/services/item.service";
+import { requirePermission } from "@/lib/auth/rbac";
+import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
+
+type EditItemPageProps = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<SearchParamsInput>;
+};
+
+function getErrorMessage(code?: string) {
+  if (code === "validation") {
+    return "Please review the submitted values.";
+  }
+  if (code === "duplicate") {
+    return "Item code must be unique within the selected service partner.";
+  }
+  if (code === "service-partner") {
+    return "Service partner is required.";
+  }
+  if (code === "mismatch") {
+    return "Category must belong to the selected service partner.";
+  }
+  return undefined;
+}
+
+export default async function EditItemPage({ params, searchParams }: EditItemPageProps) {
+  const session = await requirePermission("items.update");
+  const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
+  const item = await getItemById(session, id);
+
+  if (!item) {
+    notFound();
+  }
+
+  const [servicePartners, categories] = await Promise.all([
+    listItemServicePartnersForForm(session),
+    listCategoriesForItemForm(session),
+  ]);
+  const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
+
+  return (
+    <section className="space-y-5">
+      <PageHeader title="Edit Item" description="Update item details, category, and status." />
+      <div>
+        <Link href={`/items/${id}`} className="text-sm text-[var(--muted)] underline">
+          Back to details
+        </Link>
+      </div>
+      <ItemForm
+        action={updateItemAction.bind(null, id)}
+        cancelHref={`/items/${id}`}
+        servicePartners={servicePartners}
+        categories={categories}
+        canChooseServicePartner={session.user.isSuperAdmin}
+        errorMessage={errorMessage}
+        item={{
+          servicePartnerId: item.servicePartnerId,
+          categoryId: item.categoryId,
+          code: item.code,
+          name: item.name,
+          unit: item.unit,
+          description: item.description,
+          active: item.active,
+        }}
+      />
+    </section>
+  );
+}
+
