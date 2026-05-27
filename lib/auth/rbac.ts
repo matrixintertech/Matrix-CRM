@@ -1,6 +1,5 @@
-import { forbidden } from "next/navigation";
-
 import { getUserPermissions, hasPermission } from "@/lib/auth/permissions";
+import { redirectForbidden } from "@/lib/auth/access-control";
 import { requireAuth } from "@/lib/auth/session";
 
 export async function requirePermission(permissionKey: string) {
@@ -8,7 +7,7 @@ export async function requirePermission(permissionKey: string) {
   const allowed = await hasPermission(session, permissionKey);
 
   if (!allowed) {
-    forbidden();
+    redirectForbidden();
   }
 
   return session;
@@ -23,7 +22,7 @@ export async function requireAnyPermission(permissionKeys: string[]) {
 
   const permissions = await getUserPermissions(session.user.id);
   if (!permissionKeys.some((permissionKey) => permissions.includes(permissionKey))) {
-    forbidden();
+    redirectForbidden();
   }
 
   return session;
@@ -38,7 +37,7 @@ export async function requireAllPermissions(permissionKeys: string[]) {
 
   const permissions = await getUserPermissions(session.user.id);
   if (!permissionKeys.every((permissionKey) => permissions.includes(permissionKey))) {
-    forbidden();
+    redirectForbidden();
   }
 
   return session;

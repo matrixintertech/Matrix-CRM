@@ -1,13 +1,13 @@
-import { forbidden } from "next/navigation";
 import type { Session } from "next-auth";
 
+import { redirectForbidden } from "@/lib/auth/access-control";
 import { requireAuth } from "@/lib/auth/session";
 
 export async function requireTenantAccess(servicePartnerId: string) {
   const session = await requireAuth();
 
   if (!session.user.isSuperAdmin && session.user.servicePartnerId !== servicePartnerId) {
-    forbidden();
+    redirectForbidden();
   }
 
   return session;
