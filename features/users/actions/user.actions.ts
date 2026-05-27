@@ -144,21 +144,28 @@ export async function updateUserStatusAction(id: string, formData: FormData) {
     throw new Error("User not found.");
   }
 
-  await requireTenantAccess(user.servicePartnerId);
-  await assertCanChangeOwnCriticalState(id, parsed.data.status);
+  try {
+    await requireTenantAccess(user.servicePartnerId);
+    await assertCanChangeOwnCriticalState(id, parsed.data.status);
 
-  await prisma.user.update({ where: { id }, data: { status: parsed.data.status } });
-  await logActivity({
-    action: "user.status_change",
-    module: "users",
-    entityType: "USER",
-    entityId: id,
-    message: `User status changed to ${parsed.data.status}`,
-    servicePartnerId: user.servicePartnerId,
-  });
+    await prisma.user.update({ where: { id }, data: { status: parsed.data.status } });
+    await logActivity({
+      action: "user.status_change",
+      module: "users",
+      entityType: "USER",
+      entityId: id,
+      message: `User status changed to ${parsed.data.status}`,
+      servicePartnerId: user.servicePartnerId,
+    });
 
-  revalidateUserPaths(id);
-  redirect(getSafeRedirectPath(formData.get("redirectTo"), `/users/${id}`));
+    revalidateUserPaths(id);
+    redirect(getSafeRedirectPath(formData.get("redirectTo"), `/users/${id}`));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot lock out")) {
+      redirect(`/users/${id}?error=self-lockout`);
+    }
+    throw error;
+  }
 }
 
 export async function deleteUserAction(id: string, formData: FormData) {
@@ -169,28 +176,35 @@ export async function deleteUserAction(id: string, formData: FormData) {
     throw new Error("User not found.");
   }
 
-  await requireTenantAccess(user.servicePartnerId);
-  await assertCanChangeOwnCriticalState(id, undefined, true);
+  try {
+    await requireTenantAccess(user.servicePartnerId);
+    await assertCanChangeOwnCriticalState(id, undefined, true);
 
-  await prisma.user.update({
-    where: { id },
-    data: {
-      deletedAt: new Date(),
-      status: "INACTIVE",
-    },
-  });
+    await prisma.user.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        status: "INACTIVE",
+      },
+    });
 
-  await logActivity({
-    action: "user.delete",
-    module: "users",
-    entityType: "USER",
-    entityId: id,
-    message: "User soft deleted",
-    servicePartnerId: user.servicePartnerId,
-  });
+    await logActivity({
+      action: "user.delete",
+      module: "users",
+      entityType: "USER",
+      entityId: id,
+      message: "User soft deleted",
+      servicePartnerId: user.servicePartnerId,
+    });
 
-  revalidateUserPaths(id);
-  redirect(getSafeRedirectPath(formData.get("redirectTo"), "/users"));
+    revalidateUserPaths(id);
+    redirect(getSafeRedirectPath(formData.get("redirectTo"), "/users"));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot lock out")) {
+      redirect(`/users/${id}?error=self-lockout`);
+    }
+    throw error;
+  }
 }
 
 export async function assignUserRoleAction(id: string, formData: FormData) {
@@ -264,24 +278,31 @@ export async function removeUserRoleAction(id: string, formData: FormData) {
     throw new Error("Role not found.");
   }
 
-  if (id === session.user.id && role.key === "super_admin") {
-    const ownSuperAdminRoles = await countUserSuperAdminRoles(id);
-    if (ownSuperAdminRoles <= 1) {
-      throw new Error("Cannot remove your own last super admin role.");
+  try {
+    if (id === session.user.id && role.key === "super_admin") {
+      const ownSuperAdminRoles = await countUserSuperAdminRoles(id);
+      if (ownSuperAdminRoles <= 1) {
+        throw new Error("Cannot remove your own last super admin role.");
+      }
     }
+
+    await prisma.userRole.deleteMany({ where: { userId: id, roleId: parsed.data.roleId } });
+
+    await logActivity({
+      action: "user.role_remove",
+      module: "users",
+      entityType: "USER",
+      entityId: id,
+      message: `Role removed: ${role.key}`,
+      servicePartnerId: user.servicePartnerId,
+    });
+
+    revalidateUserPaths(id);
+    redirect(`/users/${id}?success=role-removed`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot remove your own last super admin role")) {
+      redirect(`/users/${id}?error=self-lockout`);
+    }
+    throw error;
   }
-
-  await prisma.userRole.deleteMany({ where: { userId: id, roleId: parsed.data.roleId } });
-
-  await logActivity({
-    action: "user.role_remove",
-    module: "users",
-    entityType: "USER",
-    entityId: id,
-    message: `Role removed: ${role.key}`,
-    servicePartnerId: user.servicePartnerId,
-  });
-
-  revalidateUserPaths(id);
-  redirect(`/users/${id}?success=role-removed`);
 }

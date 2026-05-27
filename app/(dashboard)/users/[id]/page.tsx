@@ -36,6 +36,9 @@ function getErrorMessage(code?: string) {
   if (code === "validation") {
     return "Request validation failed.";
   }
+  if (code === "self-lockout") {
+    return "This action is blocked to prevent unsafe super admin self-lockout.";
+  }
   return undefined;
 }
 
