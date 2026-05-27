@@ -5,6 +5,18 @@ import { env } from "../lib/config/env";
 const prisma = new PrismaClient();
 
 const baselinePermissions = [
+  "service_partners.read",
+  "service_partners.create",
+  "service_partners.update",
+  "service_partners.delete",
+  "clients.read",
+  "clients.create",
+  "clients.update",
+  "clients.delete",
+  "branches.read",
+  "branches.create",
+  "branches.update",
+  "branches.delete",
   "users.read",
   "users.create",
   "users.update",
@@ -33,6 +45,27 @@ const baselineNavigation = [
     href: "/",
     sortOrder: 1,
     permissionKey: "reports.read",
+  },
+  {
+    key: "service-partners",
+    label: "Service Partners",
+    href: "/service-partners",
+    sortOrder: 7,
+    permissionKey: "service_partners.read",
+  },
+  {
+    key: "clients",
+    label: "Clients",
+    href: "/clients",
+    sortOrder: 8,
+    permissionKey: "clients.read",
+  },
+  {
+    key: "branches",
+    label: "Branches",
+    href: "/branches",
+    sortOrder: 9,
+    permissionKey: "branches.read",
   },
   {
     key: "users",

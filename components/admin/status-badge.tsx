@@ -1,6 +1,9 @@
 const styles: Record<string, string> = {
   ACTIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   INACTIVE: "bg-slate-100 text-slate-700 ring-slate-200",
+  PENDING: "bg-amber-50 text-amber-800 ring-amber-200",
+  REJECTED: "bg-red-50 text-red-700 ring-red-200",
+  ON_HOLD: "bg-orange-50 text-orange-800 ring-orange-200",
   SUSPENDED: "bg-red-50 text-red-700 ring-red-200",
   PLATFORM: "bg-teal-50 text-teal-700 ring-teal-200",
   TENANT: "bg-sky-50 text-sky-700 ring-sky-200",
