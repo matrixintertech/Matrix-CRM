@@ -3,6 +3,7 @@ import type { OtpPurpose, UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { env } from "@/lib/config/env";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
+import { sendOtpMessage } from "@/features/auth/services/otp-provider.service";
 import {
   getOtpConfig,
   hashOtpCode,
@@ -71,30 +72,6 @@ export type VerifyOtpResult =
 const OTP_GENERIC_SEND_MESSAGE = "If this account exists, an OTP has been sent.";
 const OTP_GENERIC_VERIFY_MESSAGE = "Invalid or expired OTP.";
 
-type DeliveryOutcome = {
-  delivered: boolean;
-  devOtpPreview?: string;
-};
-
-async function sendOtpViaProvider(
-  channel: "EMAIL" | "SMS",
-  target: string,
-  code: string
-): Promise<DeliveryOutcome> {
-  const config = env();
-
-  if (config.IS_PRODUCTION) {
-    return { delivered: false };
-  }
-
-  if (config.OTP_DEV_MODE) {
-    return { delivered: true, devOtpPreview: code };
-  }
-
-  const _unused = { channel, target, code };
-  return { delivered: false };
-}
-
 function makeRateLimitKey(segment: string, purpose: OtpPurpose, target: string, ipAddress?: string | null): string {
   return `otp:${segment}:${purpose}:${target}:${ipAddress ?? "unknown"}`;
 }
@@ -139,16 +116,6 @@ export async function sendOtpChallenge(
       status: 429,
       message: "Too many OTP requests. Please try again later.",
       retryAfterSeconds: sendRateLimit.retryAfterSeconds,
-      maskedTarget,
-    };
-  }
-
-  if (env().IS_PRODUCTION) {
-    return {
-      ok: false,
-      code: "OTP_PROVIDER_NOT_CONFIGURED",
-      status: 500,
-      message: "OTP provider is not configured.",
       maskedTarget,
     };
   }
@@ -221,15 +188,20 @@ export async function sendOtpChallenge(
     select: { id: true },
   });
 
-  const delivery = await sendOtpViaProvider(channel, normalizedTarget, code);
+  const delivery = await sendOtpMessage({
+    channel,
+    target: normalizedTarget,
+    code,
+    purpose: input.purpose,
+  });
 
-  if (!delivery.delivered) {
+  if (!delivery.ok && delivery.code === "PROVIDER_NOT_CONFIGURED") {
     await prisma.otpChallenge.delete({ where: { id: challenge.id } });
     return {
       ok: false,
       code: "OTP_PROVIDER_NOT_CONFIGURED",
-      status: 500,
-      message: "OTP provider is not configured.",
+      status: 503,
+      message: "OTP delivery is temporarily unavailable. Please contact support.",
       maskedTarget,
     };
   }
@@ -239,8 +211,8 @@ export async function sendOtpChallenge(
     maskedTarget,
     expiresInSeconds: otpConfig.expirySeconds,
     resendAfterSeconds: otpConfig.resendCooldownSeconds,
-    ...(env().OTP_DEV_MODE && !env().IS_PRODUCTION && delivery.devOtpPreview
-      ? { devOtpPreview: delivery.devOtpPreview }
+    ...(env().OTP_DEV_MODE && !env().IS_PRODUCTION && delivery.ok && delivery.mode === "dev"
+      ? { devOtpPreview: code }
       : {}),
   };
 }

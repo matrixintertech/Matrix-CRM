@@ -28,12 +28,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(failure("VALIDATION_ERROR", "Invalid OTP request."), { status: 400 });
   }
 
-  const result = await sendOtpChallenge({
-    target: parsed.data.target,
-    purpose: parsed.data.purpose,
-    ipAddress: getRequestIp(request),
-    userAgent: request.headers.get("user-agent"),
-  });
+  let result;
+  try {
+    result = await sendOtpChallenge({
+      target: parsed.data.target,
+      purpose: parsed.data.purpose,
+      ipAddress: getRequestIp(request),
+      userAgent: request.headers.get("user-agent"),
+    });
+  } catch {
+    return NextResponse.json(failure("INTERNAL_ERROR", "Unable to process OTP request right now."), { status: 500 });
+  }
 
   if (!result.ok) {
     return NextResponse.json(
