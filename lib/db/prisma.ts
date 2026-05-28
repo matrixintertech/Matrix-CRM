@@ -9,7 +9,10 @@ if (process.platform === "win32" && !process.env.PRISMA_CLIENT_ENGINE_TYPE) {
 }
 
 function resolveRuntimeDatabaseUrl() {
-  const rawUrl = process.env.DATABASE_URL;
+  const rawUrl =
+    process.platform === "win32" && process.env.DIRECT_URL?.trim()
+      ? process.env.DIRECT_URL
+      : process.env.DATABASE_URL;
   if (!rawUrl) {
     return undefined;
   }
@@ -23,13 +26,22 @@ function resolveRuntimeDatabaseUrl() {
   try {
     const url = new URL(rawUrl);
     url.searchParams.set("channel_binding", "disable");
+    url.searchParams.set("gssencmode", "disable");
     return url.toString();
   } catch {
     if (/channel_binding=/i.test(rawUrl)) {
-      return rawUrl.replace(/channel_binding=[^&]*/gi, "channel_binding=disable");
+      const withChannelBinding = rawUrl.replace(/channel_binding=[^&]*/gi, "channel_binding=disable");
+      if (/gssencmode=/i.test(withChannelBinding)) {
+        return withChannelBinding.replace(/gssencmode=[^&]*/gi, "gssencmode=disable");
+      }
+      const separator = withChannelBinding.includes("?") ? "&" : "?";
+      return `${withChannelBinding}${separator}gssencmode=disable`;
     }
-    const separator = rawUrl.includes("?") ? "&" : "?";
-    return `${rawUrl}${separator}channel_binding=disable`;
+    let normalized = rawUrl;
+    const querySeparator = normalized.includes("?") ? "&" : "?";
+    normalized = `${normalized}${querySeparator}channel_binding=disable`;
+    const gssSeparator = normalized.includes("?") ? "&" : "?";
+    return `${normalized}${gssSeparator}gssencmode=disable`;
   }
 }
 

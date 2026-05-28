@@ -46,7 +46,7 @@ export function ServiceRequestsTable({ serviceRequests }: { serviceRequests: Ser
           header: "Client / Branch",
           cell: (serviceRequest) =>
             `${serviceRequest.client.name} (${serviceRequest.client.code})${
-              serviceRequest.branch ? ` • ${serviceRequest.branch.name} (${serviceRequest.branch.code})` : ""
+              serviceRequest.branch ? ` - ${serviceRequest.branch.name} (${serviceRequest.branch.code})` : ""
             }`,
         },
         {

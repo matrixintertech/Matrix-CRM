@@ -32,6 +32,8 @@ export async function GET() {
         ? "database_unreachable"
         : rawMessage.includes("Timed out fetching a new connection")
           ? "pool_timeout"
+          : rawMessage.includes("No credentials are available in the security package")
+            ? "windows_tls_credential_error"
           : rawMessage.includes("TLS connection")
             ? "tls_error"
             : "database_error");
