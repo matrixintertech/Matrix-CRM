@@ -3,6 +3,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 
 export async function GET() {
+  const databaseUrl = process.env.DATABASE_URL ?? "";
+  const directUrl = process.env.DIRECT_URL ?? "";
+  const runtimeEnv = {
+    databaseUrlPresent: databaseUrl.length > 0,
+    directUrlPresent: directUrl.length > 0,
+    databaseUrlPooledHost: /pooler/i.test(databaseUrl),
+    directUrlPooledHost: /pooler/i.test(directUrl),
+    databaseUrlHasSchema: /schema=matrixcrm_v2/i.test(databaseUrl),
+    directUrlHasSchema: /schema=matrixcrm_v2/i.test(directUrl),
+    databaseUrlHasSslModeRequire: /sslmode=require/i.test(databaseUrl),
+    directUrlHasSslModeRequire: /sslmode=require/i.test(directUrl),
+  };
+
   const basePayload = {
     service: "matrixcrm-next-postgres-v2",
     milestone: 1,
@@ -19,6 +32,7 @@ export async function GET() {
       ok: true,
       ...basePayload,
       database: "connected",
+      runtimeEnv,
     });
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
@@ -46,6 +60,7 @@ export async function GET() {
         ...basePayload,
         database: "disconnected",
         reason,
+        runtimeEnv,
         ...(devMessage ? { message: devMessage } : {}),
       },
       { status: 503 }
