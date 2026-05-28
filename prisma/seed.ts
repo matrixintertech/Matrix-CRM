@@ -42,6 +42,9 @@ const baselinePermissions = [
   "permissions.read",
   "service_requests.read",
   "service_requests.create",
+  "service_requests.update",
+  "service_requests.delete",
+  "service_requests.timeline",
   "service_requests.assign",
   "service_requests.approve",
   "inventory.read",
@@ -58,6 +61,13 @@ const baselineNavigation = [
     href: "/",
     sortOrder: 1,
     permissionKey: "reports.read",
+  },
+  {
+    key: "service-requests",
+    label: "Service Requests",
+    href: "/service-requests",
+    sortOrder: 6,
+    permissionKey: "service_requests.read",
   },
   {
     key: "service-partners",

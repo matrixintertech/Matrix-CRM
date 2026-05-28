@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "set PRISMA_CLIENT_ENGINE_TYPE=binary&&next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:validate": "prisma validate",
