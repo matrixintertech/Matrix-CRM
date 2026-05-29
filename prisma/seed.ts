@@ -1,163 +1,17 @@
-import { PrismaClient, RoleScope, ServicePartnerStatus, UserStatus } from "@prisma/client";
+import { PrismaClient, ServicePartnerStatus, UserStatus } from "@prisma/client";
 
 import { env } from "../lib/config/env";
+import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = new PrismaClient();
 
-const baselinePermissions = [
-  "categories.read",
-  "categories.create",
-  "categories.update",
-  "categories.delete",
-  "items.read",
-  "items.create",
-  "items.update",
-  "items.delete",
-  "rate_cards.read",
-  "rate_cards.create",
-  "rate_cards.update",
-  "rate_cards.delete",
-  "rate_cards.publish",
-  "service_partners.read",
-  "service_partners.create",
-  "service_partners.update",
-  "service_partners.delete",
-  "clients.read",
-  "clients.create",
-  "clients.update",
-  "clients.delete",
-  "branches.read",
-  "branches.create",
-  "branches.update",
-  "branches.delete",
-  "users.read",
-  "users.create",
-  "users.update",
-  "users.delete",
-  "roles.read",
-  "roles.create",
-  "roles.update",
-  "roles.delete",
-  "roles.assign",
-  "permissions.read",
-  "service_requests.read",
-  "service_requests.create",
-  "service_requests.update",
-  "service_requests.delete",
-  "service_requests.timeline",
-  "service_requests.assign",
-  "service_requests.approve",
-  "inventory.read",
-  "inventory.manage",
-  "payments.read",
-  "payments.create",
-  "reports.read",
-] as const;
+type SeedResult = {
+  platformServicePartnerId: string;
+  bootstrapAdminCreated: boolean;
+  devUsersSeeded: boolean;
+};
 
-const baselineNavigation = [
-  {
-    key: "dashboard",
-    label: "Dashboard",
-    href: "/",
-    sortOrder: 1,
-    permissionKey: "reports.read",
-  },
-  {
-    key: "service-requests",
-    label: "Service Requests",
-    href: "/service-requests",
-    sortOrder: 6,
-    permissionKey: "service_requests.read",
-  },
-  {
-    key: "service-partners",
-    label: "Service Partners",
-    href: "/service-partners",
-    sortOrder: 7,
-    permissionKey: "service_partners.read",
-  },
-  {
-    key: "clients",
-    label: "Clients",
-    href: "/clients",
-    sortOrder: 8,
-    permissionKey: "clients.read",
-  },
-  {
-    key: "branches",
-    label: "Branches",
-    href: "/branches",
-    sortOrder: 9,
-    permissionKey: "branches.read",
-  },
-  {
-    key: "users",
-    label: "Users",
-    href: "/users",
-    sortOrder: 13,
-    permissionKey: "users.read",
-  },
-  {
-    key: "roles",
-    label: "Roles",
-    href: "/roles",
-    sortOrder: 14,
-    permissionKey: "roles.read",
-  },
-  {
-    key: "permissions",
-    label: "Permissions",
-    href: "/permissions",
-    sortOrder: 15,
-    permissionKey: "permissions.read",
-  },
-  {
-    key: "categories",
-    label: "Categories",
-    href: "/categories",
-    sortOrder: 10,
-    permissionKey: "categories.read",
-  },
-  {
-    key: "items",
-    label: "Items",
-    href: "/items",
-    sortOrder: 11,
-    permissionKey: "items.read",
-  },
-  {
-    key: "rate-cards",
-    label: "Rate Cards",
-    href: "/rate-cards",
-    sortOrder: 12,
-    permissionKey: "rate_cards.read",
-  },
-] as const;
-
-const baselineSettings = [
-  {
-    key: "app.timezone",
-    value: { timezone: "Asia/Kolkata" },
-    isSecret: false,
-  },
-  {
-    key: "otp.expiry_seconds",
-    value: { seconds: 300 },
-    isSecret: false,
-  },
-  {
-    key: "otp.max_attempts",
-    value: { attempts: 5 },
-    isSecret: false,
-  },
-  {
-    key: "otp.resend_cooldown_seconds",
-    value: { seconds: 30 },
-    isSecret: false,
-  },
-] as const;
-
-async function seedPlatformServicePartner() {
+async function upsertPlatformServicePartner() {
   const variables = env();
 
   return prisma.servicePartner.upsert({
@@ -174,178 +28,46 @@ async function seedPlatformServicePartner() {
   });
 }
 
-async function seedSuperAdminRole(servicePartnerId: string) {
-  return prisma.role.upsert({
+async function assignRoleByKey(userId: string, servicePartnerId: string, roleKey: string) {
+  const role = await prisma.role.findFirst({
     where: {
-      servicePartnerId_key: {
-        servicePartnerId,
-        key: "super_admin",
+      servicePartnerId,
+      key: roleKey,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+
+  if (!role) {
+    throw new Error(`Missing role "${roleKey}" for service partner ${servicePartnerId}`);
+  }
+
+  await prisma.userRole.upsert({
+    where: {
+      userId_roleId: {
+        userId,
+        roleId: role.id,
       },
     },
-    update: {
-      name: "Super Admin",
-      scope: RoleScope.PLATFORM,
-      isSystem: true,
-    },
+    update: {},
     create: {
-      servicePartnerId,
-      key: "super_admin",
-      name: "Super Admin",
-      description: "Platform super administrator",
-      scope: RoleScope.PLATFORM,
-      isSystem: true,
+      userId,
+      roleId: role.id,
     },
   });
 }
 
-async function seedProjectManagerRole(servicePartnerId: string) {
-  return prisma.role.upsert({
-    where: {
-      servicePartnerId_key: {
-        servicePartnerId,
-        key: "project_manager",
-      },
-    },
-    update: {
-      name: "Project Manager",
-      scope: RoleScope.TENANT,
-      isSystem: true,
-    },
-    create: {
-      servicePartnerId,
-      key: "project_manager",
-      name: "Project Manager",
-      description: "Development test role with limited permissions",
-      scope: RoleScope.TENANT,
-      isSystem: true,
-    },
-  });
-}
-
-async function seedPermissions() {
-  return Promise.all(
-    baselinePermissions.map((permissionKey) => {
-      const [rawModule, rawAction] = permissionKey.split(".");
-      const permissionModule = rawModule ?? "unknown";
-      const action = rawAction ?? "unknown";
-
-      return prisma.permission.upsert({
-        where: { key: permissionKey },
-        update: {
-          module: permissionModule,
-          action,
-        },
-        create: {
-          key: permissionKey,
-          module: permissionModule,
-          action,
-          description: `Seeded permission ${permissionKey}`,
-        },
-      });
-    })
-  );
-}
-
-async function mapRolePermissions(roleId: string, permissionIds: string[]) {
-  await Promise.all(
-    permissionIds.map((permissionId) =>
-      prisma.rolePermission.upsert({
-        where: {
-          roleId_permissionId: {
-            roleId,
-            permissionId,
-          },
-        },
-        update: {},
-        create: {
-          roleId,
-          permissionId,
-        },
-      })
-    )
-  );
-}
-
-async function seedNavigation(servicePartnerId: string, permissionsByKey: Map<string, string>) {
-  for (const item of baselineNavigation) {
-    const navigation = await prisma.navigationItem.upsert({
-      where: {
-        servicePartnerId_key: {
-          servicePartnerId,
-          key: item.key,
-        },
-      },
-      update: {
-        label: item.label,
-        href: item.href,
-        isActive: true,
-        sortOrder: item.sortOrder,
-      },
-      create: {
-        servicePartnerId,
-        key: item.key,
-        label: item.label,
-        href: item.href,
-        isActive: true,
-        sortOrder: item.sortOrder,
-      },
-    });
-
-    const permissionId = permissionsByKey.get(item.permissionKey);
-    if (!permissionId) {
-      continue;
-    }
-
-    await prisma.navigationItemPermission.upsert({
-      where: {
-        navigationItemId_permissionId: {
-          navigationItemId: navigation.id,
-          permissionId,
-        },
-      },
-      update: {},
-      create: {
-        navigationItemId: navigation.id,
-        permissionId,
-      },
-    });
-  }
-}
-
-async function seedSettings(servicePartnerId: string) {
-  for (const setting of baselineSettings) {
-    await prisma.setting.upsert({
-      where: {
-        servicePartnerId_key: {
-          servicePartnerId,
-          key: setting.key,
-        },
-      },
-      update: {
-        value: setting.value,
-        isSecret: setting.isSecret,
-      },
-      create: {
-        servicePartnerId,
-        key: setting.key,
-        value: setting.value,
-        isSecret: setting.isSecret,
-      },
-    });
-  }
-}
-
-async function seedBootstrapAdmin(servicePartnerId: string, superAdminRoleId: string) {
+async function seedBootstrapSuperAdmin(platformServicePartnerId: string) {
   const variables = env();
   const email = variables.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase().trim();
   const phone = variables.BOOTSTRAP_ADMIN_PHONE?.trim();
 
   if (!email && !phone) {
-    return { created: false, reason: "missing_bootstrap_admin_identifiers" as const };
+    return false;
   }
 
   const payload = {
-    servicePartnerId,
+    servicePartnerId: platformServicePartnerId,
     name: "Super Admin",
     status: UserStatus.ACTIVE,
     email: email ?? null,
@@ -364,123 +86,95 @@ async function seedBootstrapAdmin(servicePartnerId: string, superAdminRoleId: st
         create: payload,
       });
 
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId: user.id,
-        roleId: superAdminRoleId,
-      },
+  await assignRoleByKey(user.id, platformServicePartnerId, "super_admin");
+  return true;
+}
+
+async function seedDevTestUsers() {
+  const variables = env();
+  if (!variables.SEED_DEV_TEST_USERS || variables.IS_PRODUCTION) {
+    return false;
+  }
+
+  const devTenant = await prisma.servicePartner.upsert({
+    where: { code: "DEVCOMPANY" },
+    update: {
+      name: "Development Company",
+      status: ServicePartnerStatus.ACTIVE,
     },
-    update: {},
     create: {
-      userId: user.id,
-      roleId: superAdminRoleId,
+      code: "DEVCOMPANY",
+      name: "Development Company",
+      status: ServicePartnerStatus.ACTIVE,
     },
   });
 
-  return { created: true, userId: user.id as string };
+  await ensureTenantRbac(prisma, {
+    servicePartnerId: devTenant.id,
+    includePlatformRole: false,
+  });
+
+  const companyAdminEmail = variables.DEV_TEST_USER_EMAIL?.toLowerCase().trim() ?? "company.admin@matrixcrm.local";
+  const companyAdminPhone = variables.DEV_TEST_USER_PHONE?.trim() ?? "+910000000001";
+
+  const companyAdmin = await prisma.user.upsert({
+    where: { email: companyAdminEmail },
+    update: {
+      servicePartnerId: devTenant.id,
+      name: "Company Admin",
+      phone: companyAdminPhone,
+      status: UserStatus.ACTIVE,
+    },
+    create: {
+      servicePartnerId: devTenant.id,
+      name: "Company Admin",
+      email: companyAdminEmail,
+      phone: companyAdminPhone,
+      status: UserStatus.ACTIVE,
+    },
+  });
+
+  await assignRoleByKey(companyAdmin.id, devTenant.id, "company_admin");
+  return true;
 }
 
-async function seedDevelopmentTestUser(
-  servicePartnerId: string,
-  permissionsByKey: Map<string, string>
-) {
-  const variables = env();
+async function main(): Promise<SeedResult> {
+  const platform = await upsertPlatformServicePartner();
 
-  if (!variables.SEED_DEV_TEST_USERS) {
-    return { enabled: false, created: false };
-  }
+  await ensureTenantRbac(prisma, {
+    servicePartnerId: platform.id,
+    includePlatformRole: true,
+  });
 
-  if (variables.IS_PRODUCTION) {
-    return { enabled: true, created: false, reason: "production_disabled" as const };
-  }
+  const existingTenants = await prisma.servicePartner.findMany({
+    where: {
+      id: { not: platform.id },
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
 
-  const email = variables.DEV_TEST_USER_EMAIL?.toLowerCase().trim() ?? "project.manager@matrixcrm.local";
-  const phone = variables.DEV_TEST_USER_PHONE?.trim() ?? "+910000000001";
-  const role = await seedProjectManagerRole(servicePartnerId);
-  const allowedPermissionKeys = ["reports.read"] as const;
-
-  for (const permissionKey of allowedPermissionKeys) {
-    const permissionId = permissionsByKey.get(permissionKey);
-    if (!permissionId) {
-      continue;
-    }
-
-    await prisma.rolePermission.upsert({
-      where: {
-        roleId_permissionId: {
-          roleId: role.id,
-          permissionId,
-        },
-      },
-      update: {},
-      create: {
-        roleId: role.id,
-        permissionId,
-      },
+  for (const tenant of existingTenants) {
+    await ensureTenantRbac(prisma, {
+      servicePartnerId: tenant.id,
+      includePlatformRole: false,
     });
   }
 
-  const user = await prisma.user.upsert({
-    where: { email },
-    update: {
-      servicePartnerId,
-      name: "Project Manager",
-      status: UserStatus.ACTIVE,
-      phone,
-    },
-    create: {
-      servicePartnerId,
-      name: "Project Manager",
-      email,
-      phone,
-      status: UserStatus.ACTIVE,
-    },
-  });
+  const bootstrapAdminCreated = await seedBootstrapSuperAdmin(platform.id);
+  const devUsersSeeded = await seedDevTestUsers();
 
-  await prisma.userRole.upsert({
-    where: {
-      userId_roleId: {
-        userId: user.id,
-        roleId: role.id,
-      },
-    },
-    update: {},
-    create: {
-      userId: user.id,
-      roleId: role.id,
-    },
-  });
-
-  return { enabled: true, created: true };
-}
-
-async function main() {
-  const platform = await seedPlatformServicePartner();
-  const superAdminRole = await seedSuperAdminRole(platform.id);
-
-  const permissionRows = await seedPermissions();
-  const permissionsByKey = new Map(permissionRows.map((row) => [row.key, row.id]));
-
-  await mapRolePermissions(
-    superAdminRole.id,
-    permissionRows.map((row) => row.id)
-  );
-  await seedNavigation(platform.id, permissionsByKey);
-  await seedSettings(platform.id);
-  const bootstrapAdmin = await seedBootstrapAdmin(platform.id, superAdminRole.id);
-  const developmentTestUser = await seedDevelopmentTestUser(platform.id, permissionsByKey);
-
-  console.log("Seed completed", {
+  return {
     platformServicePartnerId: platform.id,
-    superAdminRoleId: superAdminRole.id,
-    seededPermissions: permissionRows.length,
-    bootstrapAdminCreated: bootstrapAdmin.created,
-    developmentTestUserSeedEnabled: developmentTestUser.enabled,
-  });
+    bootstrapAdminCreated,
+    devUsersSeeded,
+  };
 }
 
 main()
+  .then((result) => {
+    console.log("Seed completed", result);
+  })
   .catch((error) => {
     console.error(error);
     process.exit(1);

@@ -8,10 +8,20 @@ type ServicePartnerOption = {
   code: string;
 };
 
+type RoleOption = {
+  id: string;
+  name: string;
+  key: string;
+  scope: string;
+};
+
 type UserFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   cancelHref: string;
   servicePartners: ServicePartnerOption[];
+  roles?: RoleOption[];
+  defaultRoleId?: string;
+  hiddenFields?: Record<string, string>;
   errorMessage?: string;
   user?: {
     name: string | null;
@@ -23,11 +33,25 @@ type UserFormProps = {
   canChooseServicePartner: boolean;
 };
 
-export function UserForm({ action, cancelHref, servicePartners, user, canChooseServicePartner, errorMessage }: UserFormProps) {
+export function UserForm({
+  action,
+  cancelHref,
+  servicePartners,
+  roles = [],
+  defaultRoleId,
+  hiddenFields,
+  user,
+  canChooseServicePartner,
+  errorMessage,
+}: UserFormProps) {
   const selectedServicePartnerId = user?.servicePartnerId ?? servicePartners[0]?.id ?? "";
+  const selectedRoleId = defaultRoleId ?? "";
 
   return (
     <form action={action} className="space-y-5 rounded-md border border-[var(--border)] bg-white p-5">
+      {hiddenFields
+        ? Object.entries(hiddenFields).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)
+        : null}
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-1 text-sm">
@@ -86,6 +110,23 @@ export function UserForm({ action, cancelHref, servicePartners, user, canChooseS
           </select>
           {!canChooseServicePartner ? <input type="hidden" name="servicePartnerId" value={selectedServicePartnerId} /> : null}
         </label>
+        {roles.length > 0 ? (
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span className="font-medium">Initial role (optional)</span>
+            <select
+              name="roleId"
+              defaultValue={selectedRoleId}
+              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            >
+              <option value="">No role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name} ({role.key}, {role.scope})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
       <p className="text-xs text-[var(--muted)]">Users sign in with OTP. At least one of email or phone is required.</p>
       <FormActions cancelHref={cancelHref} submitLabel={user ? "Update user" : "Create user"} />

@@ -7,6 +7,7 @@ import { ServicePartnerStatusActions } from "@/features/service-partners/compone
 import { canManageServicePartners, getServicePartnerById } from "@/features/service-partners/services/service-partner.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
+import { prisma } from "@/lib/db/prisma";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 import { formatDateTime, formatOptional } from "@/lib/utils/format";
 
@@ -44,11 +45,40 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
     notFound();
   }
 
-  const [canUpdate, canDelete] = await Promise.all([
+  const [canUpdate, canDelete, canCreateUsers, canReadUsers] = await Promise.all([
     hasPermission(session, "service_partners.update"),
     hasPermission(session, "service_partners.delete"),
+    hasPermission(session, "users.create"),
+    hasPermission(session, "users.read"),
   ]);
   const canManage = canManageServicePartners(session);
+  const companyAdmins =
+    canManage && canReadUsers
+      ? await prisma.user.findMany({
+          where: {
+            servicePartnerId: servicePartner.id,
+            deletedAt: null,
+            roles: {
+              some: {
+                role: {
+                  key: "company_admin",
+                  deletedAt: null,
+                },
+              },
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            status: true,
+            lastLoginAt: true,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 20,
+        })
+      : [];
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -153,6 +183,38 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
               Open clients
             </Link>
           </div>
+
+          {canManage && canReadUsers ? (
+            <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-base font-semibold">Company Admins</h2>
+                {canCreateUsers ? (
+                  <Link href={`/service-partners/${servicePartner.id}/admins/new`} className="text-sm font-medium text-[var(--primary)] underline">
+                    Add Company Admin
+                  </Link>
+                ) : null}
+              </div>
+              {companyAdmins.length === 0 ? (
+                <p className="text-[var(--muted)]">No company admins found for this service partner.</p>
+              ) : (
+                <div className="space-y-2">
+                  {companyAdmins.map((admin) => (
+                    <Link
+                      key={admin.id}
+                      href={`/users/${admin.id}`}
+                      className="block rounded-md border border-[var(--border)] p-3 hover:bg-slate-50"
+                    >
+                      <p className="font-medium">{admin.name?.trim() || admin.email || admin.phone || "Company Admin"}</p>
+                      <p className="text-xs text-[var(--muted)]">{formatOptional(admin.email)} | {formatOptional(admin.phone)}</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        Status: {admin.status} | Last login: {admin.lastLoginAt ? formatDateTime(admin.lastLoginAt) : "-"}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

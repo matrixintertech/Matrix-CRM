@@ -1,0 +1,291 @@
+import { RoleScope } from "@prisma/client";
+
+export type PermissionDefinition = {
+  key: string;
+  module: string;
+  action: string;
+  description: string;
+};
+
+export type NavigationSeedItem = {
+  key: string;
+  label: string;
+  href: string;
+  sortOrder: number;
+  permissionKey: string;
+};
+
+export type RoleSeedDefinition = {
+  key: string;
+  name: string;
+  description: string;
+  scope: RoleScope;
+  isSystem: boolean;
+};
+
+export type SettingSeedDefinition = {
+  key: string;
+  value: Record<string, unknown>;
+  isSecret: boolean;
+};
+
+export const baselinePermissions: PermissionDefinition[] = [
+  { key: "dashboard.read", module: "dashboard", action: "read", description: "Access dashboard." },
+  { key: "dashboard.platform", module: "dashboard", action: "platform", description: "View platform-level dashboard." },
+  { key: "dashboard.company", module: "dashboard", action: "company", description: "View company-level dashboard." },
+  { key: "platform.dashboard", module: "platform", action: "dashboard", description: "View platform admin dashboard." },
+  { key: "platform.manage", module: "platform", action: "manage", description: "Manage platform-level entities." },
+  { key: "settings.read", module: "settings", action: "read", description: "Read settings." },
+  { key: "settings.update", module: "settings", action: "update", description: "Update settings." },
+  { key: "audit_logs.read", module: "audit_logs", action: "read", description: "Read audit logs." },
+  { key: "activity_logs.read", module: "activity_logs", action: "read", description: "Read activity logs." },
+  { key: "service_partners.read", module: "service_partners", action: "read", description: "Read service partners." },
+  { key: "service_partners.create", module: "service_partners", action: "create", description: "Create service partners." },
+  { key: "service_partners.update", module: "service_partners", action: "update", description: "Update service partners." },
+  { key: "service_partners.delete", module: "service_partners", action: "delete", description: "Delete service partners." },
+  { key: "users.read", module: "users", action: "read", description: "Read users." },
+  { key: "users.create", module: "users", action: "create", description: "Create users." },
+  { key: "users.update", module: "users", action: "update", description: "Update users." },
+  { key: "users.delete", module: "users", action: "delete", description: "Delete users." },
+  { key: "users.status", module: "users", action: "status", description: "Change user status." },
+  { key: "users.roles.assign", module: "users", action: "roles.assign", description: "Assign roles to users." },
+  { key: "roles.read", module: "roles", action: "read", description: "Read roles." },
+  { key: "roles.create", module: "roles", action: "create", description: "Create roles." },
+  { key: "roles.update", module: "roles", action: "update", description: "Update roles." },
+  { key: "roles.delete", module: "roles", action: "delete", description: "Delete roles." },
+  { key: "roles.assign", module: "roles", action: "assign", description: "Assign role permissions." },
+  { key: "permissions.read", module: "permissions", action: "read", description: "Read permissions." },
+  { key: "permissions.assign", module: "permissions", action: "assign", description: "Assign permissions." },
+  { key: "clients.read", module: "clients", action: "read", description: "Read clients." },
+  { key: "clients.create", module: "clients", action: "create", description: "Create clients." },
+  { key: "clients.update", module: "clients", action: "update", description: "Update clients." },
+  { key: "clients.delete", module: "clients", action: "delete", description: "Delete clients." },
+  { key: "branches.read", module: "branches", action: "read", description: "Read branches." },
+  { key: "branches.create", module: "branches", action: "create", description: "Create branches." },
+  { key: "branches.update", module: "branches", action: "update", description: "Update branches." },
+  { key: "branches.delete", module: "branches", action: "delete", description: "Delete branches." },
+  { key: "categories.read", module: "categories", action: "read", description: "Read categories." },
+  { key: "categories.create", module: "categories", action: "create", description: "Create categories." },
+  { key: "categories.update", module: "categories", action: "update", description: "Update categories." },
+  { key: "categories.delete", module: "categories", action: "delete", description: "Delete categories." },
+  { key: "items.read", module: "items", action: "read", description: "Read items." },
+  { key: "items.create", module: "items", action: "create", description: "Create items." },
+  { key: "items.update", module: "items", action: "update", description: "Update items." },
+  { key: "items.delete", module: "items", action: "delete", description: "Delete items." },
+  { key: "rate_cards.read", module: "rate_cards", action: "read", description: "Read rate cards." },
+  { key: "rate_cards.create", module: "rate_cards", action: "create", description: "Create rate cards." },
+  { key: "rate_cards.update", module: "rate_cards", action: "update", description: "Update rate cards." },
+  { key: "rate_cards.delete", module: "rate_cards", action: "delete", description: "Delete rate cards." },
+  { key: "rate_cards.publish", module: "rate_cards", action: "publish", description: "Publish rate cards." },
+  { key: "service_requests.read", module: "service_requests", action: "read", description: "Read service requests." },
+  { key: "service_requests.create", module: "service_requests", action: "create", description: "Create service requests." },
+  { key: "service_requests.update", module: "service_requests", action: "update", description: "Update service requests." },
+  { key: "service_requests.delete", module: "service_requests", action: "delete", description: "Delete service requests." },
+  { key: "service_requests.timeline", module: "service_requests", action: "timeline", description: "View service request timeline." },
+  { key: "service_requests.status.change", module: "service_requests", action: "status.change", description: "Change service request status." },
+  { key: "service_requests.assign", module: "service_requests", action: "assign", description: "Assign service requests." },
+  { key: "service_requests.approve", module: "service_requests", action: "approve", description: "Approve service requests." },
+  { key: "reports.read", module: "reports", action: "read", description: "Read reports." },
+  { key: "inventory.read", module: "inventory", action: "read", description: "Read inventory." },
+  { key: "inventory.manage", module: "inventory", action: "manage", description: "Manage inventory." },
+  { key: "payments.read", module: "payments", action: "read", description: "Read payments." },
+  { key: "payments.create", module: "payments", action: "create", description: "Create payments." },
+];
+
+export const baselineNavigation: NavigationSeedItem[] = [
+  { key: "dashboard", label: "Dashboard", href: "/", sortOrder: 1, permissionKey: "dashboard.read" },
+  { key: "users", label: "Users", href: "/users", sortOrder: 2, permissionKey: "users.read" },
+  { key: "roles", label: "Roles", href: "/roles", sortOrder: 3, permissionKey: "roles.read" },
+  { key: "permissions", label: "Permissions", href: "/permissions", sortOrder: 4, permissionKey: "permissions.read" },
+  { key: "service-partners", label: "Service Partners", href: "/service-partners", sortOrder: 5, permissionKey: "service_partners.read" },
+  { key: "clients", label: "Clients", href: "/clients", sortOrder: 6, permissionKey: "clients.read" },
+  { key: "branches", label: "Branches", href: "/branches", sortOrder: 7, permissionKey: "branches.read" },
+  { key: "service-requests", label: "Service Requests", href: "/service-requests", sortOrder: 8, permissionKey: "service_requests.read" },
+  { key: "categories", label: "Categories", href: "/categories", sortOrder: 9, permissionKey: "categories.read" },
+  { key: "items", label: "Items", href: "/items", sortOrder: 10, permissionKey: "items.read" },
+  { key: "rate-cards", label: "Rate Cards", href: "/rate-cards", sortOrder: 11, permissionKey: "rate_cards.read" },
+  { key: "settings", label: "Settings", href: "/settings", sortOrder: 12, permissionKey: "settings.read" },
+];
+
+export const baselineRoleDefinitions: RoleSeedDefinition[] = [
+  {
+    key: "super_admin",
+    name: "Super Admin",
+    description: "Platform super administrator",
+    scope: RoleScope.PLATFORM,
+    isSystem: true,
+  },
+  {
+    key: "company_admin",
+    name: "Company Admin",
+    description: "Company-wide administrator",
+    scope: RoleScope.TENANT,
+    isSystem: true,
+  },
+  {
+    key: "manager",
+    name: "Manager",
+    description: "Operational manager",
+    scope: RoleScope.TENANT,
+    isSystem: true,
+  },
+  {
+    key: "operator",
+    name: "Operator",
+    description: "Operations user",
+    scope: RoleScope.TENANT,
+    isSystem: true,
+  },
+  {
+    key: "technician",
+    name: "Technician",
+    description: "Field technician",
+    scope: RoleScope.TENANT,
+    isSystem: true,
+  },
+  {
+    key: "support",
+    name: "Support",
+    description: "Support desk user",
+    scope: RoleScope.TENANT,
+    isSystem: true,
+  },
+];
+
+const companyAdminPermissions = [
+  "dashboard.read",
+  "dashboard.company",
+  "settings.read",
+  "settings.update",
+  "activity_logs.read",
+  "users.read",
+  "users.create",
+  "users.update",
+  "users.delete",
+  "users.status",
+  "users.roles.assign",
+  "roles.read",
+  "roles.create",
+  "roles.update",
+  "roles.delete",
+  "roles.assign",
+  "permissions.read",
+  "permissions.assign",
+  "service_partners.read",
+  "service_partners.update",
+  "clients.read",
+  "clients.create",
+  "clients.update",
+  "clients.delete",
+  "branches.read",
+  "branches.create",
+  "branches.update",
+  "branches.delete",
+  "categories.read",
+  "categories.create",
+  "categories.update",
+  "categories.delete",
+  "items.read",
+  "items.create",
+  "items.update",
+  "items.delete",
+  "rate_cards.read",
+  "rate_cards.create",
+  "rate_cards.update",
+  "rate_cards.delete",
+  "rate_cards.publish",
+  "service_requests.read",
+  "service_requests.create",
+  "service_requests.update",
+  "service_requests.delete",
+  "service_requests.timeline",
+  "service_requests.status.change",
+  "service_requests.assign",
+  "service_requests.approve",
+] as const;
+
+export const rolePermissionGrants: Record<string, readonly string[]> = {
+  super_admin: baselinePermissions.map((permission) => permission.key),
+  company_admin: companyAdminPermissions,
+  manager: [
+    "dashboard.read",
+    "dashboard.company",
+    "settings.read",
+    "users.read",
+    "roles.read",
+    "permissions.read",
+    "clients.read",
+    "clients.create",
+    "clients.update",
+    "branches.read",
+    "branches.create",
+    "branches.update",
+    "categories.read",
+    "items.read",
+    "rate_cards.read",
+    "service_requests.read",
+    "service_requests.create",
+    "service_requests.update",
+    "service_requests.timeline",
+    "service_requests.status.change",
+    "activity_logs.read",
+  ],
+  operator: [
+    "dashboard.read",
+    "dashboard.company",
+    "clients.read",
+    "branches.read",
+    "categories.read",
+    "items.read",
+    "rate_cards.read",
+    "service_requests.read",
+    "service_requests.create",
+    "service_requests.update",
+    "service_requests.timeline",
+    "service_requests.status.change",
+  ],
+  technician: [
+    "dashboard.read",
+    "dashboard.company",
+    "clients.read",
+    "branches.read",
+    "service_requests.read",
+    "service_requests.update",
+    "service_requests.timeline",
+    "service_requests.status.change",
+  ],
+  support: [
+    "dashboard.read",
+    "dashboard.company",
+    "clients.read",
+    "branches.read",
+    "service_requests.read",
+    "service_requests.timeline",
+    "activity_logs.read",
+  ],
+};
+
+export const tenantBootstrapRoleKeys = ["company_admin", "manager", "operator", "technician", "support"] as const;
+
+export const baselineSettings: SettingSeedDefinition[] = [
+  {
+    key: "app.timezone",
+    value: { timezone: "Asia/Kolkata" },
+    isSecret: false,
+  },
+  {
+    key: "otp.expiry_seconds",
+    value: { seconds: 300 },
+    isSecret: false,
+  },
+  {
+    key: "otp.max_attempts",
+    value: { attempts: 5 },
+    isSecret: false,
+  },
+  {
+    key: "otp.resend_cooldown_seconds",
+    value: { seconds: 30 },
+    isSecret: false,
+  },
+];

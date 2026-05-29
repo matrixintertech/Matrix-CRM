@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { logActivity } from "@/lib/activity/activity-log";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { requireAuth } from "@/lib/auth/session";
 import { requireTenantAccess } from "@/lib/auth/tenant";
@@ -44,23 +45,72 @@ function revalidateUserPaths(userId: string) {
   revalidatePath(`/users/${userId}`);
 }
 
+function withErrorCode(path: string, code: string) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}error=${encodeURIComponent(code)}`;
+}
+
 export async function createUserAction(formData: FormData) {
   const session = await requirePermission("users.create");
+  const errorRedirect = getSafeRedirectPath(formData.get("errorRedirect"), "/users/new");
+  const successRedirectOverride = getSafeRedirectPath(formData.get("successRedirect"), "");
+  const selectedRoleId = getFormString(formData, "roleId");
   const parsed = toUserInput(formData);
 
   if (!parsed.success) {
-    redirect("/users/new?error=validation");
+    redirect(withErrorCode(errorRedirect, "validation"));
   }
 
   const servicePartnerId = getServicePartnerIdForWrite(session, parsed.data.servicePartnerId);
   if (!servicePartnerId) {
-    redirect("/users/new?error=service-partner");
+    redirect(withErrorCode(errorRedirect, "service-partner"));
   }
 
   await requireTenantAccess(servicePartnerId);
 
   try {
     const user = await createUser(session, parsed.data);
+
+    if (selectedRoleId) {
+      const canAssignRoles =
+        (await hasPermission(session, "roles.assign")) || (await hasPermission(session, "users.roles.assign"));
+
+      if (!canAssignRoles) {
+        redirect(withErrorCode(errorRedirect, "role-permission"));
+      }
+
+      const role = await prisma.role.findFirst({
+        where: {
+          id: selectedRoleId,
+          deletedAt: null,
+          servicePartnerId: user.servicePartnerId,
+          ...(session.user.isSuperAdmin ? {} : { scope: "TENANT" }),
+        },
+        select: {
+          id: true,
+          key: true,
+        },
+      });
+
+      if (!role) {
+        redirect(withErrorCode(errorRedirect, "role"));
+      }
+
+      await prisma.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId: user.id,
+            roleId: role.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: user.id,
+          roleId: role.id,
+        },
+      });
+    }
+
     await logActivity({
       action: "user.create",
       module: "users",
@@ -70,10 +120,13 @@ export async function createUserAction(formData: FormData) {
       servicePartnerId: user.servicePartnerId,
     });
     revalidatePath("/users");
+    if (successRedirectOverride) {
+      redirect(getSafeRedirectPath(successRedirectOverride, `/users/${user.id}?success=created`));
+    }
     redirect(`/users/${user.id}?success=created`);
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      redirect("/users/new?error=duplicate");
+      redirect(withErrorCode(errorRedirect, "duplicate"));
     }
     throw error;
   }

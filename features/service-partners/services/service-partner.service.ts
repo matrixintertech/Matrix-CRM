@@ -6,6 +6,7 @@ import { scopeByTenant } from "@/lib/auth/tenant";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
+import { ensureTenantRbac } from "@/lib/rbac/bootstrap";
 
 type ListServicePartnersInput = {
   q?: string;
@@ -119,20 +120,29 @@ export function isPlatformServicePartnerCode(code: string) {
 }
 
 export async function createServicePartner(input: ServicePartnerUpsertInput) {
-  return prisma.servicePartner.create({
-    data: {
-      code: input.code.trim().toUpperCase(),
-      name: input.name.trim(),
-      legalName: normalizeOptionalString(input.legalName),
-      email: normalizeEmail(input.email),
-      phone: normalizeOptionalString(input.phone),
-      address: normalizeOptionalString(input.address),
-      city: normalizeOptionalString(input.city),
-      state: normalizeOptionalString(input.state),
-      country: normalizeOptionalString(input.country),
-      postalCode: normalizeOptionalString(input.postalCode),
-      status: input.status,
-    },
+  return prisma.$transaction(async (tx) => {
+    const servicePartner = await tx.servicePartner.create({
+      data: {
+        code: input.code.trim().toUpperCase(),
+        name: input.name.trim(),
+        legalName: normalizeOptionalString(input.legalName),
+        email: normalizeEmail(input.email),
+        phone: normalizeOptionalString(input.phone),
+        address: normalizeOptionalString(input.address),
+        city: normalizeOptionalString(input.city),
+        state: normalizeOptionalString(input.state),
+        country: normalizeOptionalString(input.country),
+        postalCode: normalizeOptionalString(input.postalCode),
+        status: input.status,
+      },
+    });
+
+    await ensureTenantRbac(tx, {
+      servicePartnerId: servicePartner.id,
+      includePlatformRole: false,
+    });
+
+    return servicePartner;
   });
 }
 

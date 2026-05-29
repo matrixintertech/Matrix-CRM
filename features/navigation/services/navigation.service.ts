@@ -1,6 +1,7 @@
 import type { Session } from "next-auth";
 
 import { getUserPermissions } from "@/lib/auth/permissions";
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 
 export type SidebarNavItem = {
@@ -27,6 +28,42 @@ type NavigationRow = {
     };
   }[];
 };
+
+const fallbackHrefByKey: Record<string, string> = {
+  dashboard: "/",
+  users: "/users",
+  roles: "/roles",
+  permissions: "/permissions",
+  "service-partners": "/service-partners",
+  service_partners: "/service-partners",
+  clients: "/clients",
+  branches: "/branches",
+  "service-requests": "/service-requests",
+  service_requests: "/service-requests",
+  categories: "/categories",
+  items: "/items",
+  "rate-cards": "/rate-cards",
+  rate_cards: "/rate-cards",
+  settings: "/settings",
+};
+
+function normalizeHref(href: string, key: string) {
+  const rawValue = href.trim();
+  if (!rawValue || rawValue === "#") {
+    return fallbackHrefByKey[key] ?? "/";
+  }
+
+  const normalized = rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
+  if (normalized === "/dashboard") {
+    return "/";
+  }
+
+  if (normalized.startsWith("/dashboard/")) {
+    return normalized.replace(/^\/dashboard/, "");
+  }
+
+  return normalized;
+}
 
 function canSeeItem(row: NavigationRow, permissionKeys: Set<string>, isSuperAdmin: boolean): boolean {
   if (isSuperAdmin) {
@@ -62,7 +99,7 @@ function buildTree(rows: NavigationRow[], permissionKeys: Set<string>, isSuperAd
           id: row.id,
           key: row.key,
           label: row.label,
-          href: row.href,
+          href: normalizeHref(row.href, row.key),
           icon: row.icon,
           children,
         });
@@ -76,29 +113,47 @@ function buildTree(rows: NavigationRow[], permissionKeys: Set<string>, isSuperAd
 }
 
 export async function getNavigationForSession(session: Session): Promise<SidebarNavItem[]> {
-  const rows = await prisma.navigationItem.findMany({
-    where: {
-      servicePartnerId: session.user.servicePartnerId,
-      isActive: true,
-    },
-    orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
-    select: {
-      id: true,
-      key: true,
-      label: true,
-      href: true,
-      icon: true,
-      parentId: true,
-      sortOrder: true,
-      permissions: {
-        select: {
-          permission: {
-            select: { key: true },
+  const platformCode = env().PLATFORM_SERVICE_PARTNER_CODE;
+  const platformPartner = await prisma.servicePartner.findUnique({
+    where: { code: platformCode },
+    select: { id: true },
+  });
+
+  const candidateServicePartnerIds = [
+    session.user.servicePartnerId,
+    platformPartner?.id,
+  ].filter((value): value is string => Boolean(value));
+
+  let rows: NavigationRow[] = [];
+  for (const servicePartnerId of candidateServicePartnerIds) {
+    rows = await prisma.navigationItem.findMany({
+      where: {
+        servicePartnerId,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+      select: {
+        id: true,
+        key: true,
+        label: true,
+        href: true,
+        icon: true,
+        parentId: true,
+        sortOrder: true,
+        permissions: {
+          select: {
+            permission: {
+              select: { key: true },
+            },
           },
         },
       },
-    },
-  });
+    });
+
+    if (rows.length > 0) {
+      break;
+    }
+  }
 
   if (rows.length === 0) {
     return [
