@@ -13,6 +13,7 @@ export type NavigationSeedItem = {
   href: string;
   sortOrder: number;
   permissionKey: string;
+  isActive?: boolean;
 };
 
 export type RoleSeedDefinition = {
@@ -85,26 +86,49 @@ export const baselinePermissions: PermissionDefinition[] = [
   { key: "service_requests.status.change", module: "service_requests", action: "status.change", description: "Change service request status." },
   { key: "service_requests.assign", module: "service_requests", action: "assign", description: "Assign service requests." },
   { key: "service_requests.approve", module: "service_requests", action: "approve", description: "Approve service requests." },
-  { key: "reports.read", module: "reports", action: "read", description: "Read reports." },
-  { key: "inventory.read", module: "inventory", action: "read", description: "Read inventory." },
-  { key: "inventory.manage", module: "inventory", action: "manage", description: "Manage inventory." },
-  { key: "payments.read", module: "payments", action: "read", description: "Read payments." },
+  { key: "inventory.read", module: "inventory", action: "read", description: "Read inventory management module." },
+  { key: "inventory.manage", module: "inventory", action: "manage", description: "Manage inventory module." },
+  { key: "suppliers.read", module: "suppliers", action: "read", description: "Read supplier management module." },
+  { key: "tasks.read", module: "tasks", action: "read", description: "Read tasks module." },
+  { key: "ledger.read", module: "ledger", action: "read", description: "Read ledger module." },
+  { key: "quotations.read", module: "quotations", action: "read", description: "Read quotations module." },
+  { key: "payments.read", module: "payments", action: "read", description: "Read payments module." },
   { key: "payments.create", module: "payments", action: "create", description: "Create payments." },
+  { key: "expenses.read", module: "expenses", action: "read", description: "Read expenses module." },
+  { key: "vendor_quotations.read", module: "vendor_quotations", action: "read", description: "Read vendor quotation list module." },
+  { key: "rfq.read", module: "rfq", action: "read", description: "Read RFQ module." },
+  { key: "purchase_orders.read", module: "purchase_orders", action: "read", description: "Read purchase orders module." },
+  { key: "invoices.read", module: "invoices", action: "read", description: "Read invoices module." },
+  { key: "vendor_payments.read", module: "vendor_payments", action: "read", description: "Read vendor payments module." },
+  { key: "reports.read", module: "reports", action: "read", description: "Read reports." },
 ];
 
 export const baselineNavigation: NavigationSeedItem[] = [
   { key: "dashboard", label: "Dashboard", href: "/", sortOrder: 1, permissionKey: "dashboard.read" },
-  { key: "users", label: "Users", href: "/users", sortOrder: 2, permissionKey: "users.read" },
+  { key: "users", label: "Client User Management", href: "/users", sortOrder: 2, permissionKey: "users.read" },
   { key: "roles", label: "Roles", href: "/roles", sortOrder: 3, permissionKey: "roles.read" },
   { key: "permissions", label: "Permissions", href: "/permissions", sortOrder: 4, permissionKey: "permissions.read" },
   { key: "service-partners", label: "Service Partners", href: "/service-partners", sortOrder: 5, permissionKey: "service_partners.read" },
   { key: "clients", label: "Clients", href: "/clients", sortOrder: 6, permissionKey: "clients.read" },
-  { key: "branches", label: "Branches", href: "/branches", sortOrder: 7, permissionKey: "branches.read" },
+  { key: "branches", label: "Branch Management", href: "/branches", sortOrder: 7, permissionKey: "branches.read" },
   { key: "service-requests", label: "Service Requests", href: "/service-requests", sortOrder: 8, permissionKey: "service_requests.read" },
-  { key: "categories", label: "Categories", href: "/categories", sortOrder: 9, permissionKey: "categories.read" },
+  { key: "categories", label: "Category Management", href: "/categories", sortOrder: 9, permissionKey: "categories.read" },
   { key: "items", label: "Items", href: "/items", sortOrder: 10, permissionKey: "items.read" },
-  { key: "rate-cards", label: "Rate Cards", href: "/rate-cards", sortOrder: 11, permissionKey: "rate_cards.read" },
-  { key: "settings", label: "Settings", href: "/settings", sortOrder: 12, permissionKey: "settings.read" },
+  { key: "rate-cards", label: "RC Management", href: "/rate-cards", sortOrder: 11, permissionKey: "rate_cards.read" },
+  { key: "activity-log", label: "Activity Log", href: "/activity-log", sortOrder: 12, permissionKey: "activity_logs.read" },
+  { key: "settings", label: "Settings", href: "/settings", sortOrder: 13, permissionKey: "settings.read" },
+  { key: "inventory-management", label: "Inventory Management", href: "#", sortOrder: 20, permissionKey: "inventory.read", isActive: false },
+  { key: "supplier-management", label: "Supplier Management", href: "#", sortOrder: 21, permissionKey: "suppliers.read", isActive: false },
+  { key: "tasks", label: "Tasks", href: "#", sortOrder: 22, permissionKey: "tasks.read", isActive: false },
+  { key: "ledger", label: "Ledger", href: "#", sortOrder: 23, permissionKey: "ledger.read", isActive: false },
+  { key: "quotations", label: "Quotations", href: "#", sortOrder: 24, permissionKey: "quotations.read", isActive: false },
+  { key: "payments", label: "Payments", href: "#", sortOrder: 25, permissionKey: "payments.read", isActive: false },
+  { key: "expenses", label: "Expenses", href: "#", sortOrder: 26, permissionKey: "expenses.read", isActive: false },
+  { key: "vendor-quotations", label: "Vendors Quotation List", href: "#", sortOrder: 27, permissionKey: "vendor_quotations.read", isActive: false },
+  { key: "rfq-list", label: "RFQ List", href: "#", sortOrder: 28, permissionKey: "rfq.read", isActive: false },
+  { key: "po-list", label: "PO List", href: "#", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: false },
+  { key: "invoice-list", label: "Invoice List", href: "#", sortOrder: 30, permissionKey: "invoices.read", isActive: false },
+  { key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false },
 ];
 
 export const baselineRoleDefinitions: RoleSeedDefinition[] = [
@@ -171,8 +195,6 @@ const companyAdminPermissions = [
   "roles.assign",
   "permissions.read",
   "permissions.assign",
-  "service_partners.read",
-  "service_partners.update",
   "clients.read",
   "clients.create",
   "clients.update",
@@ -200,8 +222,6 @@ const companyAdminPermissions = [
   "service_requests.delete",
   "service_requests.timeline",
   "service_requests.status.change",
-  "service_requests.assign",
-  "service_requests.approve",
 ] as const;
 
 export const rolePermissionGrants: Record<string, readonly string[]> = {
