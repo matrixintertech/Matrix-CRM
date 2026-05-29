@@ -3,6 +3,8 @@ import type { Session } from "next-auth";
 import { prisma } from "@/lib/db/prisma";
 
 export type PermissionKey = string;
+const PLATFORM_ONLY_PREFIXES = ["platform.", "service_partners."] as const;
+const PLATFORM_ONLY_KEYS = new Set<string>(["dashboard.platform"]);
 
 type PermissionSubject =
   | Session
@@ -45,21 +47,25 @@ export async function getUserRoleKeys(userId: string): Promise<string[]> {
   return roles.map((entry) => entry.role.key);
 }
 
-export async function getUserPermissions(userId: string): Promise<string[]> {
-  const roleKeys = await getUserRoleKeys(userId);
+export function isPlatformOnlyPermissionKey(permissionKey: string): boolean {
+  if (PLATFORM_ONLY_KEYS.has(permissionKey)) {
+    return true;
+  }
+
+  return PLATFORM_ONLY_PREFIXES.some((prefix) => permissionKey.startsWith(prefix));
+}
+
+export async function getUserPermissions(userId: string, roleKeysHint?: string[]): Promise<string[]> {
+  const roleKeys = roleKeysHint ?? (await getUserRoleKeys(userId));
   if (roleKeys.includes("super_admin")) {
     const permissions = await prisma.permission.findMany({ select: { key: true } });
     return permissions.map((permission) => permission.key);
   }
 
-  const permissions = await prisma.rolePermission.findMany({
+  const permissions = await prisma.userPermission.findMany({
     where: {
-      role: {
-        deletedAt: null,
-        users: {
-          some: { userId },
-        },
-      },
+      userId,
+      allowed: true,
     },
     select: {
       permission: {
@@ -70,7 +76,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
     },
   });
 
-  return Array.from(new Set(permissions.map((entry) => entry.permission.key)));
+  return permissions.map((entry) => entry.permission.key);
 }
 
 export async function hasPermission(subject: PermissionSubject, permissionKey: string): Promise<boolean> {
@@ -87,6 +93,6 @@ export async function hasPermission(subject: PermissionSubject, permissionKey: s
     return true;
   }
 
-  const permissions = await getUserPermissions(user.id);
+  const permissions = await getUserPermissions(user.id, user.roleKeys);
   return permissions.includes(permissionKey);
 }

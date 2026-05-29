@@ -44,13 +44,18 @@ const fallbackHrefByKey: Record<string, string> = {
   items: "/items",
   "rate-cards": "/rate-cards",
   rate_cards: "/rate-cards",
+  "activity-log": "/activity-log",
+  activity_logs: "/activity-log",
   settings: "/settings",
 };
 
 function normalizeHref(href: string, key: string) {
   const rawValue = href.trim();
-  if (!rawValue || rawValue === "#") {
+  if (!rawValue) {
     return fallbackHrefByKey[key] ?? "/";
+  }
+  if (rawValue === "#") {
+    return "#";
   }
 
   const normalized = rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
@@ -169,6 +174,6 @@ export async function getNavigationForSession(session: Session): Promise<Sidebar
     ];
   }
 
-  const permissions = session.user.isSuperAdmin ? [] : await getUserPermissions(session.user.id);
+  const permissions = session.user.isSuperAdmin ? [] : await getUserPermissions(session.user.id, session.user.roleKeys);
   return buildTree(rows, new Set(permissions), session.user.isSuperAdmin);
 }

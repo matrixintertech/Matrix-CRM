@@ -6,17 +6,20 @@ import { redirect } from "next/navigation";
 
 import { logActivity } from "@/lib/activity/activity-log";
 import { hasPermission } from "@/lib/auth/permissions";
-import { requirePermission } from "@/lib/auth/rbac";
+import { requireAnyPermission, requirePermission } from "@/lib/auth/rbac";
 import { requireAuth } from "@/lib/auth/session";
 import { requireTenantAccess } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 import {
+  countActiveCompanyAdminsWithPermissions,
   countActiveSuperAdmins,
   countUserSuperAdminRoles,
   createUser,
   getServicePartnerIdForWrite,
   getUserById,
+  replaceUserDirectPermissions,
+  resolveGrantablePermissionIds,
   updateUser,
 } from "@/features/users/services/user.service";
 import { userRoleSchema, userStatusSchema, userUpsertSchema } from "@/features/users/validations";
@@ -36,6 +39,12 @@ function toUserInput(formData: FormData) {
   });
 }
 
+function getPermissionIds(formData: FormData) {
+  return formData
+    .getAll("permissionIds")
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+}
+
 function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
@@ -50,11 +59,63 @@ function withErrorCode(path: string, code: string) {
   return `${path}${separator}error=${encodeURIComponent(code)}`;
 }
 
+async function assertCanChangeOwnDirectPermissions(input: {
+  sessionUserId: string;
+  targetUser: {
+    id: string;
+    servicePartnerId: string;
+    roles: { role: { key: string } }[];
+  };
+  permissionIds: string[];
+}) {
+  const { targetUser, sessionUserId, permissionIds } = input;
+  if (!targetUser || targetUser.id !== sessionUserId) {
+    return;
+  }
+
+  const isCompanyAdmin = targetUser.roles.some((entry) => entry.role.key === "company_admin");
+  if (!isCompanyAdmin) {
+    return;
+  }
+
+  const selectedPermissions = permissionIds.length
+    ? await prisma.permission.findMany({
+        where: {
+          id: {
+            in: permissionIds,
+          },
+        },
+        select: {
+          key: true,
+        },
+      })
+    : [];
+  const selectedPermissionKeys = new Set(selectedPermissions.map((permission) => permission.key));
+
+  const mandatoryOwnKeys = ["dashboard.read", "users.read", "users.update"];
+  const hasLostMandatoryOwnAccess = mandatoryOwnKeys.some((permissionKey) => !selectedPermissionKeys.has(permissionKey));
+
+  if (!hasLostMandatoryOwnAccess) {
+    return;
+  }
+
+  const backupAdminCount = await countActiveCompanyAdminsWithPermissions({
+    servicePartnerId: targetUser.servicePartnerId,
+    excludeUserId: targetUser.id,
+    permissionKeys: mandatoryOwnKeys,
+  });
+
+  if (backupAdminCount <= 0) {
+    throw new Error("Cannot remove own critical access as the only active company admin.");
+  }
+}
+
 export async function createUserAction(formData: FormData) {
   const session = await requirePermission("users.create");
   const errorRedirect = getSafeRedirectPath(formData.get("errorRedirect"), "/users/new");
   const successRedirectOverride = getSafeRedirectPath(formData.get("successRedirect"), "");
   const selectedRoleId = getFormString(formData, "roleId");
+  const requestedPermissionIds = getPermissionIds(formData);
   const parsed = toUserInput(formData);
 
   if (!parsed.success) {
@@ -70,6 +131,7 @@ export async function createUserAction(formData: FormData) {
 
   try {
     const user = await createUser(session, parsed.data);
+    let effectiveRoleId: string | null = null;
 
     if (selectedRoleId) {
       const canAssignRoles =
@@ -109,7 +171,25 @@ export async function createUserAction(formData: FormData) {
           roleId: role.id,
         },
       });
+      effectiveRoleId = role.id;
     }
+
+    let permissionIdsToAssign = requestedPermissionIds;
+    if (permissionIdsToAssign.length === 0 && effectiveRoleId) {
+      const roleTemplatePermissions = await prisma.rolePermission.findMany({
+        where: { roleId: effectiveRoleId },
+        select: { permissionId: true },
+      });
+      permissionIdsToAssign = roleTemplatePermissions.map((entry) => entry.permissionId);
+    }
+
+    const grantablePermissionIds = await resolveGrantablePermissionIds(session, permissionIdsToAssign);
+    await replaceUserDirectPermissions({
+      userId: user.id,
+      servicePartnerId: user.servicePartnerId,
+      permissionIds: grantablePermissionIds,
+      assignedByUserId: session.user.id,
+    });
 
     await logActivity({
       action: "user.create",
@@ -128,6 +208,9 @@ export async function createUserAction(formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect(withErrorCode(errorRedirect, "duplicate"));
     }
+    if (error instanceof Error && error.message.includes("cannot grant permissions")) {
+      redirect(withErrorCode(errorRedirect, "permission-grant"));
+    }
     throw error;
   }
 }
@@ -135,6 +218,8 @@ export async function createUserAction(formData: FormData) {
 export async function updateUserAction(id: string, formData: FormData) {
   const session = await requirePermission("users.update");
   const parsed = toUserInput(formData);
+  const selectedRoleId = getFormString(formData, "roleId");
+  const requestedPermissionIds = getPermissionIds(formData);
 
   if (!parsed.success) {
     redirect(`/users/${id}/edit?error=validation`);
@@ -148,7 +233,64 @@ export async function updateUserAction(id: string, formData: FormData) {
   await requireTenantAccess(servicePartnerId);
 
   try {
+    const existingUser = await getUserById(session, id);
+    if (!existingUser) {
+      throw new Error("User not found.");
+    }
+
     const user = await updateUser(session, id, parsed.data);
+
+    if (selectedRoleId) {
+      const canAssignRoles =
+        (await hasPermission(session, "roles.assign")) || (await hasPermission(session, "users.roles.assign"));
+      if (!canAssignRoles) {
+        redirect(`/users/${id}/edit?error=role-permission`);
+      }
+
+      const role = await prisma.role.findFirst({
+        where: {
+          id: selectedRoleId,
+          deletedAt: null,
+          servicePartnerId: user.servicePartnerId,
+          ...(session.user.isSuperAdmin ? {} : { scope: "TENANT" }),
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!role) {
+        redirect(`/users/${id}/edit?error=role`);
+      }
+
+      await prisma.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId: user.id,
+            roleId: role.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: user.id,
+          roleId: role.id,
+        },
+      });
+    }
+
+    const grantablePermissionIds = await resolveGrantablePermissionIds(session, requestedPermissionIds);
+    await assertCanChangeOwnDirectPermissions({
+      sessionUserId: session.user.id,
+      targetUser: existingUser,
+      permissionIds: grantablePermissionIds,
+    });
+    await replaceUserDirectPermissions({
+      userId: user.id,
+      servicePartnerId: user.servicePartnerId,
+      permissionIds: grantablePermissionIds,
+      assignedByUserId: session.user.id,
+    });
+
     await logActivity({
       action: "user.update",
       module: "users",
@@ -162,6 +304,12 @@ export async function updateUserAction(id: string, formData: FormData) {
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       redirect(`/users/${id}/edit?error=duplicate`);
+    }
+    if (error instanceof Error && error.message.includes("cannot grant permissions")) {
+      redirect(`/users/${id}/edit?error=permission-grant`);
+    }
+    if (error instanceof Error && error.message.includes("Cannot remove own critical access")) {
+      redirect(`/users/${id}/edit?error=self-lockout`);
     }
     throw error;
   }
@@ -261,7 +409,7 @@ export async function deleteUserAction(id: string, formData: FormData) {
 }
 
 export async function assignUserRoleAction(id: string, formData: FormData) {
-  const session = await requirePermission("roles.assign");
+  const session = await requireAnyPermission(["roles.assign", "users.roles.assign"]);
   const parsed = userRoleSchema.safeParse({ roleId: getFormString(formData, "roleId") });
   if (!parsed.success) {
     redirect(`/users/${id}?error=validation`);
@@ -306,7 +454,7 @@ export async function assignUserRoleAction(id: string, formData: FormData) {
 }
 
 export async function removeUserRoleAction(id: string, formData: FormData) {
-  const session = await requirePermission("roles.assign");
+  const session = await requireAnyPermission(["roles.assign", "users.roles.assign"]);
   const parsed = userRoleSchema.safeParse({ roleId: getFormString(formData, "roleId") });
   if (!parsed.success) {
     redirect(`/users/${id}?error=validation`);

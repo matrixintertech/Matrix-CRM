@@ -31,6 +31,9 @@ function getSuccessMessage(code?: string) {
   if (code === "permission-removed") {
     return "Permission removed successfully.";
   }
+  if (code === "permission-updated") {
+    return "Role permissions updated successfully.";
+  }
   return undefined;
 }
 
@@ -70,7 +73,7 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
     <section className="space-y-5">
       <PageHeader
         title={role.name}
-        description="Review role settings and assign permissions."
+        description="Review role/template settings and default permission template."
         action={canUpdate ? { label: "Edit role", href: `/roles/${role.id}/edit` } : undefined}
       />
 
@@ -88,6 +91,9 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
           This is a protected system role.
         </p>
       ) : null}
+      <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        Role permissions work as default template suggestions. Final runtime access is assigned per user. Changing this template does not automatically update existing users.
+      </p>
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">

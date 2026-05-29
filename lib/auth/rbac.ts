@@ -20,7 +20,7 @@ export async function requireAnyPermission(permissionKeys: string[]) {
     return session;
   }
 
-  const permissions = await getUserPermissions(session.user.id);
+  const permissions = await getUserPermissions(session.user.id, session.user.roleKeys);
   if (!permissionKeys.some((permissionKey) => permissions.includes(permissionKey))) {
     redirectForbidden();
   }
@@ -35,7 +35,7 @@ export async function requireAllPermissions(permissionKeys: string[]) {
     return session;
   }
 
-  const permissions = await getUserPermissions(session.user.id);
+  const permissions = await getUserPermissions(session.user.id, session.user.roleKeys);
   if (!permissionKeys.every((permissionKey) => permissions.includes(permissionKey))) {
     redirectForbidden();
   }

@@ -1,6 +1,7 @@
 import { Prisma, UserStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
+import { getUserPermissions, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
@@ -11,6 +12,14 @@ type ListUsersInput = {
   status?: UserStatus;
   page?: number;
   pageSize?: number;
+};
+
+export type AssignablePermission = {
+  id: string;
+  key: string;
+  module: string;
+  action: string;
+  description: string | null;
 };
 
 export function normalizeEmail(email?: string | null) {
@@ -78,6 +87,34 @@ export async function getUserById(session: Session, id: string) {
     include: {
       servicePartner: { select: { id: true, name: true, code: true } },
       roles: { include: { role: true } },
+      directPermissions: {
+        where: { allowed: true },
+        select: {
+          permission: {
+            select: {
+              id: true,
+              key: true,
+              module: true,
+              action: true,
+              description: true,
+            },
+          },
+          assignedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          permission: {
+            key: "asc",
+          },
+        },
+      },
     },
   });
 }
@@ -107,6 +144,156 @@ export async function listServicePartnersForUserForm(session: Session) {
     where: { deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, code: true },
+  });
+}
+
+export async function listAssignablePermissions(session: Session): Promise<AssignablePermission[]> {
+  if (session.user.isSuperAdmin) {
+    return prisma.permission.findMany({
+      orderBy: [{ module: "asc" }, { key: "asc" }],
+      select: {
+        id: true,
+        key: true,
+        module: true,
+        action: true,
+        description: true,
+      },
+    });
+  }
+
+  const ownPermissionKeys = await getUserPermissions(session.user.id, session.user.roleKeys);
+  if (ownPermissionKeys.length === 0) {
+    return [];
+  }
+
+  const permissions = await prisma.permission.findMany({
+    where: {
+      key: {
+        in: ownPermissionKeys,
+      },
+    },
+    orderBy: [{ module: "asc" }, { key: "asc" }],
+    select: {
+      id: true,
+      key: true,
+      module: true,
+      action: true,
+      description: true,
+    },
+  });
+
+  return permissions.filter((permission) => !isPlatformOnlyPermissionKey(permission.key));
+}
+
+export async function listRoleTemplatePermissionIds(roleIds: string[]) {
+  if (roleIds.length === 0) {
+    return {} as Record<string, string[]>;
+  }
+
+  const rows = await prisma.rolePermission.findMany({
+    where: {
+      roleId: {
+        in: roleIds,
+      },
+    },
+    select: {
+      roleId: true,
+      permissionId: true,
+    },
+  });
+
+  const map: Record<string, string[]> = {};
+  for (const row of rows) {
+    const current = map[row.roleId] ?? [];
+    current.push(row.permissionId);
+    map[row.roleId] = current;
+  }
+
+  return map;
+}
+
+export async function resolveGrantablePermissionIds(session: Session, requestedPermissionIds: string[]) {
+  const dedupedPermissionIds = Array.from(new Set(requestedPermissionIds));
+  if (dedupedPermissionIds.length === 0) {
+    return [];
+  }
+
+  const permissions = await prisma.permission.findMany({
+    where: {
+      id: {
+        in: dedupedPermissionIds,
+      },
+    },
+    select: {
+      id: true,
+      key: true,
+    },
+  });
+
+  if (permissions.length !== dedupedPermissionIds.length) {
+    throw new Error("One or more permissions are invalid.");
+  }
+
+  if (session.user.isSuperAdmin) {
+    return dedupedPermissionIds;
+  }
+
+  const ownPermissionSet = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
+  const unauthorizedPermission = permissions.find(
+    (permission) => !ownPermissionSet.has(permission.key) || isPlatformOnlyPermissionKey(permission.key)
+  );
+
+  if (unauthorizedPermission) {
+    throw new Error("You cannot grant permissions you do not have.");
+  }
+
+  return dedupedPermissionIds;
+}
+
+export async function replaceUserDirectPermissions(input: {
+  userId: string;
+  servicePartnerId: string;
+  permissionIds: string[];
+  assignedByUserId?: string;
+}) {
+  const dedupedPermissionIds = Array.from(new Set(input.permissionIds));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.userPermission.deleteMany({
+      where: {
+        userId: input.userId,
+        ...(dedupedPermissionIds.length > 0
+          ? {
+              permissionId: {
+                notIn: dedupedPermissionIds,
+              },
+            }
+          : {}),
+      },
+    });
+
+    for (const permissionId of dedupedPermissionIds) {
+      await tx.userPermission.upsert({
+        where: {
+          userId_permissionId: {
+            userId: input.userId,
+            permissionId,
+          },
+        },
+        update: {
+          allowed: true,
+          servicePartnerId: input.servicePartnerId,
+          assignedByUserId: input.assignedByUserId ?? null,
+        },
+        create: {
+          userId: input.userId,
+          permissionId,
+          allowed: true,
+          servicePartnerId: input.servicePartnerId,
+          assignedByUserId: input.assignedByUserId ?? null,
+        },
+      });
+    }
   });
 }
 
@@ -183,6 +370,41 @@ export async function countUserSuperAdminRoles(userId: string) {
         key: "super_admin",
         deletedAt: null,
       },
+    },
+  });
+}
+
+export async function countActiveCompanyAdminsWithPermissions(input: {
+  servicePartnerId: string;
+  excludeUserId?: string;
+  permissionKeys: string[];
+}) {
+  const requiredPermissionKeys = Array.from(new Set(input.permissionKeys));
+
+  return prisma.user.count({
+    where: {
+      servicePartnerId: input.servicePartnerId,
+      deletedAt: null,
+      status: "ACTIVE",
+      ...(input.excludeUserId ? { id: { not: input.excludeUserId } } : {}),
+      roles: {
+        some: {
+          role: {
+            key: "company_admin",
+            deletedAt: null,
+          },
+        },
+      },
+      AND: requiredPermissionKeys.map((permissionKey) => ({
+        directPermissions: {
+          some: {
+            allowed: true,
+            permission: {
+              key: permissionKey,
+            },
+          },
+        },
+      })),
     },
   });
 }

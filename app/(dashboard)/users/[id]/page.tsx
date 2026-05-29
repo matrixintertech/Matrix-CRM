@@ -51,12 +51,35 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
     notFound();
   }
 
-  const [canUpdate, canDelete, canAssignRoles] = await Promise.all([
+  const [canUpdate, canDelete, canAssignByRole, canAssignByUserRole] = await Promise.all([
     hasPermission(session, "users.update"),
     hasPermission(session, "users.delete"),
     hasPermission(session, "roles.assign"),
+    hasPermission(session, "users.roles.assign"),
   ]);
+  const canAssignRoles = canAssignByRole || canAssignByUserRole;
   const roles = canAssignRoles ? await listAssignableRoles(session) : [];
+  const permissionGroups = new Map<string, { id: string; key: string; assignedBy: string; updatedAt: Date }[]>();
+  for (const entry of user.directPermissions) {
+    const group = permissionGroups.get(entry.permission.module) ?? [];
+    group.push({
+      id: entry.permission.id,
+      key: entry.permission.key,
+      assignedBy: entry.assignedBy?.name?.trim() || entry.assignedBy?.email || "System",
+      updatedAt: entry.updatedAt,
+    });
+    permissionGroups.set(entry.permission.module, group);
+  }
+  const directPermissionKeySet = new Set(user.directPermissions.map((entry) => entry.permission.key));
+  const moduleAccessSummary = [
+    { label: "Users", key: "users.read" },
+    { label: "Clients", key: "clients.read" },
+    { label: "Branches", key: "branches.read" },
+    { label: "Categories", key: "categories.read" },
+    { label: "Items", key: "items.read" },
+    { label: "Rate Cards", key: "rate_cards.read" },
+    { label: "Service Requests", key: "service_requests.read" },
+  ];
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -124,6 +147,54 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
               <UserStatusActions userId={user.id} canDelete={canDelete} />
             </div>
           ) : null}
+
+          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <h2 className="mb-3 text-base font-semibold">Direct User Permissions</h2>
+            <p className="mb-3 text-sm text-[var(--muted)]">
+              Final runtime access is based on these user-level permissions.
+            </p>
+            <div className="mb-4 rounded-md border border-slate-200">
+              <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                Module Access Summary
+              </div>
+              <div className="grid gap-2 p-3 md:grid-cols-2">
+                {moduleAccessSummary.map((module) => {
+                  const hasAccess = directPermissionKeySet.has(module.key);
+                  return (
+                    <div key={module.key} className="flex items-center justify-between rounded-md border border-slate-100 px-2 py-1.5 text-sm">
+                      <span>{module.label}</span>
+                      <span className={hasAccess ? "text-emerald-700" : "text-slate-500"}>{hasAccess ? "Access" : "No Access"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {permissionGroups.size === 0 ? (
+              <p className="text-sm text-[var(--muted)]">No direct permissions assigned.</p>
+            ) : (
+              <div className="space-y-3">
+                {Array.from(permissionGroups.entries())
+                  .sort(([left], [right]) => left.localeCompare(right))
+                  .map(([module, entries]) => (
+                    <div key={module} className="rounded-md border border-slate-200 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                        {module.replaceAll("_", " ")}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {entries.map((entry) => (
+                          <div key={entry.id} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
+                            <p className="font-medium text-slate-800">{entry.key}</p>
+                            <p className="text-[var(--muted)]">
+                              Assigned by {entry.assignedBy} | Updated {formatDateTime(entry.updatedAt)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-5">
