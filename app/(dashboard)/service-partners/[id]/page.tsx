@@ -23,6 +23,9 @@ function getSuccessMessage(code?: string) {
   if (code === "updated") {
     return "Service partner updated successfully.";
   }
+  if (code === "company-admin-created") {
+    return "Company admin created successfully.";
+  }
   return undefined;
 }
 
@@ -45,11 +48,12 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
     notFound();
   }
 
-  const [canUpdate, canDelete, canCreateUsers, canReadUsers] = await Promise.all([
+  const [canUpdate, canDelete, canCreateUsers, canReadUsers, canUpdateUsers] = await Promise.all([
     hasPermission(session, "service_partners.update"),
     hasPermission(session, "service_partners.delete"),
     hasPermission(session, "users.create"),
     hasPermission(session, "users.read"),
+    hasPermission(session, "users.update"),
   ]);
   const canManage = canManageServicePartners(session);
   const companyAdmins =
@@ -197,20 +201,44 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
               {companyAdmins.length === 0 ? (
                 <p className="text-[var(--muted)]">No company admins found for this service partner.</p>
               ) : (
-                <div className="space-y-2">
-                  {companyAdmins.map((admin) => (
-                    <Link
-                      key={admin.id}
-                      href={`/users/${admin.id}`}
-                      className="block rounded-md border border-[var(--border)] p-3 hover:bg-slate-50"
-                    >
-                      <p className="font-medium">{admin.name?.trim() || admin.email || admin.phone || "Company Admin"}</p>
-                      <p className="text-xs text-[var(--muted)]">{formatOptional(admin.email)} | {formatOptional(admin.phone)}</p>
-                      <p className="mt-1 text-xs text-[var(--muted)]">
-                        Status: {admin.status} | Last login: {admin.lastLoginAt ? formatDateTime(admin.lastLoginAt) : "-"}
-                      </p>
-                    </Link>
-                  ))}
+                <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
+                      <tr>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Phone</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Last Login</th>
+                        <th className="px-3 py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {companyAdmins.map((admin) => (
+                        <tr key={admin.id} className="border-t border-[var(--border)]">
+                          <td className="px-3 py-2 font-medium">{admin.name?.trim() || admin.email || admin.phone || "Company Admin"}</td>
+                          <td className="px-3 py-2">{formatOptional(admin.email)}</td>
+                          <td className="px-3 py-2">{formatOptional(admin.phone)}</td>
+                          <td className="px-3 py-2">
+                            <StatusBadge value={admin.status} />
+                          </td>
+                          <td className="px-3 py-2">{admin.lastLoginAt ? formatDateTime(admin.lastLoginAt) : "-"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <Link href={`/users/${admin.id}`} className="text-xs font-medium text-[var(--primary)] underline">
+                                View
+                              </Link>
+                              {canUpdateUsers ? (
+                                <Link href={`/users/${admin.id}/edit`} className="text-xs font-medium text-[var(--primary)] underline">
+                                  Edit
+                                </Link>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type RoleOption = {
   id: string;
   name: string;
   key: string;
   scope: string;
+  servicePartnerId: string;
 };
 
 type PermissionOption = {
@@ -23,6 +24,8 @@ type UserPermissionMatrixProps = {
   roleTemplatePermissionIds: Record<string, string[]>;
   defaultRoleId?: string;
   initialPermissionIds: string[];
+  selectedServicePartnerId?: string;
+  presetMode?: "default" | "companyAdmin";
 };
 
 function normalizeModuleLabel(value: string) {
@@ -35,10 +38,19 @@ export function UserPermissionMatrix({
   roleTemplatePermissionIds,
   defaultRoleId,
   initialPermissionIds,
+  selectedServicePartnerId,
+  presetMode = "default",
 }: UserPermissionMatrixProps) {
   const [selectedRoleId, setSelectedRoleId] = useState(defaultRoleId ?? "");
   const [query, setQuery] = useState("");
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<Set<string>>(() => new Set(initialPermissionIds));
+  const visibleRoles = useMemo(() => {
+    if (!selectedServicePartnerId) {
+      return roles;
+    }
+
+    return roles.filter((role) => role.servicePartnerId === selectedServicePartnerId);
+  }, [roles, selectedServicePartnerId]);
 
   const filteredPermissions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -73,6 +85,17 @@ export function UserPermissionMatrix({
     }
     return moduleSet.size;
   }, [permissions, selectedPermissionIds]);
+
+  useEffect(() => {
+    if (!selectedRoleId) {
+      return;
+    }
+
+    const isVisible = visibleRoles.some((role) => role.id === selectedRoleId);
+    if (!isVisible) {
+      setSelectedRoleId("");
+    }
+  }, [visibleRoles, selectedRoleId]);
 
   function togglePermission(permissionId: string) {
     setSelectedPermissionIds((current) => {
@@ -113,7 +136,7 @@ export function UserPermissionMatrix({
     setSelectedPermissionIds(new Set(roleTemplatePermissionIds[selectedRoleId] ?? []));
   }
 
-  function applyReadOnlyPreset() {
+  function applyLimitedPreset() {
     setSelectedPermissionIds(
       new Set(
         permissions
@@ -131,9 +154,22 @@ export function UserPermissionMatrix({
     setSelectedPermissionIds(new Set());
   }
 
+  const presetLabels =
+    presetMode === "companyAdmin"
+      ? {
+          full: "Full Company Admin Access",
+          limited: "Limited Access",
+          clear: "Clear All",
+        }
+      : {
+          full: "Full Allowed Access",
+          limited: "Read Only",
+          clear: "Clear All",
+        };
+
   return (
     <div className="space-y-4">
-      {roles.length > 0 ? (
+      {visibleRoles.length > 0 ? (
         <label className="space-y-1 text-sm">
           <span className="font-medium">Role / Designation</span>
           <select
@@ -143,7 +179,7 @@ export function UserPermissionMatrix({
             className="h-9 w-full rounded-md border border-[var(--border)] px-3"
           >
             <option value="">No role</option>
-            {roles.map((role) => (
+            {visibleRoles.map((role) => (
               <option key={role.id} value={role.id}>
                 {role.name} ({role.key}, {role.scope})
               </option>
@@ -177,24 +213,27 @@ export function UserPermissionMatrix({
             className="h-9 w-full rounded-md border border-[var(--border)] px-3"
           />
         </label>
-        <div className="flex flex-wrap gap-2 md:col-span-2">
-          <button
-            type="button"
-            onClick={applyRoleTemplate}
-            disabled={!selectedRoleId}
-            className="rounded-md border border-slate-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Use Role Template
-          </button>
-          <button type="button" onClick={applyReadOnlyPreset} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-            Read Only
-          </button>
-          <button type="button" onClick={applyFullPreset} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-            Full Allowed Access
-          </button>
-          <button type="button" onClick={clearAllPermissions} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-            Clear All
-          </button>
+        <div className="space-y-2 md:col-span-2">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Permission Template</h4>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={applyRoleTemplate}
+              disabled={!selectedRoleId}
+              className="rounded-md border border-slate-200 px-2 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Use Role Template
+            </button>
+            <button type="button" onClick={applyLimitedPreset} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
+              {presetLabels.limited}
+            </button>
+            <button type="button" onClick={applyFullPreset} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
+              {presetLabels.full}
+            </button>
+            <button type="button" onClick={clearAllPermissions} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
+              {presetLabels.clear}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -202,6 +241,7 @@ export function UserPermissionMatrix({
         <p className="text-sm text-[var(--muted)]">No permissions available for assignment.</p>
       ) : (
         <div className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Final User Permissions</h4>
           {groupedPermissions.map(([module, modulePermissions]) => {
             const selectedInModule = modulePermissions.filter((permission) => selectedPermissionIds.has(permission.id)).length;
             return (

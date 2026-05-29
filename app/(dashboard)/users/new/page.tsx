@@ -4,7 +4,12 @@ import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { createUserAction } from "@/features/users/actions/user.actions";
 import { UserForm } from "@/features/users/components/user-form";
-import { listAssignableRoles, listServicePartnersForUserForm } from "@/features/users/services/user.service";
+import {
+  listAssignablePermissions,
+  listAssignableRoles,
+  listRoleTemplatePermissionIds,
+  listServicePartnersForUserForm,
+} from "@/features/users/services/user.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
@@ -29,6 +34,9 @@ function getErrorMessage(code?: string) {
   if (code === "role-permission") {
     return "You do not have permission to assign roles.";
   }
+  if (code === "permission-grant") {
+    return "You can only assign permissions that you currently have.";
+  }
   return undefined;
 }
 
@@ -41,13 +49,17 @@ export default async function NewUserPage({ searchParams }: NewUserPageProps) {
       ([canAssignByRole, canAssignByUser]) => canAssignByRole || canAssignByUser
     ),
   ]);
-  const roles = canAssignRoles ? await listAssignableRoles(session) : [];
+  const [roles, permissions] = await Promise.all([
+    canAssignRoles ? listAssignableRoles(session) : Promise.resolve([]),
+    listAssignablePermissions(session),
+  ]);
+  const roleTemplatePermissionIds = await listRoleTemplatePermissionIds(roles.map((role) => role.id));
 
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Create User" description="Create a new user and assign them to a service partner." />
+      <PageHeader title="Create User" description="Create a new user, choose role template, and assign direct permissions." />
       <div>
         <Link href="/users" className="text-sm text-[var(--muted)] underline">
           Back to users
@@ -60,7 +72,16 @@ export default async function NewUserPage({ searchParams }: NewUserPageProps) {
           action={createUserAction}
           cancelHref="/users"
           servicePartners={servicePartners}
-          roles={roles.map((role) => ({ id: role.id, name: role.name, key: role.key, scope: role.scope }))}
+          roles={roles.map((role) => ({
+            id: role.id,
+            name: role.name,
+            key: role.key,
+            scope: role.scope,
+            servicePartnerId: role.servicePartnerId,
+          }))}
+          permissions={permissions}
+          roleTemplatePermissionIds={roleTemplatePermissionIds}
+          initialPermissionIds={[]}
           canChooseServicePartner={session.user.isSuperAdmin}
           errorMessage={errorMessage}
         />

@@ -4,7 +4,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { updateUserAction } from "@/features/users/actions/user.actions";
 import { UserForm } from "@/features/users/components/user-form";
-import { getUserById, listServicePartnersForUserForm } from "@/features/users/services/user.service";
+import {
+  getUserById,
+  listAssignablePermissions,
+  listAssignableRoles,
+  listRoleTemplatePermissionIds,
+  listServicePartnersForUserForm,
+} from "@/features/users/services/user.service";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 
@@ -23,23 +30,45 @@ function getErrorMessage(code?: string) {
   if (code === "service-partner") {
     return "Service partner is required.";
   }
+  if (code === "role") {
+    return "Selected role is invalid for this service partner.";
+  }
+  if (code === "role-permission") {
+    return "You do not have permission to assign roles.";
+  }
+  if (code === "permission-grant") {
+    return "You can only assign permissions that you currently have.";
+  }
+  if (code === "self-lockout") {
+    return "Blocked to prevent removing your own critical company admin access.";
+  }
   return undefined;
 }
 
 export default async function EditUserPage({ params, searchParams }: EditUserPageProps) {
   const session = await requirePermission("users.update");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
-  const [user, servicePartners] = await Promise.all([getUserById(session, id), listServicePartnersForUserForm(session)]);
+  const [user, servicePartners, canAssignRoles, permissions] = await Promise.all([
+    getUserById(session, id),
+    listServicePartnersForUserForm(session),
+    Promise.all([hasPermission(session, "roles.assign"), hasPermission(session, "users.roles.assign")]).then(
+      ([canAssignByRole, canAssignByUser]) => canAssignByRole || canAssignByUser
+    ),
+    listAssignablePermissions(session),
+  ]);
 
   if (!user) {
     notFound();
   }
 
+  const roles = canAssignRoles ? await listAssignableRoles(session) : [];
+  const roleTemplatePermissionIds = await listRoleTemplatePermissionIds(roles.map((role) => role.id));
+  const defaultRoleId = user.roles[0]?.role.id;
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Edit User" description="Update user identity, contact details, and status." />
+      <PageHeader title="Edit User" description="Update user identity, role template, and direct permissions." />
       <div>
         <Link href={`/users/${id}`} className="text-sm text-[var(--muted)] underline">
           Back to details
@@ -49,6 +78,17 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
         action={updateUserAction.bind(null, id)}
         cancelHref={`/users/${id}`}
         servicePartners={servicePartners}
+        roles={roles.map((role) => ({
+          id: role.id,
+          name: role.name,
+          key: role.key,
+          scope: role.scope,
+          servicePartnerId: role.servicePartnerId,
+        }))}
+        defaultRoleId={defaultRoleId}
+        permissions={permissions}
+        roleTemplatePermissionIds={roleTemplatePermissionIds}
+        initialPermissionIds={user.directPermissions.map((entry) => entry.permission.id)}
         canChooseServicePartner={session.user.isSuperAdmin}
         errorMessage={errorMessage}
         user={{
