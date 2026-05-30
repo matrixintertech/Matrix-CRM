@@ -31,6 +31,9 @@ function getErrorMessage(code?: string) {
   if (code === "mismatch") {
     return "Client, service request, item, and vendor must belong to the selected service partner.";
   }
+  if (code === "invalid-transition") {
+    return "RFQ status transition is not allowed.";
+  }
   return undefined;
 }
 

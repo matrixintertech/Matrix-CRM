@@ -47,6 +47,12 @@ function getErrorMessage(code?: string) {
   if (code === "mismatch") {
     return "RFQ update blocked by tenant scope mismatch.";
   }
+  if (code === "invalid-transition") {
+    return "RFQ status transition is not allowed.";
+  }
+  if (code === "send-prerequisite") {
+    return "RFQ must have at least one line item and one vendor before sending.";
+  }
   if (code === "not-found") {
     return "RFQ record could not be found.";
   }

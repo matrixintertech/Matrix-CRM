@@ -18,6 +18,8 @@ const statusOptions: RfqStatus[] = [
 ];
 
 export function RfqStatusActions({ rfqId, currentStatus, canDelete, canSend }: RfqStatusActionsProps) {
+  const canSendFromCurrentStatus = currentStatus !== RfqStatus.CLOSED && currentStatus !== RfqStatus.CANCELLED;
+
   return (
     <div className="space-y-2">
       <form action={updateRfqStatusAction.bind(null, rfqId)} className="space-y-2">
@@ -37,7 +39,7 @@ export function RfqStatusActions({ rfqId, currentStatus, canDelete, canSend }: R
         </button>
       </form>
 
-      {canSend ? (
+      {canSend && canSendFromCurrentStatus ? (
         <form action={sendRfqAction.bind(null, rfqId)}>
           <input type="hidden" name="redirectTo" value={`/rfqs/${rfqId}`} />
           <button type="submit" className="rounded-md border border-indigo-200 px-3 py-2 text-sm text-indigo-700">

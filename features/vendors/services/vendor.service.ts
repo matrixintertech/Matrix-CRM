@@ -183,7 +183,12 @@ export async function updateVendor(session: Session, id: string, input: VendorUp
   });
 }
 
-export async function updateVendorStatus(id: string, status: VendorStatus, isVerified?: boolean) {
+export async function updateVendorStatus(session: Session, id: string, status: VendorStatus, isVerified?: boolean) {
+  const existing = await getVendorById(session, id);
+  if (!existing) {
+    throw new Error("Vendor not found.");
+  }
+
   return prisma.vendor.update({
     where: { id },
     data: {
@@ -193,7 +198,12 @@ export async function updateVendorStatus(id: string, status: VendorStatus, isVer
   });
 }
 
-export async function softDeleteVendor(id: string) {
+export async function softDeleteVendor(session: Session, id: string) {
+  const existing = await getVendorById(session, id);
+  if (!existing) {
+    throw new Error("Vendor not found.");
+  }
+
   return prisma.vendor.update({
     where: { id },
     data: {

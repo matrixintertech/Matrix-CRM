@@ -150,7 +150,7 @@ export async function updateVendorStatusAction(id: string, formData: FormData) {
 
   await requireTenantAccess(vendor.servicePartnerId);
 
-  await updateVendorStatus(id, parsed.data.status, parsed.data.isVerified);
+  await updateVendorStatus(session, id, parsed.data.status, parsed.data.isVerified);
   await logActivity({
     action: "vendor.status_change",
     module: "vendors",
@@ -178,7 +178,7 @@ export async function deleteVendorAction(id: string, formData: FormData) {
 
   await requireTenantAccess(vendor.servicePartnerId);
 
-  await softDeleteVendor(id);
+  await softDeleteVendor(session, id);
   await logActivity({
     action: "vendor.delete",
     module: "vendors",

@@ -29,6 +29,54 @@ function roundQuantity(value: number) {
   return Math.round((value + Number.EPSILON) * 1000) / 1000;
 }
 
+const rfqStatusTransitionMap: Record<RfqStatus, readonly RfqStatus[]> = {
+  [RfqStatus.DRAFT]: [RfqStatus.DRAFT, RfqStatus.PUBLISHED, RfqStatus.QUOTING, RfqStatus.CANCELLED],
+  [RfqStatus.PUBLISHED]: [RfqStatus.PUBLISHED, RfqStatus.QUOTING, RfqStatus.CLOSED, RfqStatus.CANCELLED],
+  [RfqStatus.QUOTING]: [RfqStatus.QUOTING, RfqStatus.CLOSED, RfqStatus.CANCELLED],
+  [RfqStatus.CLOSED]: [RfqStatus.CLOSED],
+  [RfqStatus.CANCELLED]: [RfqStatus.CANCELLED],
+};
+
+const rfqVendorStatusTransitionMap: Record<RfqVendorStatus, readonly RfqVendorStatus[]> = {
+  [RfqVendorStatus.INVITED]: [
+    RfqVendorStatus.INVITED,
+    RfqVendorStatus.QUOTING,
+    RfqVendorStatus.QUOTE_SUBMITTED,
+    RfqVendorStatus.REJECTED,
+    RfqVendorStatus.CANCELLED,
+  ],
+  [RfqVendorStatus.QUOTING]: [
+    RfqVendorStatus.QUOTING,
+    RfqVendorStatus.QUOTE_SUBMITTED,
+    RfqVendorStatus.SELECTED,
+    RfqVendorStatus.REJECTED,
+    RfqVendorStatus.CANCELLED,
+  ],
+  [RfqVendorStatus.QUOTE_SUBMITTED]: [
+    RfqVendorStatus.QUOTE_SUBMITTED,
+    RfqVendorStatus.SELECTED,
+    RfqVendorStatus.REJECTED,
+    RfqVendorStatus.CANCELLED,
+  ],
+  [RfqVendorStatus.SELECTED]: [RfqVendorStatus.SELECTED, RfqVendorStatus.CANCELLED],
+  [RfqVendorStatus.REJECTED]: [RfqVendorStatus.REJECTED],
+  [RfqVendorStatus.CANCELLED]: [RfqVendorStatus.CANCELLED],
+};
+
+function assertRfqStatusTransition(currentStatus: RfqStatus, nextStatus: RfqStatus) {
+  const allowedStatuses = rfqStatusTransitionMap[currentStatus] ?? [currentStatus];
+  if (!allowedStatuses.includes(nextStatus)) {
+    throw new Error(`RFQ status transition is not allowed: ${currentStatus} -> ${nextStatus}.`);
+  }
+}
+
+function assertRfqVendorStatusTransition(currentStatus: RfqVendorStatus, nextStatus: RfqVendorStatus) {
+  const allowedStatuses = rfqVendorStatusTransitionMap[currentStatus] ?? [currentStatus];
+  if (!allowedStatuses.includes(nextStatus)) {
+    throw new Error(`RFQ vendor status transition is not allowed: ${currentStatus} -> ${nextStatus}.`);
+  }
+}
+
 export function getRfqScopeWhere(session: Session): Prisma.RfqWhereInput {
   return scopeByTenant(session, {});
 }
@@ -554,6 +602,7 @@ export async function updateRfq(session: Session, id: string, input: RfqUpsertIn
   if (!existing) {
     throw new Error("RFQ not found.");
   }
+  assertRfqStatusTransition(existing.status, input.status);
 
   const servicePartnerId = getServicePartnerIdForRfqWrite(session, input.servicePartnerId ?? existing.servicePartnerId);
   if (!servicePartnerId) {
@@ -613,6 +662,7 @@ export async function updateRfqStatus(session: Session, id: string, status: RfqS
   if (!existing) {
     throw new Error("RFQ not found.");
   }
+  assertRfqStatusTransition(existing.status, status);
 
   return prisma.rfq.update({
     where: { id },
@@ -626,6 +676,15 @@ export async function sendRfqToVendors(session: Session, id: string) {
   const existing = await getRfqById(session, id);
   if (!existing) {
     throw new Error("RFQ not found.");
+  }
+  assertRfqStatusTransition(existing.status, RfqStatus.PUBLISHED);
+
+  if (existing.items.length === 0) {
+    throw new Error("RFQ cannot be sent without at least one line item.");
+  }
+
+  if (existing.vendorQuotes.length === 0) {
+    throw new Error("RFQ cannot be sent without at least one vendor.");
   }
 
   return prisma.$transaction(async (tx) => {
@@ -676,6 +735,28 @@ export async function updateRfqVendorQuote(session: Session, rfqId: string, inpu
     throw new Error("RFQ vendor not found.");
   }
 
+  const existingVendorQuote = existing.vendorQuotes.find((quote) => quote.vendorId === input.vendorId);
+  if (!existingVendorQuote) {
+    throw new Error("RFQ vendor not found.");
+  }
+
+  const nextStatus = input.status ?? RfqVendorStatus.QUOTE_SUBMITTED;
+  assertRfqVendorStatusTransition(existingVendorQuote.status, nextStatus);
+
+  if (input.quotedAmount !== undefined && input.quotedAmount < 0) {
+    throw new Error("Quoted amount cannot be negative.");
+  }
+  if ((nextStatus === RfqVendorStatus.QUOTE_SUBMITTED || nextStatus === RfqVendorStatus.SELECTED) && input.quotedAmount === undefined) {
+    throw new Error("Quoted amount is required when quote is submitted or selected.");
+  }
+
+  const submittedAt =
+    nextStatus === RfqVendorStatus.QUOTE_SUBMITTED || nextStatus === RfqVendorStatus.SELECTED
+      ? new Date()
+      : nextStatus === RfqVendorStatus.INVITED || nextStatus === RfqVendorStatus.QUOTING
+        ? null
+        : existingVendorQuote.submittedAt;
+
   return prisma.rfqVendor.update({
     where: {
       rfqId_vendorId: {
@@ -684,10 +765,10 @@ export async function updateRfqVendorQuote(session: Session, rfqId: string, inpu
       },
     },
     data: {
-      status: input.status ?? RfqVendorStatus.QUOTE_SUBMITTED,
+      status: nextStatus,
       quotedAmount: input.quotedAmount ?? null,
       notes: normalizeOptionalString(input.notes),
-      submittedAt: new Date(),
+      submittedAt,
     },
   });
 }

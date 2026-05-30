@@ -67,6 +67,21 @@ function isTenantMismatchError(error: unknown) {
   );
 }
 
+function isStatusTransitionError(error: unknown) {
+  return error instanceof Error && error.message.toLowerCase().includes("status transition is not allowed");
+}
+
+function isSendPrerequisiteError(error: unknown) {
+  return error instanceof Error && error.message.toLowerCase().includes("cannot be sent without");
+}
+
+function isVendorQuoteValidationError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.message.toLowerCase().includes("quoted amount") || error.message.toLowerCase().includes("vendor status transition is not allowed"))
+  );
+}
+
 function revalidateRfqPaths(rfqId: string) {
   revalidatePath("/rfqs");
   revalidatePath(`/rfqs/${rfqId}`);
@@ -348,6 +363,9 @@ export async function updateRfqAction(id: string, formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect(`/rfqs/${id}/edit?error=duplicate`);
     }
+    if (isStatusTransitionError(error)) {
+      redirect(`/rfqs/${id}/edit?error=invalid-transition`);
+    }
     if (isTenantMismatchError(error)) {
       redirect(`/rfqs/${id}/edit?error=mismatch`);
     }
@@ -372,7 +390,16 @@ export async function updateRfqStatusAction(id: string, formData: FormData) {
 
   await requireTenantAccess(existing.servicePartnerId);
 
-  const rfq = await updateRfqStatus(session, id, parsed.data.status);
+  let rfq;
+  try {
+    rfq = await updateRfqStatus(session, id, parsed.data.status);
+  } catch (error) {
+    if (isStatusTransitionError(error)) {
+      redirect(`/rfqs/${id}?error=invalid-transition`);
+    }
+    throw error;
+  }
+
   await logActivity({
     action: "rfq.status_change",
     module: "rfq",
@@ -406,7 +433,19 @@ export async function sendRfqAction(id: string, formData: FormData) {
 
   await requireTenantAccess(existing.servicePartnerId);
 
-  const rfq = await sendRfqToVendors(session, id);
+  let rfq;
+  try {
+    rfq = await sendRfqToVendors(session, id);
+  } catch (error) {
+    if (isStatusTransitionError(error)) {
+      redirect(`/rfqs/${id}?error=invalid-transition`);
+    }
+    if (isSendPrerequisiteError(error)) {
+      redirect(`/rfqs/${id}?error=send-prerequisite`);
+    }
+    throw error;
+  }
+
   await logActivity({
     action: "rfq.status_change",
     module: "rfq",
@@ -468,7 +507,16 @@ export async function updateRfqVendorQuoteAction(rfqId: string, formData: FormDa
   }
   await requireTenantAccess(existing.servicePartnerId);
 
-  const updated = await updateRfqVendorQuote(session, rfqId, parsed.data);
+  let updated;
+  try {
+    updated = await updateRfqVendorQuote(session, rfqId, parsed.data);
+  } catch (error) {
+    if (isVendorQuoteValidationError(error)) {
+      redirect(`/rfqs/${rfqId}?error=vendor-quote-validation`);
+    }
+    throw error;
+  }
+
   await logActivity({
     action: "rfq.vendor_quote_update",
     module: "rfq",
