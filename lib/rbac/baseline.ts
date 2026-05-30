@@ -108,6 +108,12 @@ export const baselinePermissions: PermissionDefinition[] = [
   { key: "tasks.status.update", module: "tasks", action: "status.update", description: "Update task status." },
   { key: "ledger.read", module: "ledger", action: "read", description: "Read ledger module." },
   { key: "quotations.read", module: "quotations", action: "read", description: "Read quotations module." },
+  { key: "quotations.create", module: "quotations", action: "create", description: "Create quotations." },
+  { key: "quotations.update", module: "quotations", action: "update", description: "Update quotations." },
+  { key: "quotations.delete", module: "quotations", action: "delete", description: "Delete quotations." },
+  { key: "quotations.status.update", module: "quotations", action: "status.update", description: "Update quotation status." },
+  { key: "quotations.submit", module: "quotations", action: "submit", description: "Submit quotations." },
+  { key: "quotations.approve", module: "quotations", action: "approve", description: "Approve quotations." },
   { key: "payments.read", module: "payments", action: "read", description: "Read payments module." },
   { key: "payments.create", module: "payments", action: "create", description: "Create payments." },
   { key: "expenses.read", module: "expenses", action: "read", description: "Read expenses module." },
@@ -245,6 +251,13 @@ const companyAdminPermissions = [
   "tasks.update",
   "tasks.delete",
   "tasks.status.update",
+  "quotations.read",
+  "quotations.create",
+  "quotations.update",
+  "quotations.delete",
+  "quotations.status.update",
+  "quotations.submit",
+  "quotations.approve",
 ] as const;
 
 export const rolePermissionGrants: Record<string, readonly string[]> = {
@@ -277,6 +290,12 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "tasks.create",
     "tasks.update",
     "tasks.status.update",
+    "quotations.read",
+    "quotations.create",
+    "quotations.update",
+    "quotations.status.update",
+    "quotations.submit",
+    "quotations.approve",
     "activity_logs.read",
   ],
   operator: [
@@ -298,6 +317,11 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "tasks.create",
     "tasks.update",
     "tasks.status.update",
+    "quotations.read",
+    "quotations.create",
+    "quotations.update",
+    "quotations.status.update",
+    "quotations.submit",
   ],
   technician: [
     "dashboard.read",
@@ -312,6 +336,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "tasks.read",
     "tasks.update",
     "tasks.status.update",
+    "quotations.read",
   ],
   support: [
     "dashboard.read",
@@ -322,6 +347,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "service_requests.timeline",
     "activity_logs.read",
     "tasks.read",
+    "quotations.read",
   ],
 };
 

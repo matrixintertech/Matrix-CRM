@@ -2,6 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/admin/page-header";
+import { createQuotationAction } from "@/features/quotations/actions/quotation.actions";
+import { QuotationForm } from "@/features/quotations/components/quotation-form";
+import { QuotationSummaryCard } from "@/features/quotations/components/quotation-summary-card";
+import { QuotationsTable } from "@/features/quotations/components/quotations-table";
+import {
+  listQuotationItemOptions,
+  listQuotationsForServiceRequest,
+} from "@/features/quotations/services/quotation.service";
 import { ServiceRequestResponsibilityCard } from "@/features/service-requests/components/service-request-responsibility-card";
 import { ServiceRequestStatusActions } from "@/features/service-requests/components/service-request-status-actions";
 import { ServiceRequestSummaryCard } from "@/features/service-requests/components/service-request-summary-card";
@@ -46,6 +54,21 @@ function getSuccessMessage(code?: string) {
   if (code === "task-deleted") {
     return "Work item deleted successfully.";
   }
+  if (code === "quotation-created") {
+    return "Quotation created successfully.";
+  }
+  if (code === "quotation-updated") {
+    return "Quotation updated successfully.";
+  }
+  if (code === "quotation-status-updated") {
+    return "Quotation status updated successfully.";
+  }
+  if (code === "quotation-submitted") {
+    return "Quotation submitted successfully.";
+  }
+  if (code === "quotation-deleted") {
+    return "Quotation deleted successfully.";
+  }
   return undefined;
 }
 
@@ -74,6 +97,21 @@ function getErrorMessage(code?: string) {
   if (code === "task-not-found") {
     return "Work item could not be found.";
   }
+  if (code === "quotation-validation") {
+    return "Quotation validation failed. Check dates and line values.";
+  }
+  if (code === "quotation-status-validation") {
+    return "Quotation status update failed due to invalid status.";
+  }
+  if (code === "quotation-mismatch") {
+    return "Quotation update blocked: line items must belong to this company and be active.";
+  }
+  if (code === "quotation-not-found") {
+    return "Quotation could not be found.";
+  }
+  if (code === "quotation-duplicate") {
+    return "A quotation already exists for this service request.";
+  }
   return undefined;
 }
 
@@ -96,6 +134,12 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
     canTaskUpdate,
     canTaskDelete,
     canTaskStatusUpdate,
+    canQuotationRead,
+    canQuotationCreate,
+    canQuotationUpdate,
+    canQuotationDelete,
+    canQuotationStatusUpdate,
+    canQuotationSubmit,
   ] = await Promise.all([
     hasPermission(session, "service_requests.update"),
     hasPermission(session, "service_requests.delete"),
@@ -106,18 +150,43 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
     hasPermission(session, "tasks.update"),
     hasPermission(session, "tasks.delete"),
     hasPermission(session, "tasks.status.update"),
+    hasPermission(session, "quotations.read"),
+    hasPermission(session, "quotations.create"),
+    hasPermission(session, "quotations.update"),
+    hasPermission(session, "quotations.delete"),
+    hasPermission(session, "quotations.status.update"),
+    hasPermission(session, "quotations.submit"),
   ]);
 
-  const [responsibility, taskBundle, taskUsers] = await Promise.all([
+  const [responsibility, taskBundle, taskUsers, quotationBundle, quotationItemOptions] = await Promise.all([
     canResponsibilityRead ? getServiceRequestResponsibilities(session, serviceRequest.id) : Promise.resolve(null),
     canTaskRead ? listTasksForServiceRequest(session, serviceRequest.id) : Promise.resolve(null),
     canResponsibilityUpdate || canTaskCreate || canTaskUpdate
       ? listTaskResponsibilityUsers(session, serviceRequest.servicePartnerId)
       : Promise.resolve([]),
+    canQuotationRead ? listQuotationsForServiceRequest(session, serviceRequest.id) : Promise.resolve(null),
+    canQuotationCreate || canQuotationUpdate
+      ? listQuotationItemOptions(session, serviceRequest.id)
+      : Promise.resolve([]),
   ]);
   const responsibilityCandidates = canResponsibilityUpdate
     ? await listResponsibilityCandidates(session, serviceRequest.servicePartnerId)
     : [];
+  const mappedQuotations =
+    quotationBundle?.quotations.map((quotation) => ({
+      ...quotation,
+      subtotal: Number(quotation.subtotal),
+      taxTotal: Number(quotation.taxTotal),
+      grandTotal: Number(quotation.grandTotal),
+      items: quotation.items.map((line) => ({
+        ...line,
+        quantity: Number(line.quantity),
+        unitRate: Number(line.unitRate),
+        taxPercent: line.taxPercent === null ? null : Number(line.taxPercent),
+        amount: Number(line.amount),
+      })),
+    })) ?? [];
+  const canCreateNewQuotation = canQuotationRead && canQuotationCreate && mappedQuotations.length === 0;
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -181,6 +250,40 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
                   redirectTo={`/service-requests/${serviceRequest.id}`}
                   users={taskUsers}
                   submitLabel="Create work item"
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <h2 className="mb-3 text-base font-semibold">Quotations</h2>
+            {canQuotationRead && quotationBundle ? (
+              <div className="space-y-4">
+                <QuotationSummaryCard quotations={mappedQuotations} />
+                <QuotationsTable
+                  serviceRequestId={serviceRequest.id}
+                  redirectTo={`/service-requests/${serviceRequest.id}`}
+                  quotations={mappedQuotations}
+                  itemOptions={quotationItemOptions}
+                  canUpdate={canQuotationUpdate}
+                  canDelete={canQuotationDelete}
+                  canUpdateStatus={canQuotationStatusUpdate}
+                  canSubmit={canQuotationSubmit}
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">You do not have permission to view quotations.</p>
+            )}
+
+            {canCreateNewQuotation ? (
+              <div className="mt-4">
+                <h3 className="mb-2 text-sm font-semibold">Add Quotation</h3>
+                <QuotationForm
+                  action={createQuotationAction}
+                  serviceRequestId={serviceRequest.id}
+                  redirectTo={`/service-requests/${serviceRequest.id}`}
+                  itemOptions={quotationItemOptions}
+                  submitLabel="Create quotation"
                 />
               </div>
             ) : null}

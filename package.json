@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "qa:access": "tsx scripts/access-governance-qa.ts",
     "qa:service-requests": "tsx scripts/service-request-work-items-qa.ts",
+    "qa:quotations": "tsx scripts/quotation-qa.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
