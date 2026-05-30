@@ -4,12 +4,34 @@ import { env } from "../lib/config/env";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = new PrismaClient();
+const parsedHeartbeatMs = Number(process.env.SEED_HEARTBEAT_MS ?? 30_000);
+const SEED_HEARTBEAT_MS = Number.isFinite(parsedHeartbeatMs) && parsedHeartbeatMs >= 5_000 ? parsedHeartbeatMs : 30_000;
+const seedStart = Date.now();
 
 type SeedResult = {
   platformServicePartnerId: string;
   bootstrapAdminCreated: boolean;
   devUsersSeeded: boolean;
 };
+
+function formatDuration(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remSeconds = seconds % 60;
+  return `${minutes}m ${remSeconds}s`;
+}
+
+function logSeed(message: string) {
+  console.log(`[seed] ${message}`);
+}
+
+async function runStep<T>(name: string, fn: () => Promise<T>) {
+  const startedAt = Date.now();
+  logSeed(`START ${name}`);
+  const result = await fn();
+  logSeed(`DONE ${name} (${Date.now() - startedAt}ms)`);
+  return result;
+}
 
 async function upsertPlatformServicePartner() {
   const variables = env();
@@ -57,6 +79,138 @@ async function assignRoleByKey(userId: string, servicePartnerId: string, roleKey
   });
 }
 
+async function ensureDirectPermissionsFromAssignedRoles(userId: string, servicePartnerId: string) {
+  const existingDirectPermissionCount = await prisma.userPermission.count({
+    where: {
+      userId,
+    },
+  });
+
+  if (existingDirectPermissionCount > 0) {
+    return;
+  }
+
+  const assignedRoles = await prisma.userRole.findMany({
+    where: {
+      userId,
+      role: {
+        deletedAt: null,
+      },
+    },
+    select: {
+      role: {
+        select: {
+          key: true,
+          permissions: {
+            select: {
+              permissionId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (assignedRoles.some((entry) => entry.role.key === "super_admin")) {
+    return;
+  }
+
+  const permissionIds = Array.from(
+    new Set(assignedRoles.flatMap((entry) => entry.role.permissions.map((permission) => permission.permissionId)))
+  );
+  if (permissionIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction(
+    permissionIds.map((permissionId) =>
+      prisma.userPermission.upsert({
+        where: {
+          userId_permissionId: {
+            userId,
+            permissionId,
+          },
+        },
+        update: {
+          allowed: true,
+          servicePartnerId,
+          assignedByUserId: null,
+        },
+        create: {
+          userId,
+          permissionId,
+          allowed: true,
+          servicePartnerId,
+          assignedByUserId: null,
+        },
+      })
+    )
+  );
+}
+
+async function backfillDirectPermissionsForExistingUsers() {
+  const users = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      roles: {
+        some: {
+          role: {
+            deletedAt: null,
+          },
+        },
+      },
+      directPermissions: {
+        none: {},
+      },
+    },
+    include: {
+      roles: {
+        where: {
+          role: {
+            deletedAt: null,
+          },
+        },
+        select: {
+          role: {
+            select: {
+              key: true,
+              permissions: {
+                select: {
+                  permissionId: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  for (const user of users) {
+    if (user.roles.some((entry) => entry.role.key === "super_admin")) {
+      continue;
+    }
+
+    const permissionIds = Array.from(
+      new Set(user.roles.flatMap((entry) => entry.role.permissions.map((permission) => permission.permissionId)))
+    );
+    if (permissionIds.length === 0) {
+      continue;
+    }
+
+    await prisma.userPermission.createMany({
+      data: permissionIds.map((permissionId) => ({
+        userId: user.id,
+        permissionId,
+        allowed: true,
+        servicePartnerId: user.servicePartnerId,
+        assignedByUserId: null,
+      })),
+      skipDuplicates: true,
+    });
+  }
+}
+
 async function seedBootstrapSuperAdmin(platformServicePartnerId: string) {
   const variables = env();
   const email = variables.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase().trim();
@@ -87,6 +241,7 @@ async function seedBootstrapSuperAdmin(platformServicePartnerId: string) {
       });
 
   await assignRoleByKey(user.id, platformServicePartnerId, "super_admin");
+  await ensureDirectPermissionsFromAssignedRoles(user.id, platformServicePartnerId);
   return true;
 }
 
@@ -135,34 +290,53 @@ async function seedDevTestUsers() {
   });
 
   await assignRoleByKey(companyAdmin.id, devTenant.id, "company_admin");
+  await ensureDirectPermissionsFromAssignedRoles(companyAdmin.id, devTenant.id);
   return true;
 }
 
 async function main(): Promise<SeedResult> {
-  const platform = await upsertPlatformServicePartner();
+  const heartbeat = setInterval(() => {
+    logSeed(`IN_PROGRESS total=${formatDuration(Date.now() - seedStart)}`);
+  }, SEED_HEARTBEAT_MS);
+  heartbeat.unref();
 
-  await ensureTenantRbac(prisma, {
-    servicePartnerId: platform.id,
-    includePlatformRole: true,
-  });
+  await runStep("connect prisma client", async () => prisma.$connect());
 
-  const existingTenants = await prisma.servicePartner.findMany({
-    where: {
-      id: { not: platform.id },
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
+  const platform = await runStep("upsert platform service partner", upsertPlatformServicePartner);
 
-  for (const tenant of existingTenants) {
-    await ensureTenantRbac(prisma, {
-      servicePartnerId: tenant.id,
-      includePlatformRole: false,
-    });
+  await runStep("ensure platform RBAC baseline", async () =>
+    ensureTenantRbac(prisma, {
+      servicePartnerId: platform.id,
+      includePlatformRole: true,
+    })
+  );
+
+  const existingTenants = await runStep("load active tenants", async () =>
+    prisma.servicePartner.findMany({
+      where: {
+        id: { not: platform.id },
+        deletedAt: null,
+      },
+      select: { id: true },
+    })
+  );
+  logSeed(`INFO active tenant count=${existingTenants.length}`);
+
+  for (const [index, tenant] of existingTenants.entries()) {
+    await runStep(`ensure tenant RBAC baseline (${index + 1}/${existingTenants.length})`, async () =>
+      ensureTenantRbac(prisma, {
+        servicePartnerId: tenant.id,
+        includePlatformRole: false,
+      })
+    );
   }
 
-  const bootstrapAdminCreated = await seedBootstrapSuperAdmin(platform.id);
-  const devUsersSeeded = await seedDevTestUsers();
+  const bootstrapAdminCreated = await runStep("seed bootstrap super admin", async () =>
+    seedBootstrapSuperAdmin(platform.id)
+  );
+  const devUsersSeeded = await runStep("seed development test users", seedDevTestUsers);
+  await runStep("backfill direct permissions", backfillDirectPermissionsForExistingUsers);
+  clearInterval(heartbeat);
 
   return {
     platformServicePartnerId: platform.id,
@@ -173,12 +347,16 @@ async function main(): Promise<SeedResult> {
 
 main()
   .then((result) => {
+    logSeed(`COMPLETED total=${formatDuration(Date.now() - seedStart)}`);
     console.log("Seed completed", result);
   })
   .catch((error) => {
+    logSeed(`FAILED total=${formatDuration(Date.now() - seedStart)}`);
     console.error(error);
     process.exit(1);
   })
   .finally(async () => {
+    logSeed("DISCONNECT prisma client");
     await prisma.$disconnect();
+    logSeed("DISCONNECTED prisma client");
   });

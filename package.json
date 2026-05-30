@@ -11,9 +11,11 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "prisma db seed",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed:prisma": "prisma db seed",
     "db:studio": "prisma studio",
     "qa:access": "tsx scripts/access-governance-qa.ts",
+    "qa:service-requests": "tsx scripts/service-request-work-items-qa.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
