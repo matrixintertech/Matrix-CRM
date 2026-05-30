@@ -11,7 +11,20 @@ type KpiCardDefinition = {
   note: string;
   href: string;
   permission: string;
-  key: "companies" | "users" | "roles" | "permissions" | "clients" | "branches" | "categories" | "items" | "rateCards" | "serviceRequests" | "openServiceRequests";
+  key:
+    | "companies"
+    | "users"
+    | "roles"
+    | "permissions"
+    | "clients"
+    | "branches"
+    | "categories"
+    | "items"
+    | "vendors"
+    | "rateCards"
+    | "serviceRequests"
+    | "openServiceRequests"
+    | "rfqs";
 };
 
 type QuickAction = {
@@ -44,8 +57,10 @@ const superAdminKpis: KpiCardDefinition[] = [
   { title: "Branches", note: "All branches", href: "/branches", permission: "branches.read", key: "branches" },
   { title: "Categories", note: "All categories", href: "/categories", permission: "categories.read", key: "categories" },
   { title: "Items", note: "All items", href: "/items", permission: "items.read", key: "items" },
+  { title: "Vendors", note: "All vendors", href: "/vendors", permission: "vendors.read", key: "vendors" },
   { title: "Rate Cards", note: "All rate cards", href: "/rate-cards", permission: "rate_cards.read", key: "rateCards" },
   { title: "Service Requests", note: "All requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
+  { title: "RFQs", note: "All RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
 ];
 
 const companyKpis: KpiCardDefinition[] = [
@@ -55,9 +70,11 @@ const companyKpis: KpiCardDefinition[] = [
   { title: "Branches", note: "Company branches", href: "/branches", permission: "branches.read", key: "branches" },
   { title: "Categories", note: "Company categories", href: "/categories", permission: "categories.read", key: "categories" },
   { title: "Items", note: "Company items", href: "/items", permission: "items.read", key: "items" },
+  { title: "Vendors", note: "Company vendors", href: "/vendors", permission: "vendors.read", key: "vendors" },
   { title: "Rate Cards", note: "Company rate cards", href: "/rate-cards", permission: "rate_cards.read", key: "rateCards" },
   { title: "Service Requests", note: "Company requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "Open Service Requests", note: "Open queue", href: "/service-requests", permission: "service_requests.read", key: "openServiceRequests" },
+  { title: "RFQs", note: "Company RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
 ];
 
 const quickActionDefinitions: QuickAction[] = [
@@ -69,8 +86,10 @@ const quickActionDefinitions: QuickAction[] = [
   { title: "Add Branch", subtitle: "Create branch", href: "/branches/new", permission: "branches.create" },
   { title: "Add Category", subtitle: "Create category", href: "/categories/new", permission: "categories.create" },
   { title: "Add Item", subtitle: "Create item", href: "/items/new", permission: "items.create" },
+  { title: "Add Vendor", subtitle: "Create vendor", href: "/vendors/new", permission: "vendors.create" },
   { title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
   { title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
+  { title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
 ];
 
 function formatStatusLabel(status: ServiceRequestStatus) {
@@ -107,7 +126,7 @@ export default async function DashboardPage() {
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, rateCards, serviceRequests, openServiceRequests, recentRequests, companyProfile, topCompanyRows] =
+  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, recentRequests, companyProfile, topCompanyRows] =
     await Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
@@ -121,6 +140,7 @@ export default async function DashboardPage() {
       can("branches.read") ? prisma.branch.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("categories.read") ? prisma.category.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("items.read") ? prisma.item.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+      can("vendors.read") ? prisma.vendor.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("rate_cards.read") ? prisma.rateCard.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("service_requests.read") ? prisma.serviceRequest.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("service_requests.read")
@@ -131,6 +151,7 @@ export default async function DashboardPage() {
             },
           })
         : Promise.resolve(0),
+      can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("service_requests.read")
         ? prisma.serviceRequest.findMany({
             where: scopeByTenant(session, { deletedAt: null }),
@@ -178,9 +199,11 @@ export default async function DashboardPage() {
     branches,
     categories,
     items,
+    vendors,
     rateCards,
     serviceRequests,
     openServiceRequests,
+    rfqs,
   };
 
   const kpiDefinitions = isSuperAdmin ? superAdminKpis : companyKpis;
