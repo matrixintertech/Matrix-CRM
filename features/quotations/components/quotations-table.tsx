@@ -69,7 +69,7 @@ export function QuotationsTable({
   canSubmit,
 }: QuotationsTableProps) {
   if (quotations.length === 0) {
-    return <p className="text-sm text-[var(--muted)]">No quotations created yet.</p>;
+    return <p className="text-sm text-[var(--muted)]">No quotation created yet.</p>;
   }
 
   return (
@@ -81,8 +81,8 @@ export function QuotationsTable({
               <th className="px-3 py-2">Quotation</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Subtotal</th>
-              <th className="px-3 py-2">Tax</th>
-              <th className="px-3 py-2">Total</th>
+              <th className="px-3 py-2">Tax Total</th>
+              <th className="px-3 py-2">Grand Total</th>
               <th className="px-3 py-2">Created</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -99,9 +99,9 @@ export function QuotationsTable({
                 <td className="px-3 py-2">
                   <StatusBadge value={quotation.status} />
                 </td>
-                <td className="px-3 py-2">₹{quotation.subtotal.toFixed(2)}</td>
-                <td className="px-3 py-2">₹{quotation.taxTotal.toFixed(2)}</td>
-                <td className="px-3 py-2 font-semibold">₹{quotation.grandTotal.toFixed(2)}</td>
+                <td className="px-3 py-2">INR {quotation.subtotal.toFixed(2)}</td>
+                <td className="px-3 py-2">INR {quotation.taxTotal.toFixed(2)}</td>
+                <td className="px-3 py-2 font-semibold">INR {quotation.grandTotal.toFixed(2)}</td>
                 <td className="px-3 py-2">{formatDateTime(quotation.createdAt)}</td>
                 <td className="px-3 py-2">
                   <div className="space-y-2">
@@ -155,9 +155,9 @@ export function QuotationsTable({
                     <td className="px-2 py-2">{line.item.name}</td>
                     <td className="px-2 py-2">{line.description || "-"}</td>
                     <td className="px-2 py-2">{line.quantity.toFixed(3)}</td>
-                    <td className="px-2 py-2">₹{line.unitRate.toFixed(2)}</td>
+                    <td className="px-2 py-2">INR {line.unitRate.toFixed(2)}</td>
                     <td className="px-2 py-2">{line.taxPercent?.toFixed(2) ?? "0.00"}</td>
-                    <td className="px-2 py-2">₹{line.amount.toFixed(2)}</td>
+                    <td className="px-2 py-2">INR {line.amount.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

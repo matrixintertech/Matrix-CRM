@@ -22,7 +22,7 @@ export function QuotationSummaryCard({ quotations }: QuotationSummaryCardProps) 
     return (
       <div className="rounded-md border border-[var(--border)] bg-white p-4">
         <h3 className="mb-2 text-sm font-semibold">Quotation Summary</h3>
-        <p className="text-sm text-[var(--muted)]">No quotations created yet.</p>
+        <p className="text-sm text-[var(--muted)]">No quotation created yet.</p>
       </div>
     );
   }
@@ -31,6 +31,7 @@ export function QuotationSummaryCard({ quotations }: QuotationSummaryCardProps) 
   if (!latest) {
     return null;
   }
+
   return (
     <div className="rounded-md border border-[var(--border)] bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
@@ -39,9 +40,9 @@ export function QuotationSummaryCard({ quotations }: QuotationSummaryCardProps) 
       </div>
       <p className="text-sm font-medium">{latest.quotationNumber}</p>
       <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
-        <p>Subtotal: ₹{latest.subtotal.toFixed(2)}</p>
-        <p>Tax: ₹{latest.taxTotal.toFixed(2)}</p>
-        <p className="font-semibold text-slate-800">Total: ₹{latest.grandTotal.toFixed(2)}</p>
+        <p>Subtotal: INR {latest.subtotal.toFixed(2)}</p>
+        <p>Tax Total: INR {latest.taxTotal.toFixed(2)}</p>
+        <p className="font-semibold text-slate-800">Grand Total: INR {latest.grandTotal.toFixed(2)}</p>
         <p>Valid Until: {formatDateTime(latest.validUntil)}</p>
         <p>Updated: {formatDateTime(latest.updatedAt)}</p>
       </div>

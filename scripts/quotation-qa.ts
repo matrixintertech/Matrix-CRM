@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   ApprovalStatus,
   PrismaClient,
+  RateCardStatus,
   ServicePartnerStatus,
   ServiceRequestStatus,
   UserStatus,
@@ -9,6 +10,7 @@ import {
 
 import {
   createQuotation,
+  getQuotationById,
   listQuotationItemOptions,
   listQuotationsForServiceRequest,
   softDeleteQuotation,
@@ -16,7 +18,7 @@ import {
   updateQuotation,
   updateQuotationStatus,
 } from "../features/quotations/services/quotation.service";
-import { getUserPermissions, hasPermission } from "../lib/auth/permissions";
+import { hasPermission } from "../lib/auth/permissions";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = new PrismaClient();
@@ -46,9 +48,16 @@ type TenantData = {
   itemId: string;
 };
 
+type ThrowResult = {
+  threw: boolean;
+  message?: string;
+};
+
 const QA_PREFIX = "qa.quotation";
 const COMPANY_CODE = "QAQCOMP";
 const FOREIGN_CODE = "QAQFORE";
+const COMPANY_RATE_CARD_CODE = "QAQRC-COMPANY-001";
+const FOREIGN_RATE_CARD_CODE = "QAQRC-FOREIGN-001";
 const REQUIRED_PERMISSION_KEYS = [
   "quotations.read",
   "quotations.create",
@@ -67,12 +76,17 @@ function pushResult(results: QAResult[], key: string, condition: boolean, detail
   });
 }
 
-async function expectThrow(fn: () => Promise<unknown>) {
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+async function expectThrowMessage(fn: () => Promise<unknown>): Promise<ThrowResult> {
   try {
     await fn();
-    return false;
-  } catch {
-    return true;
+    return { threw: false };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { threw: true, message };
   }
 }
 
@@ -355,20 +369,14 @@ async function ensureTenantData(input: {
   };
 }
 
-async function cleanupQaRecords(data: {
-  companyServiceRequestId?: string;
-  foreignServiceRequestId?: string;
-}) {
-  const serviceRequestIds = [data.companyServiceRequestId, data.foreignServiceRequestId].filter(
-    (value): value is string => Boolean(value)
-  );
-  if (serviceRequestIds.length === 0) {
+async function cleanupQaRecords(input: { serviceRequestIds: string[] }) {
+  if (input.serviceRequestIds.length === 0) {
     return;
   }
 
   const quotations = await prisma.quotation.findMany({
     where: {
-      serviceRequestId: { in: serviceRequestIds },
+      serviceRequestId: { in: input.serviceRequestIds },
     },
     select: {
       id: true,
@@ -393,10 +401,41 @@ async function cleanupQaRecords(data: {
   }
 }
 
+async function cleanupQaRateCards() {
+  const rateCards = await prisma.rateCard.findMany({
+    where: {
+      code: {
+        in: [COMPANY_RATE_CARD_CODE, FOREIGN_RATE_CARD_CODE],
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+  const rateCardIds = rateCards.map((rateCard) => rateCard.id);
+  if (rateCardIds.length === 0) {
+    return;
+  }
+
+  await prisma.rateCardLine.deleteMany({
+    where: {
+      rateCardId: {
+        in: rateCardIds,
+      },
+    },
+  });
+  await prisma.rateCard.deleteMany({
+    where: {
+      id: {
+        in: rateCardIds,
+      },
+    },
+  });
+}
+
 async function main() {
   const results: QAResult[] = [];
-  let companyServiceRequestId: string | undefined;
-  let foreignServiceRequestId: string | undefined;
+  const qaServiceRequestIds: string[] = [];
 
   try {
     const requiredPermissions = await prisma.permission.findMany({
@@ -513,18 +552,37 @@ async function main() {
       prefix: "QAQTN",
       createdByUserId: qaCompanyAdmin.id,
     });
+    const companyCalcData = await ensureTenantData({
+      servicePartnerId: companyPartner.id,
+      prefix: "QAQCAL",
+      createdByUserId: qaCompanyAdmin.id,
+    });
+    const companyNoQuoteData = await ensureTenantData({
+      servicePartnerId: companyPartner.id,
+      prefix: "QAQNOQ",
+      createdByUserId: qaCompanyAdmin.id,
+    });
+    const companyRecalcData = await ensureTenantData({
+      servicePartnerId: companyPartner.id,
+      prefix: "QAQREC",
+      createdByUserId: qaCompanyAdmin.id,
+    });
     const foreignData = await ensureTenantData({
       servicePartnerId: foreignPartner.id,
       prefix: "QAQTNF",
       createdByUserId: foreignUser.id,
     });
-    companyServiceRequestId = companyData.serviceRequestId;
-    foreignServiceRequestId = foreignData.serviceRequestId;
 
-    await cleanupQaRecords({
-      companyServiceRequestId,
-      foreignServiceRequestId,
-    });
+    qaServiceRequestIds.push(
+      companyData.serviceRequestId,
+      companyCalcData.serviceRequestId,
+      companyNoQuoteData.serviceRequestId,
+      companyRecalcData.serviceRequestId,
+      foreignData.serviceRequestId
+    );
+
+    await cleanupQaRecords({ serviceRequestIds: qaServiceRequestIds });
+    await cleanupQaRateCards();
 
     await replaceDirectPermissions({
       userId: qaCompanyAdmin.id,
@@ -561,8 +619,250 @@ async function main() {
       isSuperAdmin: false,
     });
 
+    const effectiveFrom = new Date("2026-01-01T00:00:00.000Z");
+    const companyRateCard = await prisma.rateCard.upsert({
+      where: {
+        servicePartnerId_code: {
+          servicePartnerId: companyPartner.id,
+          code: COMPANY_RATE_CARD_CODE,
+        },
+      },
+      update: {
+        clientId: companyData.clientId,
+        name: "QA Company Rate Card",
+        effectiveFrom,
+        effectiveTo: null,
+        status: RateCardStatus.ACTIVE,
+        deletedAt: null,
+      },
+      create: {
+        servicePartnerId: companyPartner.id,
+        clientId: companyData.clientId,
+        code: COMPANY_RATE_CARD_CODE,
+        name: "QA Company Rate Card",
+        effectiveFrom,
+        effectiveTo: null,
+        status: RateCardStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+      },
+    });
+    const foreignRateCard = await prisma.rateCard.upsert({
+      where: {
+        servicePartnerId_code: {
+          servicePartnerId: foreignPartner.id,
+          code: FOREIGN_RATE_CARD_CODE,
+        },
+      },
+      update: {
+        clientId: foreignData.clientId,
+        name: "QA Foreign Rate Card",
+        effectiveFrom,
+        effectiveTo: null,
+        status: RateCardStatus.ACTIVE,
+        deletedAt: null,
+      },
+      create: {
+        servicePartnerId: foreignPartner.id,
+        clientId: foreignData.clientId,
+        code: FOREIGN_RATE_CARD_CODE,
+        name: "QA Foreign Rate Card",
+        effectiveFrom,
+        effectiveTo: null,
+        status: RateCardStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+      },
+    });
+    await prisma.rateCardLine.upsert({
+      where: {
+        rateCardId_itemId: {
+          rateCardId: companyRateCard.id,
+          itemId: companyData.itemId,
+        },
+      },
+      update: {
+        rate: 123.45,
+        taxPercent: 18,
+      },
+      create: {
+        rateCardId: companyRateCard.id,
+        itemId: companyData.itemId,
+        rate: 123.45,
+        taxPercent: 18,
+      },
+    });
+    await prisma.rateCardLine.upsert({
+      where: {
+        rateCardId_itemId: {
+          rateCardId: foreignRateCard.id,
+          itemId: companyData.itemId,
+        },
+      },
+      update: {
+        rate: 999.99,
+        taxPercent: 50,
+      },
+      create: {
+        rateCardId: foreignRateCard.id,
+        itemId: companyData.itemId,
+        rate: 999.99,
+        taxPercent: 50,
+      },
+    });
+
     const quotationItemOptions = await listQuotationItemOptions(companyAdminSession as never, companyData.serviceRequestId);
-    pushResult(results, "quotations.item_options_loaded", quotationItemOptions.some((item) => item.id === companyData.itemId));
+    const companyItemOption = quotationItemOptions.find((item) => item.id === companyData.itemId);
+    pushResult(results, "quotations.item_options_loaded", Boolean(companyItemOption));
+    pushResult(results, "tenant.rate_card_default_company_applied", companyItemOption?.defaultUnitRate === "123.45");
+    pushResult(results, "tenant.rate_card_default_tax_applied", companyItemOption?.defaultTaxPercent === "18.00");
+    pushResult(results, "tenant.rate_card_mismatch_blocked", companyItemOption?.defaultUnitRate !== "999.99");
+
+    const calculationQuote = await createQuotation(companyAdminSession as never, {
+      serviceRequestId: companyCalcData.serviceRequestId,
+      validUntil: undefined,
+      notes: "QA calculation quote",
+      lines: [
+        {
+          itemId: companyCalcData.itemId,
+          description: "Decimal and zero tax",
+          quantity: 1.234,
+          unitRate: 99.99,
+          taxPercent: 0,
+        },
+        {
+          itemId: companyData.itemId,
+          description: "Hundred tax",
+          quantity: 2,
+          unitRate: 50,
+          taxPercent: 100,
+        },
+        {
+          itemId: companyNoQuoteData.itemId,
+          description: "Rounding line",
+          quantity: 3,
+          unitRate: 10.005,
+          taxPercent: 18,
+        },
+      ],
+    });
+    pushResult(results, "calc.decimal_quantity_handled", Number(calculationQuote.subtotal) === 253.42);
+    pushResult(results, "calc.zero_tax_handled", Number(calculationQuote.taxTotal) >= 0);
+    pushResult(results, "calc.hundred_tax_handled", Number(calculationQuote.taxTotal) === 105.41);
+    pushResult(results, "calc.multiple_lines_handled", Number(calculationQuote.grandTotal) === 358.83);
+    pushResult(
+      results,
+      "calc.rounding_consistency",
+      Number(calculationQuote.grandTotal) === roundMoney(Number(calculationQuote.subtotal) + Number(calculationQuote.taxTotal))
+    );
+
+    const calculationDetail = await getQuotationById(companyAdminSession as never, calculationQuote.id);
+    const hundredTaxLine = calculationDetail?.items.find((line) => line.itemId === companyData.itemId);
+    pushResult(results, "calc.line_with_100_tax_total", Number(hundredTaxLine?.amount ?? 0) === 200);
+
+    const recalculatedQuote = await createQuotation(companyAdminSession as never, {
+      serviceRequestId: companyRecalcData.serviceRequestId,
+      validUntil: undefined,
+      notes: "QA server recalculation",
+      lines: [
+        {
+          itemId: companyRecalcData.itemId,
+          description: "Ignore client totals",
+          quantity: 1,
+          unitRate: 10,
+          taxPercent: 0,
+          subtotal: 999999,
+          taxTotal: 999999,
+          grandTotal: 999999,
+        },
+      ],
+      subtotal: 999999,
+      taxTotal: 999999,
+      grandTotal: 999999,
+    } as never);
+    pushResult(results, "calc.server_recalculates_totals", Number(recalculatedQuote.grandTotal) === 10);
+
+    const invalidQuantity = await expectThrowMessage(() =>
+      createQuotation(companyAdminSession as never, {
+        serviceRequestId: companyNoQuoteData.serviceRequestId,
+        validUntil: undefined,
+        notes: "Invalid quantity",
+        lines: [
+          {
+            itemId: companyNoQuoteData.itemId,
+            description: "negative quantity",
+            quantity: -1,
+            unitRate: 1,
+            taxPercent: 0,
+          },
+        ],
+      })
+    );
+    pushResult(
+      results,
+      "calc.negative_quantity_rejected",
+      invalidQuantity.threw && (invalidQuantity.message?.toLowerCase().includes("validation") ?? false)
+    );
+
+    const invalidRate = await expectThrowMessage(() =>
+      createQuotation(companyAdminSession as never, {
+        serviceRequestId: companyNoQuoteData.serviceRequestId,
+        validUntil: undefined,
+        notes: "Invalid unit rate",
+        lines: [
+          {
+            itemId: companyNoQuoteData.itemId,
+            description: "negative rate",
+            quantity: 1,
+            unitRate: -1,
+            taxPercent: 0,
+          },
+        ],
+      })
+    );
+    pushResult(
+      results,
+      "calc.negative_rate_rejected",
+      invalidRate.threw && (invalidRate.message?.toLowerCase().includes("validation") ?? false)
+    );
+
+    const invalidTax = await expectThrowMessage(() =>
+      createQuotation(companyAdminSession as never, {
+        serviceRequestId: companyNoQuoteData.serviceRequestId,
+        validUntil: undefined,
+        notes: "Invalid tax",
+        lines: [
+          {
+            itemId: companyNoQuoteData.itemId,
+            description: "negative tax",
+            quantity: 1,
+            unitRate: 1,
+            taxPercent: -1,
+          },
+        ],
+      })
+    );
+    pushResult(results, "calc.negative_tax_rejected", invalidTax.threw && (invalidTax.message?.toLowerCase().includes("validation") ?? false));
+
+    const invalidTaxHigh = await expectThrowMessage(() =>
+      createQuotation(companyAdminSession as never, {
+        serviceRequestId: companyNoQuoteData.serviceRequestId,
+        validUntil: undefined,
+        notes: "Invalid tax high",
+        lines: [
+          {
+            itemId: companyNoQuoteData.itemId,
+            description: "tax high",
+            quantity: 1,
+            unitRate: 1,
+            taxPercent: 101,
+          },
+        ],
+      })
+    );
+    pushResult(results, "calc.tax_gt_100_rejected", invalidTaxHigh.threw && (invalidTaxHigh.message?.toLowerCase().includes("validation") ?? false));
 
     const createdQuotation = await createQuotation(companyAdminSession as never, {
       serviceRequestId: companyData.serviceRequestId,
@@ -578,11 +878,11 @@ async function main() {
         },
       ],
     });
-    pushResult(results, "quotations.create_under_service_request", createdQuotation.serviceRequestId === companyData.serviceRequestId);
-    pushResult(results, "quotations.quote_number_generated", createdQuotation.quotationNumber.startsWith("QTN-"));
-    pushResult(results, "quotations.total_calculation_on_create", Number(createdQuotation.grandTotal) === 220);
+    pushResult(results, "lifecycle.create_quote", createdQuotation.serviceRequestId === companyData.serviceRequestId);
+    pushResult(results, "lifecycle.quote_number_generated", createdQuotation.quotationNumber.startsWith("QTN-"));
+    pushResult(results, "lifecycle.create_total_calculation", Number(createdQuotation.grandTotal) === 220);
 
-    const duplicateCreateBlocked = await expectThrow(() =>
+    const duplicateCreate = await expectThrowMessage(() =>
       createQuotation(companyAdminSession as never, {
         serviceRequestId: companyData.serviceRequestId,
         validUntil: undefined,
@@ -598,7 +898,12 @@ async function main() {
         ],
       })
     );
-    pushResult(results, "quotations.duplicate_create_blocked", duplicateCreateBlocked);
+    pushResult(results, "lifecycle.one_quote_per_service_request_clean_error", duplicateCreate.threw);
+    pushResult(
+      results,
+      "lifecycle.one_quote_per_service_request_error_text",
+      duplicateCreate.message?.toLowerCase().includes("already exists") ?? false
+    );
 
     const updatedQuotation = await updateQuotation(companyAdminSession as never, createdQuotation.id, {
       serviceRequestId: companyData.serviceRequestId,
@@ -614,7 +919,7 @@ async function main() {
         },
       ],
     });
-    pushResult(results, "quotations.update_line_works", Number(updatedQuotation.grandTotal) === 346.5);
+    pushResult(results, "lifecycle.update_quote_lines", Number(updatedQuotation.grandTotal) === 346.5);
 
     const deleteLineUpdate = await updateQuotation(companyAdminSession as never, createdQuotation.id, {
       serviceRequestId: companyData.serviceRequestId,
@@ -622,7 +927,7 @@ async function main() {
       notes: "QA delete line",
       lines: [],
     });
-    pushResult(results, "quotations.delete_line_works", Number(deleteLineUpdate.grandTotal) === 0);
+    pushResult(results, "lifecycle.delete_quote_line", Number(deleteLineUpdate.grandTotal) === 0);
 
     const addLineAgain = await updateQuotation(companyAdminSession as never, createdQuotation.id, {
       serviceRequestId: companyData.serviceRequestId,
@@ -638,9 +943,9 @@ async function main() {
         },
       ],
     });
-    pushResult(results, "quotations.add_line_works", Number(addLineAgain.grandTotal) === 236);
+    pushResult(results, "lifecycle.add_quote_line_again", Number(addLineAgain.grandTotal) === 236);
 
-    const foreignItemCreateBlocked = await expectThrow(() =>
+    const foreignItemCreateBlocked = await expectThrowMessage(() =>
       updateQuotation(companyAdminSession as never, createdQuotation.id, {
         serviceRequestId: companyData.serviceRequestId,
         validUntil: undefined,
@@ -656,9 +961,9 @@ async function main() {
         ],
       })
     );
-    pushResult(results, "quotations.cross_tenant_item_blocked", foreignItemCreateBlocked);
+    pushResult(results, "tenant.item_tenant_mismatch_blocked", foreignItemCreateBlocked.threw);
 
-    const tenantMismatchBlocked = await expectThrow(() =>
+    const tenantMismatchBlocked = await expectThrowMessage(() =>
       createQuotation(companyAdminSession as never, {
         serviceRequestId: foreignData.serviceRequestId,
         validUntil: undefined,
@@ -674,15 +979,15 @@ async function main() {
         ],
       })
     );
-    pushResult(results, "quotations.tenant_mismatch_service_request_blocked", tenantMismatchBlocked);
+    pushResult(results, "tenant.service_request_tenant_mismatch_blocked", tenantMismatchBlocked.threw);
 
     const statusUpdated = await updateQuotationStatus(companyAdminSession as never, createdQuotation.id, {
       status: ApprovalStatus.APPROVED,
     });
-    pushResult(results, "quotations.status_update_works", statusUpdated.status === ApprovalStatus.APPROVED);
+    pushResult(results, "lifecycle.status_update", statusUpdated.status === ApprovalStatus.APPROVED);
 
     const submitted = await submitQuotation(companyAdminSession as never, createdQuotation.id);
-    pushResult(results, "quotations.submit_works", submitted.status === ApprovalStatus.PENDING);
+    pushResult(results, "lifecycle.submit_quote", submitted.status === ApprovalStatus.PENDING);
 
     const serviceRequestQuotations = await listQuotationsForServiceRequest(
       companyAdminSession as never,
@@ -690,20 +995,33 @@ async function main() {
     );
     pushResult(
       results,
-      "quotations.service_request_detail_fetch_includes_quotations",
+      "integration.service_request_detail_fetch_includes_quote_summary",
       serviceRequestQuotations.quotations.length === 1
     );
 
+    const readOnlyList = await listQuotationsForServiceRequest(noOpsSession as never, companyData.serviceRequestId);
+    pushResult(results, "permissions.read_only_user_can_view", readOnlyList.quotations.length === 1);
+
+    const noQuoteList = await listQuotationsForServiceRequest(companyAdminSession as never, companyNoQuoteData.serviceRequestId);
+    pushResult(results, "integration.no_quote_state_does_not_break", noQuoteList.quotations.length === 0);
+
     await softDeleteQuotation(companyAdminSession as never, createdQuotation.id);
     const listedAfterDelete = await listQuotationsForServiceRequest(companyAdminSession as never, companyData.serviceRequestId);
-    pushResult(results, "quotations.soft_delete_excluded_from_list", listedAfterDelete.quotations.length === 0);
+    pushResult(results, "lifecycle.soft_delete_quote", listedAfterDelete.quotations.length === 0);
+    pushResult(results, "lifecycle.deleted_quote_excluded_from_normal_list", listedAfterDelete.quotations.length === 0);
 
+    const noOpsCanRead = await hasPermission(noOpsSession as never, "quotations.read");
     const noOpsCanCreate = await hasPermission(noOpsSession as never, "quotations.create");
     const noOpsCanUpdate = await hasPermission(noOpsSession as never, "quotations.update");
+    const noOpsCanDelete = await hasPermission(noOpsSession as never, "quotations.delete");
+    const noOpsCanSubmit = await hasPermission(noOpsSession as never, "quotations.submit");
     const noOpsCanStatusUpdate = await hasPermission(noOpsSession as never, "quotations.status.update");
     pushResult(results, "permissions.user_without_quotations_create_cannot_create", !noOpsCanCreate);
     pushResult(results, "permissions.user_without_quotations_update_cannot_update", !noOpsCanUpdate);
+    pushResult(results, "permissions.user_without_quotations_delete_cannot_delete", !noOpsCanDelete);
+    pushResult(results, "permissions.user_without_quotations_submit_cannot_submit", !noOpsCanSubmit);
     pushResult(results, "permissions.user_without_quotations_status_update_cannot_update_status", !noOpsCanStatusUpdate);
+    pushResult(results, "permissions.read_only_user_has_read_only_access", noOpsCanRead && !noOpsCanCreate && !noOpsCanUpdate && !noOpsCanDelete);
 
     const actionSource = readFileSync("features/quotations/actions/quotation.actions.ts", "utf8");
     pushResult(
@@ -715,6 +1033,16 @@ async function main() {
       results,
       "permissions.quotation_action_has_update_guard",
       actionSource.includes('requirePermission("quotations.update")')
+    );
+    pushResult(
+      results,
+      "permissions.quotation_action_has_delete_guard",
+      actionSource.includes('requirePermission("quotations.delete")')
+    );
+    pushResult(
+      results,
+      "permissions.quotation_action_has_submit_guard",
+      actionSource.includes('requirePermission("quotations.submit")')
     );
     pushResult(
       results,
@@ -734,8 +1062,30 @@ async function main() {
       packageJson.includes('"qa:service-requests": "tsx scripts/service-request-work-items-qa.ts"')
     );
 
+    const serviceRequestDetailSource = readFileSync("app/(dashboard)/service-requests/[id]/page.tsx", "utf8");
+    pushResult(
+      results,
+      "integration.quotation_section_present_in_service_request_detail",
+      serviceRequestDetailSource.includes("QuotationSummaryCard") && serviceRequestDetailSource.includes("QuotationsTable")
+    );
+    pushResult(
+      results,
+      "integration.no_broken_quotations_nav_link",
+      !serviceRequestDetailSource.includes('href="/quotations"')
+    );
+
     const hasStandaloneQuotationsPage = existsSync("app/(dashboard)/quotations/page.tsx");
     pushResult(results, "regression.no_required_standalone_quotations_page", !hasStandaloneQuotationsPage);
+
+    const statusBadgeSource = readFileSync("components/admin/status-badge.tsx", "utf8");
+    pushResult(
+      results,
+      "integration.status_badges_render_known_approval_statuses",
+      statusBadgeSource.includes("PENDING") &&
+        statusBadgeSource.includes("REVISED") &&
+        statusBadgeSource.includes("REJECTED") &&
+        statusBadgeSource.includes("APPROVED")
+    );
 
     const superForeignQuote = await createQuotation(superSession as never, {
       serviceRequestId: foreignData.serviceRequestId,
@@ -753,7 +1103,7 @@ async function main() {
     });
     pushResult(results, "tenant.super_admin_platform_wide_quote_operation", superForeignQuote.serviceRequestId === foreignData.serviceRequestId);
 
-    const superMismatchedItemBlocked = await expectThrow(() =>
+    const superMismatchedItemBlocked = await expectThrowMessage(() =>
       updateQuotation(superSession as never, superForeignQuote.id, {
         serviceRequestId: foreignData.serviceRequestId,
         validUntil: undefined,
@@ -769,12 +1119,10 @@ async function main() {
         ],
       })
     );
-    pushResult(results, "tenant.super_admin_mismatched_item_blocked", superMismatchedItemBlocked);
+    pushResult(results, "tenant.super_admin_mismatched_item_blocked", superMismatchedItemBlocked.threw);
   } finally {
-    await cleanupQaRecords({
-      companyServiceRequestId,
-      foreignServiceRequestId,
-    });
+    await cleanupQaRecords({ serviceRequestIds: qaServiceRequestIds });
+    await cleanupQaRateCards();
   }
 
   const failed = results.filter((result) => result.status === "FAIL");

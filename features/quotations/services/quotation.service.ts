@@ -1,7 +1,12 @@
 import { ApprovalStatus, Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 
-import type { QuotationLineInput, QuotationStatusInput, QuotationUpsertInput } from "@/features/quotations/validations";
+import {
+  quotationUpsertSchema,
+  type QuotationLineInput,
+  type QuotationStatusInput,
+  type QuotationUpsertInput,
+} from "@/features/quotations/validations";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 
@@ -61,6 +66,14 @@ function calculateTotals(lines: QuotationLineInput[]) {
   );
 
   return totals;
+}
+
+function assertValidQuotationInput(input: QuotationUpsertInput) {
+  const parsed = quotationUpsertSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error("Quotation input validation failed.");
+  }
+  return parsed.data;
 }
 
 async function generateQuotationNumber(servicePartnerId: string) {
@@ -356,13 +369,14 @@ export async function listQuotationItemOptions(session: Session, serviceRequestI
 }
 
 export async function createQuotation(session: Session, input: QuotationUpsertInput) {
-  const serviceRequest = await getServiceRequestTenantScoped(session, input.serviceRequestId);
+  const normalizedInput = assertValidQuotationInput(input);
+  const serviceRequest = await getServiceRequestTenantScoped(session, normalizedInput.serviceRequestId);
   if (!serviceRequest) {
     throw new Error("Service request not found.");
   }
 
-  const itemById = await assertQuotationLineItems(serviceRequest.servicePartnerId, input.lines);
-  const totals = calculateTotals(input.lines);
+  const itemById = await assertQuotationLineItems(serviceRequest.servicePartnerId, normalizedInput.lines);
+  const totals = calculateTotals(normalizedInput.lines);
 
   const existing = await prisma.quotation.findFirst({
     where: {
@@ -371,7 +385,6 @@ export async function createQuotation(session: Session, input: QuotationUpsertIn
     select: {
       id: true,
       deletedAt: true,
-      quotationNumber: true,
     },
   });
 
@@ -390,8 +403,8 @@ export async function createQuotation(session: Session, input: QuotationUpsertIn
           subtotal: totals.subtotal,
           taxTotal: totals.taxTotal,
           grandTotal: totals.grandTotal,
-          validUntil: input.validUntil ?? null,
-          notes: normalizeOptionalString(input.notes),
+          validUntil: normalizedInput.validUntil ?? null,
+          notes: normalizeOptionalString(normalizedInput.notes),
           preparedByUserId: session.user.id,
           approvedByUserId: null,
           approvedAt: null,
@@ -405,9 +418,9 @@ export async function createQuotation(session: Session, input: QuotationUpsertIn
         },
       });
 
-      if (input.lines.length > 0) {
+      if (normalizedInput.lines.length > 0) {
         await tx.quotationItem.createMany({
-          data: toQuotationItemCreateManyInput(updated.id, input.lines, itemById),
+          data: toQuotationItemCreateManyInput(updated.id, normalizedInput.lines, itemById),
         });
       }
 
@@ -426,15 +439,15 @@ export async function createQuotation(session: Session, input: QuotationUpsertIn
         subtotal: totals.subtotal,
         taxTotal: totals.taxTotal,
         grandTotal: totals.grandTotal,
-        validUntil: input.validUntil ?? null,
-        notes: normalizeOptionalString(input.notes),
+        validUntil: normalizedInput.validUntil ?? null,
+        notes: normalizeOptionalString(normalizedInput.notes),
         preparedByUserId: session.user.id,
       },
     });
 
-    if (input.lines.length > 0) {
+    if (normalizedInput.lines.length > 0) {
       await tx.quotationItem.createMany({
-        data: toQuotationItemCreateManyInput(quotation.id, input.lines, itemById),
+        data: toQuotationItemCreateManyInput(quotation.id, normalizedInput.lines, itemById),
       });
     }
 
@@ -443,17 +456,18 @@ export async function createQuotation(session: Session, input: QuotationUpsertIn
 }
 
 export async function updateQuotation(session: Session, quotationId: string, input: QuotationUpsertInput) {
+  const normalizedInput = assertValidQuotationInput(input);
   const existing = await getQuotationById(session, quotationId);
   if (!existing) {
     throw new Error("Quotation not found.");
   }
 
-  if (existing.serviceRequestId !== input.serviceRequestId) {
+  if (existing.serviceRequestId !== normalizedInput.serviceRequestId) {
     throw new Error("Quotation and service request mismatch.");
   }
 
-  const itemById = await assertQuotationLineItems(existing.servicePartnerId, input.lines);
-  const totals = calculateTotals(input.lines);
+  const itemById = await assertQuotationLineItems(existing.servicePartnerId, normalizedInput.lines);
+  const totals = calculateTotals(normalizedInput.lines);
 
   return prisma.$transaction(async (tx) => {
     const quotation = await tx.quotation.update({
@@ -462,8 +476,8 @@ export async function updateQuotation(session: Session, quotationId: string, inp
         subtotal: totals.subtotal,
         taxTotal: totals.taxTotal,
         grandTotal: totals.grandTotal,
-        validUntil: input.validUntil ?? null,
-        notes: normalizeOptionalString(input.notes),
+        validUntil: normalizedInput.validUntil ?? null,
+        notes: normalizeOptionalString(normalizedInput.notes),
       },
     });
 
@@ -473,9 +487,9 @@ export async function updateQuotation(session: Session, quotationId: string, inp
       },
     });
 
-    if (input.lines.length > 0) {
+    if (normalizedInput.lines.length > 0) {
       await tx.quotationItem.createMany({
-        data: toQuotationItemCreateManyInput(quotation.id, input.lines, itemById),
+        data: toQuotationItemCreateManyInput(quotation.id, normalizedInput.lines, itemById),
       });
     }
 

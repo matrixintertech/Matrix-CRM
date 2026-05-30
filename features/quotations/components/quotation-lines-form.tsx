@@ -30,13 +30,23 @@ type QuotationLinesFormProps = {
   }>;
 };
 
-function calculateLineTotal(line: LineState) {
+function toNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function calculateLineTotals(line: LineState) {
   const quantity = Number(line.quantity) || 0;
   const unitRate = Number(line.unitRate) || 0;
   const taxPercent = Number(line.taxPercent) || 0;
-  const subtotal = quantity * unitRate;
-  const taxAmount = (subtotal * taxPercent) / 100;
-  return subtotal + taxAmount;
+  const lineSubtotal = quantity * unitRate;
+  const taxAmount = (lineSubtotal * taxPercent) / 100;
+  const lineTotal = lineSubtotal + taxAmount;
+  return {
+    lineSubtotal,
+    taxAmount,
+    lineTotal,
+  };
 }
 
 function getDefaultLine(item: ItemOption | undefined): LineState {
@@ -74,18 +84,36 @@ export function QuotationLinesForm({ itemOptions, initialLines }: QuotationLines
     return new Set(Array.from(counts.entries()).filter((entry) => entry[1] > 1).map((entry) => entry[0]));
   }, [lines]);
 
+  const lineErrors = useMemo(
+    () =>
+      lines.map((line) => {
+        const errors: string[] = [];
+        const quantity = toNumber(line.quantity);
+        const unitRate = toNumber(line.unitRate);
+        const taxPercent = line.taxPercent.trim() === "" ? 0 : toNumber(line.taxPercent);
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          errors.push("Quantity must be greater than 0.");
+        }
+        if (!Number.isFinite(unitRate) || unitRate < 0) {
+          errors.push("Unit rate cannot be negative.");
+        }
+        if (!Number.isFinite(taxPercent) || taxPercent < 0 || taxPercent > 100) {
+          errors.push("Tax percent must be between 0 and 100.");
+        }
+
+        return errors;
+      }),
+    [lines]
+  );
+
   const totals = useMemo(() => {
     return lines.reduce(
       (acc, line) => {
-        const quantity = Number(line.quantity) || 0;
-        const unitRate = Number(line.unitRate) || 0;
-        const taxPercent = Number(line.taxPercent) || 0;
-        const subtotal = quantity * unitRate;
-        const taxAmount = (subtotal * taxPercent) / 100;
-        const lineTotal = subtotal + taxAmount;
-        acc.subtotal += subtotal;
-        acc.taxTotal += taxAmount;
-        acc.grandTotal += lineTotal;
+        const calculated = calculateLineTotals(line);
+        acc.subtotal += calculated.lineSubtotal;
+        acc.taxTotal += calculated.taxAmount;
+        acc.grandTotal += calculated.lineTotal;
         return acc;
       },
       { subtotal: 0, taxTotal: 0, grandTotal: 0 }
@@ -151,89 +179,97 @@ export function QuotationLinesForm({ itemOptions, initialLines }: QuotationLines
         <p className="text-sm text-red-700">No active items available for this service request tenant.</p>
       ) : null}
       {lines.length === 0 ? <p className="text-sm text-[var(--muted)]">No lines added yet.</p> : null}
-      {lines.map((line, index) => (
-        <div key={`${line.itemId}-${index}`} className="space-y-2 rounded-md border border-[var(--border)] p-3">
-          <div className="grid gap-2 md:grid-cols-12">
-            <label className="space-y-1 text-sm md:col-span-5">
-              <span className="font-medium">Item</span>
-              <select
-                value={line.itemId}
-                onChange={(event) => handleItemChange(index, event.target.value)}
-                className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-              >
-                {itemOptions.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} ({item.code}) / {item.unit}
-                  </option>
-                ))}
-              </select>
-              {duplicateItemIds.has(line.itemId) ? (
-                <p className="text-xs text-red-700">Duplicate item lines are not allowed.</p>
-              ) : null}
-            </label>
-            <label className="space-y-1 text-sm md:col-span-3">
-              <span className="font-medium">Quantity</span>
-              <input
-                type="number"
-                min="0.001"
-                step="0.001"
-                value={line.quantity}
-                onChange={(event) => updateLine(index, { quantity: event.target.value })}
-                className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-              />
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <span className="font-medium">Unit Rate</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={line.unitRate}
-                onChange={(event) => updateLine(index, { unitRate: event.target.value })}
-                className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-              />
-            </label>
-            <label className="space-y-1 text-sm md:col-span-2">
-              <span className="font-medium">Tax %</span>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={line.taxPercent}
-                onChange={(event) => updateLine(index, { taxPercent: event.target.value })}
-                className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-              />
-            </label>
-          </div>
-          <div className="grid gap-2 md:grid-cols-[1fr,auto]">
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">Description</span>
-              <input
-                value={line.description}
-                onChange={(event) => updateLine(index, { description: event.target.value })}
-                className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-                maxLength={400}
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <p className="text-xs text-[var(--muted)]">Line total: ₹{calculateLineTotal(line).toFixed(2)}</p>
-              <button
-                type="button"
-                onClick={() => removeLine(index)}
-                className="h-9 rounded-md border border-red-200 px-2 text-xs text-red-700"
-              >
-                Remove
-              </button>
+      {lines.map((line, index) => {
+        const calculated = calculateLineTotals(line);
+        return (
+          <div key={`${line.itemId}-${index}`} className="space-y-2 rounded-md border border-[var(--border)] p-3">
+            <div className="grid gap-2 md:grid-cols-12">
+              <label className="space-y-1 text-sm md:col-span-5">
+                <span className="font-medium">Item</span>
+                <select
+                  value={line.itemId}
+                  onChange={(event) => handleItemChange(index, event.target.value)}
+                  className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                >
+                  {itemOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.code}) / {item.unit}
+                    </option>
+                  ))}
+                </select>
+                {duplicateItemIds.has(line.itemId) ? (
+                  <p className="text-xs text-red-700">Duplicate item lines are not allowed.</p>
+                ) : null}
+              </label>
+              <label className="space-y-1 text-sm md:col-span-3">
+                <span className="font-medium">Quantity</span>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  value={line.quantity}
+                  onChange={(event) => updateLine(index, { quantity: event.target.value })}
+                  className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                />
+              </label>
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className="font-medium">Unit Rate</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={line.unitRate}
+                  onChange={(event) => updateLine(index, { unitRate: event.target.value })}
+                  className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                />
+              </label>
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className="font-medium">Tax %</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={line.taxPercent}
+                  onChange={(event) => updateLine(index, { taxPercent: event.target.value })}
+                  className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                />
+              </label>
             </div>
+            <div className="grid gap-2 md:grid-cols-[1fr,auto]">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">Description</span>
+                <input
+                  value={line.description}
+                  onChange={(event) => updateLine(index, { description: event.target.value })}
+                  className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                  maxLength={400}
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <p className="text-xs text-[var(--muted)]">Line total: INR {calculated.lineTotal.toFixed(2)}</p>
+                <button
+                  type="button"
+                  onClick={() => removeLine(index)}
+                  className="h-9 rounded-md border border-red-200 px-2 text-xs text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+            {lineErrors[index]?.length ? (
+              <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+                {lineErrors[index]?.join(" ")}
+              </div>
+            ) : null}
           </div>
-        </div>
-      ))}
+        );
+      })}
       <input type="hidden" name="linesJson" value={linesPayload} />
       <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-        <p>Subtotal: ₹{totals.subtotal.toFixed(2)}</p>
-        <p>Tax: ₹{totals.taxTotal.toFixed(2)}</p>
-        <p className="font-semibold">Total: ₹{totals.grandTotal.toFixed(2)}</p>
+        <p>Subtotal: INR {totals.subtotal.toFixed(2)}</p>
+        <p>Tax Total: INR {totals.taxTotal.toFixed(2)}</p>
+        <p className="font-semibold">Grand Total: INR {totals.grandTotal.toFixed(2)}</p>
       </div>
     </div>
   );

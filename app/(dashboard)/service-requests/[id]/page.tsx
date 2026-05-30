@@ -287,6 +287,11 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
                 />
               </div>
             ) : null}
+            {!canCreateNewQuotation && canQuotationRead && canQuotationCreate && mappedQuotations.length > 0 ? (
+              <p className="mt-3 text-xs text-[var(--muted)]">
+                Only one quotation is allowed per service request in the current milestone.
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-md border border-[var(--border)] bg-white p-5">
