@@ -70,9 +70,12 @@ export function ServiceRequestResponsibilityCard({
   candidates,
   canUpdate,
 }: ServiceRequestResponsibilityCardProps) {
+  const hasAnyAssignment = Boolean(snapshot.PM || snapshot.SM || snapshot.TECHNICIAN);
+
   return (
     <div className="rounded-md border border-[var(--border)] bg-white p-5">
       <h2 className="mb-3 text-base font-semibold">Responsibility</h2>
+      {!hasAnyAssignment ? <p className="mb-3 text-sm text-[var(--muted)]">No responsibility assigned yet.</p> : null}
       <div className="grid gap-3 md:grid-cols-3">
         <ResponsibilityRow label="Project Manager" assignment={snapshot.PM} />
         <ResponsibilityRow label="Service Manager" assignment={snapshot.SM} />

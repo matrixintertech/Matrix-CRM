@@ -85,6 +85,7 @@ export function TasksTable({
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Responsible</th>
               <th className="px-3 py-2">Due Date</th>
+              <th className="px-3 py-2">Completed At</th>
               <th className="px-3 py-2">Updated</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -103,6 +104,7 @@ export function TasksTable({
                 </td>
                 <td className="px-3 py-2">{userLabel(task.assignee)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.dueDate)}</td>
+                <td className="px-3 py-2">{formatDateTime(task.completedAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.updatedAt)}</td>
                 <td className="px-3 py-2">
                   <div className="space-y-2">
