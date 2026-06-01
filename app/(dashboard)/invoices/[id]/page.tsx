@@ -6,6 +6,11 @@ import { StatusBadge } from "@/components/admin/status-badge";
 import { InvoiceStatusActions } from "@/features/invoices/components/invoice-status-actions";
 import { InvoiceSummaryCard } from "@/features/invoices/components/invoice-summary-card";
 import { getInvoiceById } from "@/features/invoices/services/invoice.service";
+import { createPaymentAction } from "@/features/payments/actions/payment.actions";
+import { PaymentForm } from "@/features/payments/components/payment-form";
+import { PaymentsTable } from "@/features/payments/components/payments-table";
+import { PaymentSummaryCard } from "@/features/payments/components/payment-summary-card";
+import { listPaymentsForInvoice } from "@/features/payments/services/payment.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
@@ -22,6 +27,18 @@ function getSuccessMessage(code?: string) {
   }
   if (code === "updated") {
     return "Invoice updated successfully.";
+  }
+  if (code === "payment-recorded") {
+    return "Payment recorded successfully.";
+  }
+  if (code === "payment-updated") {
+    return "Payment updated successfully.";
+  }
+  if (code === "payment-status-updated") {
+    return "Payment status updated successfully.";
+  }
+  if (code === "payment-deleted") {
+    return "Payment voided successfully.";
   }
   return undefined;
 }
@@ -45,6 +62,21 @@ function getErrorMessage(code?: string) {
   if (code === "not-found") {
     return "Invoice record could not be found.";
   }
+  if (code === "payment-validation") {
+    return "Payment validation failed.";
+  }
+  if (code === "payment-status-validation") {
+    return "Payment status validation failed.";
+  }
+  if (code === "payment-overpayment") {
+    return "Payment amount cannot exceed invoice balance due.";
+  }
+  if (code === "payment-mismatch") {
+    return "Payment action blocked by tenant scope mismatch.";
+  }
+  if (code === "payment-duplicate") {
+    return "Duplicate payment number detected.";
+  }
   return undefined;
 }
 
@@ -65,11 +97,19 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
     notFound();
   }
 
-  const [canUpdate, canDelete, canStatusUpdate] = await Promise.all([
+  const [canUpdate, canDelete, canStatusUpdate, canReadPayments, canCreatePayments, canUpdatePayments, canDeletePayments, canUpdatePaymentStatus] =
+    await Promise.all([
     hasPermission(session, "invoices.update"),
     hasPermission(session, "invoices.delete"),
     hasPermission(session, "invoices.status.update"),
+    hasPermission(session, "payments.read"),
+    hasPermission(session, "payments.create"),
+    hasPermission(session, "payments.update"),
+    hasPermission(session, "payments.delete"),
+    hasPermission(session, "payments.status.update"),
   ]);
+
+  const paymentData = canReadPayments ? await listPaymentsForInvoice(session, invoice.id) : null;
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -151,7 +191,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Balance Due</dt>
-                <dd>{toMoney(invoice.grandTotal)}</dd>
+                <dd>{toMoney(paymentData?.summary.balanceDue ?? Number(invoice.grandTotal))}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Approved</dt>
@@ -199,10 +239,56 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
               </div>
             )}
           </div>
+          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-semibold">Payment History</h2>
+              {canCreatePayments ? (
+                <span className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600">Record Payment</span>
+              ) : null}
+            </div>
+            {!canReadPayments ? (
+              <p className="text-sm text-[var(--muted)]">You do not have permission to view payment history.</p>
+            ) : (
+              <div className="space-y-4">
+                <PaymentsTable
+                  invoiceId={invoice.id}
+                  redirectTo={`/invoices/${invoice.id}`}
+                  payments={paymentData?.payments ?? []}
+                  canUpdate={canUpdatePayments}
+                  canDelete={canDeletePayments}
+                  canStatusUpdate={canUpdatePaymentStatus}
+                />
+                {canCreatePayments ? (
+                  <div className="rounded-md border border-[var(--border)] p-3">
+                    <h3 className="mb-2 text-sm font-semibold">Record Payment</h3>
+                    <PaymentForm
+                      action={createPaymentAction}
+                      invoiceId={invoice.id}
+                      redirectTo={`/invoices/${invoice.id}`}
+                      submitLabel="Save Payment"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-5">
-          <InvoiceSummaryCard invoice={invoice} />
+          <InvoiceSummaryCard
+            invoice={invoice}
+            paidAmount={paymentData?.summary.paidAmount}
+            balanceDue={paymentData?.summary.balanceDue}
+            paymentStatus={paymentData?.summary.paymentStatus}
+          />
+          {canReadPayments && paymentData ? (
+            <PaymentSummaryCard
+              grandTotal={paymentData.summary.grandTotal}
+              paidAmount={paymentData.summary.paidAmount}
+              balanceDue={paymentData.summary.balanceDue}
+              paymentStatus={paymentData.summary.paymentStatus}
+            />
+          ) : null}
           {canStatusUpdate ? (
             <div className="rounded-md border border-[var(--border)] bg-white p-5">
               <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>

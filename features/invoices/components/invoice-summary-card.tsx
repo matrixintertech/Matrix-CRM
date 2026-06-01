@@ -18,6 +18,9 @@ type InvoiceSummaryCardProps = {
       items: number;
     };
   };
+  paidAmount?: number;
+  balanceDue?: number;
+  paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
 };
 
 function toMoney(value: unknown) {
@@ -28,7 +31,9 @@ function toMoney(value: unknown) {
   return `INR ${numeric.toFixed(2)}`;
 }
 
-export function InvoiceSummaryCard({ invoice }: InvoiceSummaryCardProps) {
+export function InvoiceSummaryCard({ invoice, paidAmount, balanceDue, paymentStatus }: InvoiceSummaryCardProps) {
+  const paidValue = typeof paidAmount === "number" ? paidAmount : 0;
+  const balanceValue = typeof balanceDue === "number" ? balanceDue : Number(invoice.grandTotal);
   return (
     <div className="rounded-md border border-[var(--border)] bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
@@ -43,7 +48,9 @@ export function InvoiceSummaryCard({ invoice }: InvoiceSummaryCardProps) {
         <p>Subtotal: {toMoney(invoice.subtotal)}</p>
         <p>Tax Total: {toMoney(invoice.taxTotal)}</p>
         <p className="font-medium text-slate-700">Grand Total: {toMoney(invoice.grandTotal)}</p>
-        <p>Balance Due: {toMoney(invoice.grandTotal)}</p>
+        <p>Paid Amount: {toMoney(paidValue)}</p>
+        <p>Balance Due: {toMoney(balanceValue)}</p>
+        {paymentStatus ? <p>Payment Status: {paymentStatus.replaceAll("_", " ")}</p> : null}
         <p>Created: {formatDateTime(invoice.createdAt)}</p>
         <p>Updated: {formatDateTime(invoice.updatedAt)}</p>
       </div>

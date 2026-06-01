@@ -261,6 +261,7 @@ model ServicePartner {
   messages              Message[]
   notifications         Notification[]
   otpChallenges         OtpChallenge[]
+  userPermissions       UserPermission[]
   legacyIdMaps          LegacyIdMap[]
 
   @@index([status])
@@ -285,6 +286,8 @@ model User {
   servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
 
   roles                        UserRole[]
+  directPermissions            UserPermission[]            @relation("UserDirectPermissions")
+  assignedUserPermissions      UserPermission[]            @relation("UserPermissionAssignedBy")
   clientUserProfile            ClientUser?
   vendorProfile                Vendor?
   createdServiceRequests       ServiceRequest[]              @relation("ServiceRequestCreatedByUser")
@@ -423,6 +426,7 @@ model Permission {
   updatedAt   DateTime @updatedAt
 
   roles          RolePermission[]
+  userAssignments UserPermission[]
   navigationRefs NavigationItemPermission[]
 
   @@index([module])
@@ -450,6 +454,29 @@ model UserRole {
 
   @@id([userId, roleId])
   @@index([roleId])
+}
+
+model UserPermission {
+  id               String   @id @default(uuid())
+  userId           String
+  permissionId     String
+  allowed          Boolean  @default(true)
+  servicePartnerId String?
+  assignedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user           User            @relation("UserDirectPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  permission     Permission      @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  servicePartner ServicePartner? @relation(fields: [servicePartnerId], references: [id])
+  assignedBy     User?           @relation("UserPermissionAssignedBy", fields: [assignedByUserId], references: [id])
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@index([servicePartnerId])
+  @@index([assignedByUserId])
+  @@index([userId, allowed])
 }
 
 model NavigationItem {
@@ -1250,6 +1277,7 @@ model Invoice {
   approvedBy     User?           @relation("InvoiceApprovedBy", fields: [approvedByUserId], references: [id])
 
   items       InvoiceItem[]
+  payments    Payment[]
   attachments Attachment[]
 
   @@unique([servicePartnerId, invoiceNumber])
@@ -1279,6 +1307,7 @@ model InvoiceItem {
 model Payment {
   id                String        @id @default(uuid())
   servicePartnerId  String
+  invoiceId         String?
   serviceRequestId  String?
   clientId          String?
   paymentNumber     String
@@ -1286,6 +1315,8 @@ model Payment {
   amount            Decimal       @db.Decimal(14, 2)
   approvedAmount    Decimal?      @db.Decimal(14, 2)
   currency          String        @default("INR")
+  mode              String?
+  referenceNumber   String?
   requestedByUserId String?
   approvedByUserId  String?
   paidByUserId      String?
@@ -1295,6 +1326,7 @@ model Payment {
   updatedAt         DateTime      @updatedAt
 
   servicePartner ServicePartner  @relation(fields: [servicePartnerId], references: [id])
+  invoice        Invoice?        @relation(fields: [invoiceId], references: [id])
   serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
   client         Client?         @relation(fields: [clientId], references: [id])
   requestedBy    User?           @relation("PaymentRequestedBy", fields: [requestedByUserId], references: [id])
@@ -1305,6 +1337,7 @@ model Payment {
 
   @@unique([servicePartnerId, paymentNumber])
   @@index([servicePartnerId])
+  @@index([invoiceId])
   @@index([serviceRequestId])
   @@index([clientId])
   @@index([status])

@@ -2,6 +2,7 @@ const styles: Record<string, string> = {
   ACTIVE: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   INACTIVE: "bg-slate-100 text-slate-600 ring-slate-200",
   PENDING: "bg-amber-50 text-amber-800 ring-amber-200",
+  REQUESTED: "bg-amber-50 text-amber-800 ring-amber-200",
   APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   APPROVAL_PENDING: "bg-amber-50 text-amber-800 ring-amber-200",
   SUBMITTED: "bg-sky-50 text-sky-700 ring-sky-200",
