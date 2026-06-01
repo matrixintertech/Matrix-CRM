@@ -1194,11 +1194,13 @@ async function main() {
     pushResult(results, "navigation.rfqs_nav_no_broken_link", baselineSource.includes('href: "/rfqs"'));
     pushResult(
       results,
-      "navigation.po_active_invoice_vendor_payment_not_active",
+      "navigation.po_invoice_active_vendor_payment_not_active",
       baselineSource.includes(
         '{ key: "po-list", label: "PO List", href: "/purchase-orders", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: true }'
       ) &&
-        baselineSource.includes('{ key: "invoice-list", label: "Invoice List", href: "#", sortOrder: 30, permissionKey: "invoices.read", isActive: false }') &&
+        baselineSource.includes(
+          '{ key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true }'
+        ) &&
         baselineSource.includes('{ key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false }')
     );
 

@@ -17,6 +17,7 @@
     "qa:access": "tsx scripts/access-governance-qa.ts",
     "qa:service-requests": "tsx scripts/service-request-work-items-qa.ts",
     "qa:purchase-orders": "tsx scripts/purchase-order-qa.ts",
+    "qa:invoices": "tsx scripts/invoice-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
     "prisma:validate": "prisma validate",

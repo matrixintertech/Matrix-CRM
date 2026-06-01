@@ -1,8 +1,10 @@
+import { PurchaseOrderStatus } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/admin/page-header";
 import { StatusBadge } from "@/components/admin/status-badge";
+import { listInvoicesForPurchaseOrder } from "@/features/invoices/services/invoice.service";
 import { PurchaseOrderStatusActions } from "@/features/purchase-orders/components/purchase-order-status-actions";
 import { PurchaseOrderSummaryCard } from "@/features/purchase-orders/components/purchase-order-summary-card";
 import { getPurchaseOrderById } from "@/features/purchase-orders/services/purchase-order.service";
@@ -67,6 +69,18 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
     hasPermission(session, "purchase_orders.delete"),
     hasPermission(session, "purchase_orders.status.update"),
   ]);
+  const [canReadInvoices, canCreateInvoice] = await Promise.all([
+    hasPermission(session, "invoices.read"),
+    hasPermission(session, "invoices.create"),
+  ]);
+  const relatedInvoices = canReadInvoices ? await listInvoicesForPurchaseOrder(session, purchaseOrder.id) : [];
+  const invoiceEligiblePoStatuses = new Set<PurchaseOrderStatus>([
+    PurchaseOrderStatus.APPROVED,
+    PurchaseOrderStatus.ISSUED,
+    PurchaseOrderStatus.PARTIALLY_FULFILLED,
+    PurchaseOrderStatus.FULFILLED,
+  ]);
+  const canCreateInvoiceFromPo = canCreateInvoice && invoiceEligiblePoStatuses.has(purchaseOrder.status);
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -150,6 +164,16 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                 <dt className="text-[var(--muted)]">Notes</dt>
                 <dd>{formatOptional(purchaseOrder.notes)}</dd>
               </div>
+              {canCreateInvoiceFromPo ? (
+                <div className="md:col-span-2">
+                  <Link
+                    href={`/invoices/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
+                    className="inline-flex rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                  >
+                    Create Invoice
+                  </Link>
+                </div>
+              ) : null}
             </dl>
           </div>
 
@@ -188,6 +212,46 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
               </div>
             )}
           </div>
+
+          {canReadInvoices ? (
+            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+              <h2 className="mb-3 text-base font-semibold">Related Invoices</h2>
+              {relatedInvoices.length === 0 ? (
+                <p className="text-sm text-[var(--muted)]">No invoices created for this purchase order yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Invoice</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">Lines</th>
+                        <th className="px-3 py-2">Grand Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {relatedInvoices.map((invoice) => (
+                        <tr key={invoice.id}>
+                          <td className="px-3 py-2">
+                            <Link href={`/invoices/${invoice.id}`} className="text-[var(--primary)] underline">
+                              {invoice.invoiceNumber}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2">
+                            <StatusBadge value={invoice.status} />
+                          </td>
+                          <td className="px-3 py-2">{formatDateTime(invoice.invoiceDate)}</td>
+                          <td className="px-3 py-2">{invoice._count.items}</td>
+                          <td className="px-3 py-2">{toMoney(invoice.grandTotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-5">

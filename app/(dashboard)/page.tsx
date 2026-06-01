@@ -24,7 +24,8 @@ type KpiCardDefinition = {
     | "rateCards"
     | "serviceRequests"
     | "openServiceRequests"
-    | "rfqs";
+    | "rfqs"
+    | "invoices";
 };
 
 type QuickAction = {
@@ -61,6 +62,7 @@ const superAdminKpis: KpiCardDefinition[] = [
   { title: "Rate Cards", note: "All rate cards", href: "/rate-cards", permission: "rate_cards.read", key: "rateCards" },
   { title: "Service Requests", note: "All requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "RFQs", note: "All RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
+  { title: "Invoices", note: "All invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
 ];
 
 const companyKpis: KpiCardDefinition[] = [
@@ -75,6 +77,7 @@ const companyKpis: KpiCardDefinition[] = [
   { title: "Service Requests", note: "Company requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "Open Service Requests", note: "Open queue", href: "/service-requests", permission: "service_requests.read", key: "openServiceRequests" },
   { title: "RFQs", note: "Company RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
+  { title: "Invoices", note: "Company invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
 ];
 
 const quickActionDefinitions: QuickAction[] = [
@@ -90,6 +93,7 @@ const quickActionDefinitions: QuickAction[] = [
   { title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
   { title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
   { title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
+  { title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
 ];
 
 function formatStatusLabel(status: ServiceRequestStatus) {
@@ -126,7 +130,7 @@ export default async function DashboardPage() {
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, recentRequests, companyProfile, topCompanyRows] =
+  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, recentRequests, companyProfile, topCompanyRows] =
     await Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
@@ -152,6 +156,7 @@ export default async function DashboardPage() {
           })
         : Promise.resolve(0),
       can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+      can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("service_requests.read")
         ? prisma.serviceRequest.findMany({
             where: scopeByTenant(session, { deletedAt: null }),
@@ -204,6 +209,7 @@ export default async function DashboardPage() {
     serviceRequests,
     openServiceRequests,
     rfqs,
+    invoices,
   };
 
   const kpiDefinitions = isSuperAdmin ? superAdminKpis : companyKpis;

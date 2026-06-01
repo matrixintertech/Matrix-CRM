@@ -163,7 +163,7 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     );
   }
 
-  if (keyName.includes("ledger") || keyName.includes("payment") || keyName.includes("expense")) {
+  if (keyName.includes("ledger") || keyName.includes("payment") || keyName.includes("expense") || keyName.includes("invoice")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="4" y="4" width="16" height="16" rx="2.5" />
