@@ -626,6 +626,17 @@ async function main() {
     });
     createdInvoiceIds.push(foreignInvoice.id);
 
+    const roundingInvoice = await createQaInvoice({
+      servicePartnerId: companyData.servicePartnerId,
+      serviceRequestId: companyData.serviceRequestId,
+      itemId: companyData.itemId,
+      vendorId: companyData.vendorId,
+      createdByUserId: companyAdminUser.id,
+      invoiceNumber: `QA-PAY-RND-${Date.now()}`,
+      grandTotal: 100.01,
+    });
+    createdInvoiceIds.push(roundingInvoice.id);
+
     const createdPayment = await createInvoicePayment(companyAdminSession as never, {
       invoiceId: primaryInvoice.id,
       amount: 100,
@@ -659,6 +670,7 @@ async function main() {
     pushResult(results, "payment.summary.paid_amount_after_second", afterSecondPayment.summary.paidAmount === 300);
     pushResult(results, "payment.summary.balance_due_after_second", afterSecondPayment.summary.balanceDue === 0);
     pushResult(results, "invoice.status_paid_after_full_payment", afterSecondPayment.invoice.status === InvoiceStatus.PAID);
+    pushResult(results, "payment.multiple_partial_payments_allowed_until_zero_balance", afterSecondPayment.summary.paymentStatus === "PAID");
 
     const overpaymentBlocked = await expectThrowMessage(() =>
       createInvoicePayment(companyAdminSession as never, {
@@ -672,6 +684,25 @@ async function main() {
       })
     );
     pushResult(results, "payment.overpayment_rejected", overpaymentBlocked.threw);
+    pushResult(
+      results,
+      "payment.after_fully_paid_invoice_rejected",
+      overpaymentBlocked.threw &&
+        (overpaymentBlocked.message?.toLowerCase().includes("already marked as paid") ||
+          overpaymentBlocked.message?.toLowerCase().includes("balance due"))
+    );
+
+    const updateOverpaymentBlocked = await expectThrowMessage(() =>
+      updateInvoicePayment(companyAdminSession as never, createdPayment.payment.id, {
+        amount: 150,
+        paymentDate: new Date("2026-06-09"),
+        mode: "CARD",
+        referenceNumber: "QA-PAY-REF-1B-OVER",
+        notes: "updated overpay should fail",
+        status: PaymentStatus.PAID,
+      })
+    );
+    pushResult(results, "payment.update_overpayment_rejected", updateOverpaymentBlocked.threw);
 
     const updatedPayment = await updateInvoicePayment(companyAdminSession as never, createdPayment.payment.id, {
       amount: 50,
@@ -693,6 +724,7 @@ async function main() {
 
     const afterStatusUpdate = await listPaymentsForInvoice(companyAdminSession as never, primaryInvoice.id);
     pushResult(results, "payment.cancelled_excluded_from_paid_total", afterStatusUpdate.summary.paidAmount === 50);
+    pushResult(results, "payment.non_counted_statuses_do_not_affect_paid_total", afterStatusUpdate.summary.balanceDue === 250);
 
     const voidedFirst = await voidInvoicePayment(companyAdminSession as never, createdPayment.payment.id);
     pushResult(results, "payment.void", voidedFirst.payment.status === PaymentStatus.CANCELLED);
@@ -756,6 +788,32 @@ async function main() {
     });
     pushResult(results, "validation.negative_amount_rejected", !validationNegativeAmount.success);
 
+    const validationInvalidStatus = createPaymentSchema.safeParse({
+      invoiceId: primaryInvoice.id,
+      amount: 10,
+      paymentDate: new Date("2026-06-12"),
+      mode: "CASH",
+      status: "NOT_A_STATUS",
+    });
+    pushResult(results, "validation.invalid_payment_status_rejected", !validationInvalidStatus.success);
+
+    const roundedPayment = await createInvoicePayment(companyAdminSession as never, {
+      invoiceId: roundingInvoice.id,
+      amount: 33.335,
+      paymentDate: new Date("2026-06-12"),
+      mode: "UPI",
+      referenceNumber: "QA-PAY-RND-1",
+      notes: "rounding payment",
+      status: PaymentStatus.PAID,
+    });
+    createdPaymentIds.push(roundedPayment.payment.id);
+    const roundedSummary = await listPaymentsForInvoice(companyAdminSession as never, roundingInvoice.id);
+    pushResult(
+      results,
+      "payment.decimal_rounding_consistent",
+      roundedSummary.summary.paidAmount === 33.34 && roundedSummary.summary.balanceDue === 66.67
+    );
+
     const noReadCanRead = await hasPermission(noReadSession as never, "payments.read");
     const readOnlyCanCreate = await hasPermission(readOnlySession as never, "payments.create");
     const readOnlyCanUpdate = await hasPermission(readOnlySession as never, "payments.update");
@@ -769,6 +827,7 @@ async function main() {
 
     const paymentActionsSource = readFileSync("features/payments/actions/payment.actions.ts", "utf8");
     const invoiceDetailSource = readFileSync("app/(dashboard)/invoices/[id]/page.tsx", "utf8");
+    const invoiceSummarySource = readFileSync("features/invoices/components/invoice-summary-card.tsx", "utf8");
     const baselineSource = readFileSync("lib/rbac/baseline.ts", "utf8");
     pushResult(results, "permissions.payment_action_guard_create", paymentActionsSource.includes('requirePermission("payments.create")'));
     pushResult(results, "permissions.payment_action_guard_update", paymentActionsSource.includes('requirePermission("payments.update")'));
@@ -784,6 +843,29 @@ async function main() {
       invoiceDetailSource.includes("PaymentSummaryCard") || invoiceDetailSource.includes("Payment Summary")
     );
     pushResult(results, "integration.invoice_detail_payment_history", invoiceDetailSource.includes("Payment History"));
+    pushResult(
+      results,
+      "integration.invoice_summary_shows_paid_and_balance",
+      invoiceSummarySource.includes("Paid Amount") && invoiceSummarySource.includes("Balance Due")
+    );
+    pushResult(results, "integration.record_payment_form_permission_gated", invoiceDetailSource.includes("canCreatePayments"));
+    pushResult(
+      results,
+      "integration.payment_action_buttons_permission_gated",
+      invoiceDetailSource.includes("canUpdatePayments") &&
+        invoiceDetailSource.includes("canDeletePayments") &&
+        invoiceDetailSource.includes("canUpdatePaymentStatus")
+    );
+    pushResult(
+      results,
+      "permissions.payment_duplicate_error_path_exists",
+      paymentActionsSource.includes("isUniqueConstraintError") && paymentActionsSource.includes("payment-duplicate")
+    );
+    pushResult(
+      results,
+      "schema.payment_number_unique_constraint_exists",
+      readFileSync("prisma/schema.prisma", "utf8").includes("@@unique([servicePartnerId, paymentNumber])")
+    );
 
     const adminNav = await getNavigationForSession(companyAdminSession as never);
     const adminNavKeys = new Set(flattenNavKeys(adminNav));
@@ -793,6 +875,14 @@ async function main() {
       "navigation.payments_nav_seed_inactive",
       baselineSource.includes('{ key: "payments", label: "Payments", href: "#", sortOrder: 25, permissionKey: "payments.read", isActive: false }')
     );
+    pushResult(
+      results,
+      "navigation.vendor_payments_nav_inactive",
+      baselineSource.includes(
+        '{ key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false }'
+      )
+    );
+    pushResult(results, "navigation.ledger_nav_inactive", baselineSource.includes('{ key: "ledger", label: "Ledger", href: "#", sortOrder: 23, permissionKey: "ledger.read", isActive: false }'));
     pushResult(results, "navigation.invoice_route_exists", existsSync("app/(dashboard)/invoices/[id]/page.tsx"));
   } finally {
     await cleanupQaRecords({
