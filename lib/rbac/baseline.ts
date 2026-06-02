@@ -152,6 +152,10 @@ export const baselinePermissions: PermissionDefinition[] = [
   { key: "invoices.send", module: "invoices", action: "send", description: "Send invoices." },
   { key: "invoices.approve", module: "invoices", action: "approve", description: "Approve invoices." },
   { key: "vendor_payments.read", module: "vendor_payments", action: "read", description: "Read vendor payments module." },
+  { key: "vendor_payments.create", module: "vendor_payments", action: "create", description: "Create vendor payments." },
+  { key: "vendor_payments.update", module: "vendor_payments", action: "update", description: "Update vendor payments." },
+  { key: "vendor_payments.delete", module: "vendor_payments", action: "delete", description: "Delete vendor payments." },
+  { key: "vendor_payments.status.update", module: "vendor_payments", action: "status.update", description: "Update vendor payment status." },
   { key: "reports.read", module: "reports", action: "read", description: "Read reports." },
 ];
 
@@ -180,7 +184,7 @@ export const baselineNavigation: NavigationSeedItem[] = [
   { key: "rfq-list", label: "RFQ List", href: "/rfqs", sortOrder: 28, permissionKey: "rfq.read", isActive: true },
   { key: "po-list", label: "PO List", href: "/purchase-orders", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: true },
   { key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true },
-  { key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false },
+  { key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true },
 ];
 
 export const baselineRoleDefinitions: RoleSeedDefinition[] = [
@@ -313,6 +317,11 @@ const companyAdminPermissions = [
   "payments.update",
   "payments.delete",
   "payments.status.update",
+  "vendor_payments.read",
+  "vendor_payments.create",
+  "vendor_payments.update",
+  "vendor_payments.delete",
+  "vendor_payments.status.update",
   "quotations.read",
   "quotations.create",
   "quotations.update",
@@ -384,6 +393,11 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "payments.update",
     "payments.delete",
     "payments.status.update",
+    "vendor_payments.read",
+    "vendor_payments.create",
+    "vendor_payments.update",
+    "vendor_payments.delete",
+    "vendor_payments.status.update",
     "quotations.read",
     "quotations.create",
     "quotations.update",
@@ -436,6 +450,10 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "payments.create",
     "payments.update",
     "payments.status.update",
+    "vendor_payments.read",
+    "vendor_payments.create",
+    "vendor_payments.update",
+    "vendor_payments.status.update",
     "quotations.read",
     "quotations.create",
     "quotations.update",
@@ -477,6 +495,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "payments.read",
     "payments.update",
     "payments.status.update",
+    "vendor_payments.read",
     "quotations.read",
   ],
   support: [
@@ -495,6 +514,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "invoices.read",
     "payments.read",
     "ledger.read",
+    "vendor_payments.read",
     "quotations.read",
   ],
 };

@@ -16,6 +16,19 @@ type LedgerRow = {
       invoiceNumber: string;
     } | null;
   } | null;
+  vendorPayment: {
+    id: string;
+    paymentNumber: string;
+    vendor: {
+      id: string;
+      name: string;
+      code: string;
+    } | null;
+    purchaseOrder: {
+      id: string;
+      poNumber: string;
+    } | null;
+  } | null;
   serviceRequest: {
     id: string;
     serviceNumber: string;
@@ -55,7 +68,12 @@ export function LedgerTable({ entries }: { entries: LedgerRow[] }) {
         {
           header: "Source",
           cell: (entry) => (
-            <LedgerSourceLink sourceType={entry.sourceType} payment={entry.payment} serviceRequest={entry.serviceRequest} />
+            <LedgerSourceLink
+              sourceType={entry.sourceType}
+              payment={entry.payment}
+              vendorPayment={entry.vendorPayment}
+              serviceRequest={entry.serviceRequest}
+            />
           ),
         },
         {

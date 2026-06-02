@@ -115,6 +115,106 @@ export async function syncLedgerForInvoicePayment(
   };
 }
 
+export async function syncLedgerForVendorPayment(
+  tx: DbLike,
+  input: {
+    vendorPaymentId: string;
+    actorUserId?: string | null;
+  }
+) {
+  const vendorPayment = await tx.vendorPayment.findUnique({
+    where: { id: input.vendorPaymentId },
+    select: {
+      id: true,
+      servicePartnerId: true,
+      serviceRequestId: true,
+      purchaseOrderId: true,
+      paymentNumber: true,
+      amount: true,
+      status: true,
+      paidAt: true,
+      vendor: {
+        select: {
+          id: true,
+          name: true,
+          code: true,
+        },
+      },
+      purchaseOrder: {
+        select: {
+          id: true,
+          poNumber: true,
+        },
+      },
+    },
+  });
+
+  if (!vendorPayment?.vendor) {
+    return { createdEntries: [] as Array<{ id: string; debitAmount: number; creditAmount: number }>, desiredNet: 0, currentNet: 0 };
+  }
+
+  const existingEntries = await tx.ledgerEntry.findMany({
+    where: {
+      servicePartnerId: vendorPayment.servicePartnerId,
+      vendorPaymentId: vendorPayment.id,
+      sourceType: LedgerSourceType.VENDOR_PAYMENT,
+    },
+    select: {
+      id: true,
+      debitAmount: true,
+      creditAmount: true,
+    },
+  });
+
+  const currentNet = roundMoney(
+    existingEntries.reduce((sum, entry) => sum + Number(entry.debitAmount) - Number(entry.creditAmount), 0)
+  );
+  const desiredNet = countedPaymentStatuses.includes(vendorPayment.status) ? roundMoney(Number(vendorPayment.amount)) : 0;
+  const delta = roundMoney(desiredNet - currentNet);
+
+  if (delta === 0) {
+    return { createdEntries: [] as Array<{ id: string; debitAmount: number; creditAmount: number }>, desiredNet, currentNet };
+  }
+
+  const targetLabel = vendorPayment.purchaseOrder?.poNumber
+    ? `${vendorPayment.vendor.name} against ${vendorPayment.purchaseOrder.poNumber}`
+    : vendorPayment.vendor.name;
+
+  const createdEntry = await tx.ledgerEntry.create({
+    data: {
+      servicePartnerId: vendorPayment.servicePartnerId,
+      serviceRequestId: vendorPayment.serviceRequestId ?? null,
+      sourceType: LedgerSourceType.VENDOR_PAYMENT,
+      vendorPaymentId: vendorPayment.id,
+      entryDate: vendorPayment.paidAt ?? new Date(),
+      debitAmount: delta > 0 ? Math.abs(delta) : 0,
+      creditAmount: delta < 0 ? Math.abs(delta) : 0,
+      description:
+        delta > 0
+          ? `Vendor payment posted for ${targetLabel} via ${vendorPayment.paymentNumber}`
+          : `Vendor payment ledger reversal for ${targetLabel} via ${vendorPayment.paymentNumber}`,
+      createdByUserId: input.actorUserId ?? null,
+    },
+    select: {
+      id: true,
+      debitAmount: true,
+      creditAmount: true,
+    },
+  });
+
+  return {
+    createdEntries: [
+      {
+        id: createdEntry.id,
+        debitAmount: Number(createdEntry.debitAmount),
+        creditAmount: Number(createdEntry.creditAmount),
+      },
+    ],
+    desiredNet,
+    currentNet,
+  };
+}
+
 export async function listLedgerEntries(session: Session, input: LedgerFilterInput) {
   const pagination = getPagination(input);
   const where: Prisma.LedgerEntryWhereInput = {
@@ -141,6 +241,9 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
       { description: { contains: q, mode: "insensitive" } },
       { payment: { paymentNumber: { contains: q, mode: "insensitive" } } },
       { payment: { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } } },
+      { vendorPayment: { paymentNumber: { contains: q, mode: "insensitive" } } },
+      { vendorPayment: { vendor: { name: { contains: q, mode: "insensitive" } } } },
+      { vendorPayment: { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } } },
       { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
     ];
   }
@@ -161,6 +264,25 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
               select: {
                 id: true,
                 invoiceNumber: true,
+              },
+            },
+          },
+        },
+        vendorPayment: {
+          select: {
+            id: true,
+            paymentNumber: true,
+            vendor: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+            purchaseOrder: {
+              select: {
+                id: true,
+                poNumber: true,
               },
             },
           },

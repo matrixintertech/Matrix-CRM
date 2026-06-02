@@ -26,7 +26,8 @@ type KpiCardDefinition = {
     | "openServiceRequests"
     | "rfqs"
     | "invoices"
-    | "ledgerEntries";
+    | "ledgerEntries"
+    | "vendorPayments";
 };
 
 type QuickAction = {
@@ -64,6 +65,7 @@ const superAdminKpis: KpiCardDefinition[] = [
   { title: "Service Requests", note: "All requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "RFQs", note: "All RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
   { title: "Invoices", note: "All invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Vendor Payments", note: "All vendor payments", href: "/vendor-payments", permission: "vendor_payments.read", key: "vendorPayments" },
   { title: "Ledger Entries", note: "All payment postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
 
@@ -80,6 +82,7 @@ const companyKpis: KpiCardDefinition[] = [
   { title: "Open Service Requests", note: "Open queue", href: "/service-requests", permission: "service_requests.read", key: "openServiceRequests" },
   { title: "RFQs", note: "Company RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
   { title: "Invoices", note: "Company invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Vendor Payments", note: "Company vendor payments", href: "/vendor-payments", permission: "vendor_payments.read", key: "vendorPayments" },
   { title: "Ledger Entries", note: "Company postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
 
@@ -97,6 +100,7 @@ const quickActionDefinitions: QuickAction[] = [
   { title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
   { title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
   { title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
+  { title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
 ];
 
 function formatStatusLabel(status: ServiceRequestStatus) {
@@ -133,7 +137,7 @@ export default async function DashboardPage() {
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, ledgerEntries, recentRequests, companyProfile, topCompanyRows] =
+  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, vendorPayments, ledgerEntries, recentRequests, companyProfile, topCompanyRows] =
     await Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
@@ -160,6 +164,7 @@ export default async function DashboardPage() {
         : Promise.resolve(0),
       can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+      can("vendor_payments.read") ? prisma.vendorPayment.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
       can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
       can("service_requests.read")
         ? prisma.serviceRequest.findMany({
@@ -214,6 +219,7 @@ export default async function DashboardPage() {
     openServiceRequests,
     rfqs,
     invoices,
+    vendorPayments,
     ledgerEntries,
   };
 

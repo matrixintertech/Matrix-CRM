@@ -8,6 +8,8 @@ import { listInvoicesForPurchaseOrder } from "@/features/invoices/services/invoi
 import { PurchaseOrderStatusActions } from "@/features/purchase-orders/components/purchase-order-status-actions";
 import { PurchaseOrderSummaryCard } from "@/features/purchase-orders/components/purchase-order-summary-card";
 import { getPurchaseOrderById } from "@/features/purchase-orders/services/purchase-order.service";
+import { VendorPaymentsTable } from "@/features/vendor-payments/components/vendor-payments-table";
+import { listVendorPaymentsForPurchaseOrder } from "@/features/vendor-payments/services/vendor-payment.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
@@ -69,11 +71,19 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
     hasPermission(session, "purchase_orders.delete"),
     hasPermission(session, "purchase_orders.status.update"),
   ]);
-  const [canReadInvoices, canCreateInvoice] = await Promise.all([
+  const [canReadInvoices, canCreateInvoice, canReadVendorPayments, canCreateVendorPayment, canUpdateVendorPayments, canDeleteVendorPayments, canUpdateVendorPaymentStatus] = await Promise.all([
     hasPermission(session, "invoices.read"),
     hasPermission(session, "invoices.create"),
+    hasPermission(session, "vendor_payments.read"),
+    hasPermission(session, "vendor_payments.create"),
+    hasPermission(session, "vendor_payments.update"),
+    hasPermission(session, "vendor_payments.delete"),
+    hasPermission(session, "vendor_payments.status.update"),
   ]);
-  const relatedInvoices = canReadInvoices ? await listInvoicesForPurchaseOrder(session, purchaseOrder.id) : [];
+  const [relatedInvoices, relatedVendorPayments] = await Promise.all([
+    canReadInvoices ? listInvoicesForPurchaseOrder(session, purchaseOrder.id) : Promise.resolve([]),
+    canReadVendorPayments ? listVendorPaymentsForPurchaseOrder(session, purchaseOrder.id) : Promise.resolve([]),
+  ]);
   const invoiceEligiblePoStatuses = new Set<PurchaseOrderStatus>([
     PurchaseOrderStatus.APPROVED,
     PurchaseOrderStatus.ISSUED,
@@ -81,6 +91,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
     PurchaseOrderStatus.FULFILLED,
   ]);
   const canCreateInvoiceFromPo = canCreateInvoice && invoiceEligiblePoStatuses.has(purchaseOrder.status);
+  const canCreateVendorPaymentFromPo = canCreateVendorPayment && invoiceEligiblePoStatuses.has(purchaseOrder.status);
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -165,13 +176,21 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                 <dd>{formatOptional(purchaseOrder.notes)}</dd>
               </div>
               {canCreateInvoiceFromPo ? (
-                <div className="md:col-span-2">
+                <div className="md:col-span-2 flex flex-wrap gap-2">
                   <Link
                     href={`/invoices/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
                     className="inline-flex rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
                   >
                     Create Invoice
                   </Link>
+                  {canCreateVendorPaymentFromPo ? (
+                    <Link
+                      href={`/vendor-payments/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
+                      className="inline-flex rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                    >
+                      Record Vendor Payment
+                    </Link>
+                  ) : null}
                 </div>
               ) : null}
             </dl>
@@ -250,6 +269,29 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                   </table>
                 </div>
               )}
+            </div>
+          ) : null}
+
+          {canReadVendorPayments ? (
+            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">Vendor Payments</h2>
+                {canCreateVendorPaymentFromPo ? (
+                  <Link
+                    href={`/vendor-payments/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                  >
+                    Record Vendor Payment
+                  </Link>
+                ) : null}
+              </div>
+              <VendorPaymentsTable
+                vendorPayments={relatedVendorPayments}
+                redirectTo={`/purchase-orders/${purchaseOrder.id}`}
+                canUpdate={canUpdateVendorPayments}
+                canDelete={canDeleteVendorPayments}
+                canStatusUpdate={canUpdateVendorPaymentStatus}
+              />
             </div>
           ) : null}
         </div>

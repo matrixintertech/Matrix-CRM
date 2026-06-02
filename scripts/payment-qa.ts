@@ -897,9 +897,9 @@ async function main() {
     );
     pushResult(
       results,
-      "navigation.vendor_payments_nav_inactive",
+      "navigation.vendor_payments_nav_active_when_route_exists",
       baselineSource.includes(
-        '{ key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false }'
+        '{ key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true }'
       )
     );
     pushResult(
