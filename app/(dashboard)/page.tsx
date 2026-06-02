@@ -101,6 +101,7 @@ const quickActionDefinitions: QuickAction[] = [
   { title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
   { title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
   { title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
+  { title: "Finance Reports", subtitle: "View finance reports", href: "/finance-reports", permission: "reports.read" },
 ];
 
 function formatStatusLabel(status: ServiceRequestStatus) {

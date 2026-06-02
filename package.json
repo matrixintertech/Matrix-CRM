@@ -21,6 +21,7 @@
     "qa:payments": "tsx scripts/payment-qa.ts",
     "qa:ledger": "tsx scripts/ledger-qa.ts",
     "qa:vendor-payments": "tsx scripts/vendor-payment-qa.ts",
+    "qa:finance-reports": "tsx scripts/finance-reports-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
     "prisma:validate": "prisma validate",

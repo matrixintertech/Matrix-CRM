@@ -185,6 +185,7 @@ export const baselineNavigation: NavigationSeedItem[] = [
   { key: "po-list", label: "PO List", href: "/purchase-orders", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: true },
   { key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true },
   { key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true },
+  { key: "finance-reports", label: "Finance Reports", href: "/finance-reports", sortOrder: 32, permissionKey: "reports.read", isActive: true },
 ];
 
 export const baselineRoleDefinitions: RoleSeedDefinition[] = [
@@ -322,6 +323,7 @@ const companyAdminPermissions = [
   "vendor_payments.update",
   "vendor_payments.delete",
   "vendor_payments.status.update",
+  "reports.read",
   "quotations.read",
   "quotations.create",
   "quotations.update",
@@ -398,6 +400,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "vendor_payments.update",
     "vendor_payments.delete",
     "vendor_payments.status.update",
+    "reports.read",
     "quotations.read",
     "quotations.create",
     "quotations.update",
@@ -454,6 +457,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "vendor_payments.create",
     "vendor_payments.update",
     "vendor_payments.status.update",
+    "reports.read",
     "quotations.read",
     "quotations.create",
     "quotations.update",
@@ -515,6 +519,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "payments.read",
     "ledger.read",
     "vendor_payments.read",
+    "reports.read",
     "quotations.read",
   ],
 };

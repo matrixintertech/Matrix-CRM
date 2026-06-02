@@ -24,7 +24,7 @@ const SECTION_KEY_MAP: Record<string, string[]> = {
   OPERATIONS: ["service-partners", "service_partners", "clients", "branches", "service-requests", "service_requests"],
   "INVENTORY & SERVICES": ["inventory-management", "categories", "items", "rate-cards", "rate_cards"],
   PROCUREMENT: ["supplier-management", "vendor-quotations", "rfq-list", "po-list", "invoice-list", "vendor-payments-list"],
-  FINANCE: ["ledger", "payments", "expenses"],
+  FINANCE: ["ledger", "finance-reports", "payments", "expenses"],
   "WORK MANAGEMENT": ["tasks", "activity-log", "activity_logs"],
   SETTINGS: ["settings"],
 };
@@ -163,7 +163,7 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     );
   }
 
-  if (keyName.includes("ledger") || keyName.includes("payment") || keyName.includes("expense") || keyName.includes("invoice")) {
+  if (keyName.includes("ledger") || keyName.includes("finance") || keyName.includes("payment") || keyName.includes("expense") || keyName.includes("invoice")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="4" y="4" width="16" height="16" rx="2.5" />
