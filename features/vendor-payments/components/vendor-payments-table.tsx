@@ -64,7 +64,7 @@ export function VendorPaymentsTable({
   showActions = true,
 }: VendorPaymentsTableProps) {
   if (vendorPayments.length === 0) {
-    return <p className="text-sm text-[var(--muted)]">No vendor payments recorded yet.</p>;
+    return <p className="text-sm text-[var(--muted)]">No vendor payments found.</p>;
   }
 
   return (

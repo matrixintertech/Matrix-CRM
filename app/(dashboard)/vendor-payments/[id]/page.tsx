@@ -54,6 +54,20 @@ function toMoney(value: unknown) {
   return `INR ${numeric.toFixed(2)}`;
 }
 
+function getLedgerStatus(
+  entries: Array<{
+    debitAmount: unknown;
+    creditAmount: unknown;
+  }>
+) {
+  if (entries.length === 0) {
+    return "Not Posted";
+  }
+
+  const net = entries.reduce((sum, entry) => sum + Number(entry.debitAmount) - Number(entry.creditAmount), 0);
+  return Math.abs(net) < 0.00001 ? "Reversed" : "Posted";
+}
+
 export default async function VendorPaymentDetailPage({ params, searchParams }: VendorPaymentDetailPageProps) {
   const session = await requirePermission("vendor_payments.read");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
@@ -75,6 +89,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
     ? Number(vendorPayment.amount)
     : 0;
   const cancelledAmount = vendorPayment.status === "CANCELLED" ? Number(vendorPayment.amount) : 0;
+  const ledgerStatus = getLedgerStatus(vendorPayment.ledgerEntries);
 
   return (
     <section className="space-y-5">
@@ -159,12 +174,24 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
                 <dd>{toMoney(vendorPayment.amount)}</dd>
               </div>
               <div>
+                <dt className="text-[var(--muted)]">Ledger Status</dt>
+                <dd>{ledgerStatus}</dd>
+              </div>
+              <div>
                 <dt className="text-[var(--muted)]">Approved Amount</dt>
                 <dd>{toMoney(vendorPayment.approvedAmount)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Requested By</dt>
                 <dd>{vendorPayment.requestedBy?.name?.trim() || vendorPayment.requestedBy?.email || vendorPayment.requestedBy?.phone || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--muted)]">Created At</dt>
+                <dd>{formatDateTime(vendorPayment.createdAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--muted)]">Updated At</dt>
+                <dd>{formatDateTime(vendorPayment.updatedAt)}</dd>
               </div>
               <div className="md:col-span-2">
                 <dt className="text-[var(--muted)]">Notes</dt>

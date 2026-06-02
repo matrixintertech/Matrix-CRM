@@ -10,7 +10,8 @@ import {
 } from "@prisma/client";
 
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
-import { createVendorPaymentSchema } from "../features/vendor-payments/validations";
+import { listLedgerEntries } from "../features/ledger/services/ledger.service";
+import { createVendorPaymentSchema, updateVendorPaymentStatusSchema } from "../features/vendor-payments/validations";
 import {
   createVendorPayment,
   listVendorPayments,
@@ -721,6 +722,31 @@ async function main() {
     pushResult(results, "vendor_payment.number_generated", /^VPAY-[A-Z0-9]{1,6}-\d{8}-\d{4}$/.test(requestedPayment.vendorPayment.paymentNumber));
     pushResult(results, "vendor_payment.non_counted_status_does_not_post_ledger", requestedPayment.ledger.createdEntries.length === 0);
 
+    const validationMissingDate = createVendorPaymentSchema.safeParse({
+      servicePartnerId: companyPartner.id,
+      vendorId: companyData.primaryVendorId,
+      purchaseOrderId: companyData.purchaseOrderId,
+      amount: 100,
+      notes: "missing date",
+      status: PaymentStatus.PAID,
+    });
+    pushResult(results, "validation.payment_date_required", !validationMissingDate.success);
+
+    const validationMissingVendor = createVendorPaymentSchema.safeParse({
+      servicePartnerId: companyPartner.id,
+      purchaseOrderId: companyData.purchaseOrderId,
+      amount: 100,
+      paymentDate: new Date("2026-06-21"),
+      notes: "missing vendor",
+      status: PaymentStatus.PAID,
+    });
+    pushResult(results, "validation.vendor_required", !validationMissingVendor.success);
+
+    const validationInvalidStatus = updateVendorPaymentStatusSchema.safeParse({
+      status: "NOT_A_REAL_STATUS",
+    });
+    pushResult(results, "validation.invalid_status_rejected", !validationInvalidStatus.success);
+
     const updatedRequested = await updateVendorPayment(companyAdminSession as never, requestedPayment.vendorPayment.id, {
       servicePartnerId: companyPartner.id,
       vendorId: companyData.primaryVendorId,
@@ -762,9 +788,18 @@ async function main() {
     });
     pushResult(results, "vendor_payment.repeated_status_no_duplicate_net", repeatPaid.ledger.createdEntries.length === 0 && ledgerCountAfterRepeat === 1);
 
+    const companyLedgerAfterPaid = await listLedgerEntries(companyAdminSession as never, {
+      sourceType: "VENDOR_PAYMENT" as never,
+      page: 1,
+      pageSize: 20,
+    });
+    const companyLedgerEntry = companyLedgerAfterPaid.entries.find((entry) => entry.vendorPayment?.id === requestedPayment.vendorPayment.id);
+    pushResult(results, "ledger.list_includes_vendor_payment_source", Boolean(companyLedgerEntry && companyLedgerEntry.sourceType === "VENDOR_PAYMENT"));
+
     const voidedPayment = await voidVendorPayment(companyAdminSession as never, requestedPayment.vendorPayment.id);
     pushResult(results, "vendor_payment.void", voidedPayment.vendorPayment.status === PaymentStatus.CANCELLED);
     pushResult(results, "vendor_payment.void_creates_reversal", voidedPayment.ledger.createdEntries.length === 1);
+    pushResult(results, "vendor_payment.void_clears_paid_fields", !voidedPayment.vendorPayment.paidAt && !voidedPayment.vendorPayment.approvedAmount);
 
     const ledgerAfterVoid = await prisma.ledgerEntry.findMany({
       where: {
@@ -778,6 +813,8 @@ async function main() {
     });
     const netAfterVoid = ledgerAfterVoid.reduce((sum, entry) => sum + Number(entry.debitAmount) - Number(entry.creditAmount), 0);
     pushResult(results, "vendor_payment.void_reversal_nets_zero", netAfterVoid === 0);
+    const reversalAmount = ledgerAfterVoid.reduce((sum, entry) => sum + Number(entry.creditAmount), 0);
+    pushResult(results, "vendor_payment.void_reversal_amount_matches_original", reversalAmount === 120);
 
     const foreignVendorMismatchBlocked = await expectThrowMessage(() =>
       createVendorPayment(companyAdminSession as never, {
@@ -818,6 +855,38 @@ async function main() {
     );
     pushResult(results, "tenant.purchase_order_vendor_mismatch_blocked", sameTenantVendorMismatchBlocked.threw);
 
+    await prisma.vendor.update({
+      where: { id: companyData.alternateVendorId },
+      data: { status: VendorStatus.INACTIVE },
+    });
+    const inactiveVendorBlocked = await expectThrowMessage(() =>
+      createVendorPayment(companyAdminSession as never, {
+        servicePartnerId: companyPartner.id,
+        vendorId: companyData.alternateVendorId,
+        amount: 30,
+        paymentDate: new Date("2026-06-21"),
+        notes: "inactive vendor",
+        status: PaymentStatus.PAID,
+      })
+    );
+    pushResult(results, "validation.inactive_vendor_blocked", inactiveVendorBlocked.threw);
+    await prisma.vendor.update({
+      where: { id: companyData.alternateVendorId },
+      data: { status: VendorStatus.ACTIVE },
+    });
+
+    const superAdminMismatchBlocked = await expectThrowMessage(() =>
+      createVendorPayment(superSession as never, {
+        servicePartnerId: companyPartner.id,
+        vendorId: foreignData.primaryVendorId,
+        amount: 55,
+        paymentDate: new Date("2026-06-21"),
+        notes: "super mismatch",
+        status: PaymentStatus.PAID,
+      })
+    );
+    pushResult(results, "tenant.super_admin_mismatched_records_blocked", superAdminMismatchBlocked.threw);
+
     const foreignPayment = await createVendorPayment(foreignSession as never, {
       servicePartnerId: foreignPartner.id,
       vendorId: foreignData.primaryVendorId,
@@ -828,6 +897,32 @@ async function main() {
       status: PaymentStatus.PAID,
     });
     createdVendorPaymentIds.push(foreignPayment.vendorPayment.id);
+
+    const companyList = await listVendorPayments(companyAdminSession as never, {});
+    const foreignList = await listVendorPayments(foreignSession as never, {});
+    pushResult(
+      results,
+      "tenant.vendor_payment_list_scoped_to_company",
+      companyList.vendorPayments.some((payment) => payment.id === requestedPayment.vendorPayment.id) &&
+        !companyList.vendorPayments.some((payment) => payment.id === foreignPayment.vendorPayment.id)
+    );
+    pushResult(
+      results,
+      "tenant.vendor_payment_list_scoped_to_foreign_company",
+      foreignList.vendorPayments.some((payment) => payment.id === foreignPayment.vendorPayment.id) &&
+        !foreignList.vendorPayments.some((payment) => payment.id === requestedPayment.vendorPayment.id)
+    );
+
+    const companyLedgerScoped = await listLedgerEntries(companyAdminSession as never, {
+      sourceType: "VENDOR_PAYMENT" as never,
+      page: 1,
+      pageSize: 50,
+    });
+    pushResult(
+      results,
+      "tenant.tenant_user_cannot_see_foreign_vendor_payment_ledger_entries",
+      !companyLedgerScoped.entries.some((entry) => entry.vendorPayment?.id === foreignPayment.vendorPayment.id)
+    );
 
     const foreignAccessBlocked = await expectThrowMessage(() =>
       updateVendorPayment(companyAdminSession as never, foreignPayment.vendorPayment.id, {
@@ -889,16 +984,36 @@ async function main() {
     const poDetailSource = readFileSync("app/(dashboard)/purchase-orders/[id]/page.tsx", "utf8");
     const dashboardSource = readFileSync("app/(dashboard)/page.tsx", "utf8");
     const baselineSource = readFileSync("lib/rbac/baseline.ts", "utf8");
+    const vendorPaymentsPageSource = readFileSync("app/(dashboard)/vendor-payments/page.tsx", "utf8");
+    const vendorPaymentDetailSource = readFileSync("app/(dashboard)/vendor-payments/[id]/page.tsx", "utf8");
+    const vendorPaymentNewPageSource = readFileSync("app/(dashboard)/vendor-payments/new/page.tsx", "utf8");
+    const vendorPaymentEditPageSource = readFileSync("app/(dashboard)/vendor-payments/[id]/edit/page.tsx", "utf8");
+    const vendorPaymentFormSource = readFileSync("features/vendor-payments/components/vendor-payment-form.tsx", "utf8");
+    const vendorPaymentTableSource = readFileSync("features/vendor-payments/components/vendor-payments-table.tsx", "utf8");
+    const ledgerSourceLinkSource = readFileSync("features/ledger/components/ledger-source-link.tsx", "utf8");
+    const schemaSource = readFileSync("prisma/schema.prisma", "utf8");
     pushResult(results, "permissions.vendor_payment_action_guard_create", vendorPaymentActionsSource.includes('requirePermission("vendor_payments.create")'));
     pushResult(results, "permissions.vendor_payment_action_guard_update", vendorPaymentActionsSource.includes('requirePermission("vendor_payments.update")'));
     pushResult(results, "permissions.vendor_payment_action_guard_delete", vendorPaymentActionsSource.includes('requirePermission("vendor_payments.delete")'));
     pushResult(results, "permissions.vendor_payment_action_guard_status_update", vendorPaymentActionsSource.includes('requirePermission("vendor_payments.status.update")'));
+    pushResult(results, "permissions.vendor_payment_page_guard_read", vendorPaymentsPageSource.includes('requirePermission("vendor_payments.read")'));
+    pushResult(results, "permissions.vendor_payment_new_page_guard_create", vendorPaymentNewPageSource.includes('requirePermission("vendor_payments.create")'));
+    pushResult(results, "permissions.vendor_payment_detail_page_guard_read", vendorPaymentDetailSource.includes('requirePermission("vendor_payments.read")'));
+    pushResult(results, "permissions.vendor_payment_edit_page_guard_update", vendorPaymentEditPageSource.includes('requirePermission("vendor_payments.update")'));
     pushResult(results, "integration.purchase_order_detail_section_present", poDetailSource.includes("Vendor Payments"));
     pushResult(results, "integration.purchase_order_detail_action_present", poDetailSource.includes("Record Vendor Payment"));
+    pushResult(results, "integration.purchase_order_record_payment_preselect_supported", poDetailSource.includes("/vendor-payments/new?purchaseOrderId=") && vendorPaymentNewPageSource.includes('getStringParam(params, "purchaseOrderId")'));
+    pushResult(results, "integration.vendor_payment_form_validation_message_present", vendorPaymentFormSource.includes("Payment mode and reference number are not persisted") && vendorPaymentNewPageSource.includes("Please review the submitted values."));
+    pushResult(results, "integration.vendor_payment_table_empty_state_present", vendorPaymentTableSource.includes("No vendor payments found."));
+    pushResult(results, "integration.vendor_payment_detail_shows_ledger_status_and_timestamps", vendorPaymentDetailSource.includes("Ledger Status") && vendorPaymentDetailSource.includes("Created At") && vendorPaymentDetailSource.includes("Updated At"));
     pushResult(results, "navigation.vendor_payments_nav_active", baselineSource.includes('{ key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true }'));
+    pushResult(results, "navigation.no_inactive_future_accounting_links", !vendorPaymentsPageSource.includes("/accounting") && !vendorPaymentsPageSource.includes("/chart-of-accounts"));
     pushResult(results, "dashboard.vendor_payment_kpi_permission_gated", dashboardSource.includes('permission: "vendor_payments.read"'));
     pushResult(results, "dashboard.vendor_payment_quick_action_permission_gated", dashboardSource.includes('permission: "vendor_payments.create"'));
+    pushResult(results, "dashboard.vendor_payment_count_tenant_scoped", dashboardSource.includes('prisma.vendorPayment.count({ where: scopeByTenant(session, {}) })'));
     pushResult(results, "navigation.vendor_payment_routes_exist", existsSync("app/(dashboard)/vendor-payments/page.tsx") && existsSync("app/(dashboard)/vendor-payments/new/page.tsx") && existsSync("app/(dashboard)/vendor-payments/[id]/page.tsx"));
+    pushResult(results, "ledger.source_link_points_to_vendor_payment_detail", ledgerSourceLinkSource.includes('href={`/vendor-payments/${vendorPayment.id}`}'));
+    pushResult(results, "schema.vendor_payment_number_unique_constraint_exists", schemaSource.includes("@@unique([servicePartnerId, paymentNumber])"));
   } finally {
     await cleanupQaRecords({
       vendorPaymentIds: createdVendorPaymentIds,

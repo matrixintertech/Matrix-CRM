@@ -511,6 +511,10 @@ export async function voidVendorPayment(session: Session, vendorPaymentId: strin
       where: { id: existing.id },
       data: {
         status: PaymentStatus.CANCELLED,
+        approvedAmount: null,
+        approvedByUserId: null,
+        paidByUserId: null,
+        paidAt: null,
       },
     });
 
