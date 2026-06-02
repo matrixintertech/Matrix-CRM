@@ -2,6 +2,7 @@ import { InvoiceStatus, PaymentStatus, Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { CreatePaymentInput, UpdatePaymentInput, UpdatePaymentStatusInput } from "@/features/payments/validations";
+import { syncLedgerForInvoicePayment } from "@/features/ledger/services/ledger.service";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 
@@ -274,9 +275,14 @@ export async function createInvoicePayment(session: Session, input: CreatePaymen
       },
     });
 
+    const ledger = await syncLedgerForInvoicePayment(tx, {
+      paymentId: payment.id,
+      actorUserId: session.user.id,
+    });
     const sync = await syncInvoicePaymentStatus(tx, invoice.id, invoice.servicePartnerId);
     return {
       payment,
+      ledger,
       sync,
     };
   });
@@ -327,9 +333,14 @@ export async function updateInvoicePayment(session: Session, paymentId: string, 
       },
     });
 
+    const ledger = await syncLedgerForInvoicePayment(tx, {
+      paymentId: updated.id,
+      actorUserId: session.user.id,
+    });
     const sync = await syncInvoicePaymentStatus(tx, invoice.id, invoice.servicePartnerId);
     return {
       payment: updated,
+      ledger,
       sync,
       invoiceId: invoice.id,
     };
@@ -377,9 +388,14 @@ export async function updateInvoicePaymentStatus(session: Session, paymentId: st
       },
     });
 
+    const ledger = await syncLedgerForInvoicePayment(tx, {
+      paymentId: updated.id,
+      actorUserId: session.user.id,
+    });
     const sync = await syncInvoicePaymentStatus(tx, invoice.id, invoice.servicePartnerId);
     return {
       payment: updated,
+      ledger,
       sync,
       invoiceId: invoice.id,
     };
@@ -404,9 +420,14 @@ export async function voidInvoicePayment(session: Session, paymentId: string) {
         status: PaymentStatus.CANCELLED,
       },
     });
+    const ledger = await syncLedgerForInvoicePayment(tx, {
+      paymentId: payment.id,
+      actorUserId: session.user.id,
+    });
     const sync = await syncInvoicePaymentStatus(tx, invoice.id, invoice.servicePartnerId);
     return {
       payment,
+      ledger,
       sync,
       invoiceId: invoice.id,
     };

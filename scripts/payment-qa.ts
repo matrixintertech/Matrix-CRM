@@ -3,6 +3,7 @@ import {
   InvoiceStatus,
   PaymentStatus,
   PrismaClient,
+  RoleScope,
   ServicePartnerStatus,
   ServiceRequestStatus,
   UserStatus,
@@ -19,7 +20,6 @@ import {
   voidInvoicePayment,
 } from "../features/payments/services/payment.service";
 import { hasPermission } from "../lib/auth/permissions";
-import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = new PrismaClient();
 
@@ -125,7 +125,7 @@ function toSession(input: {
 }
 
 async function ensureServicePartner(code: string, name: string) {
-  const servicePartner = await prisma.servicePartner.upsert({
+  return prisma.servicePartner.upsert({
     where: { code },
     update: {
       name,
@@ -138,13 +138,37 @@ async function ensureServicePartner(code: string, name: string) {
       status: ServicePartnerStatus.ACTIVE,
     },
   });
+}
 
-  await ensureTenantRbac(prisma, {
-    servicePartnerId: servicePartner.id,
-    includePlatformRole: false,
+async function ensureTenantRole(input: {
+  servicePartnerId: string;
+  key: "company_admin" | "manager";
+  name: string;
+  description: string;
+}) {
+  return prisma.role.upsert({
+    where: {
+      servicePartnerId_key: {
+        servicePartnerId: input.servicePartnerId,
+        key: input.key,
+      },
+    },
+    update: {
+      name: input.name,
+      description: input.description,
+      scope: RoleScope.TENANT,
+      isSystem: true,
+      deletedAt: null,
+    },
+    create: {
+      servicePartnerId: input.servicePartnerId,
+      key: input.key,
+      name: input.name,
+      description: input.description,
+      scope: RoleScope.TENANT,
+      isSystem: true,
+    },
   });
-
-  return servicePartner;
 }
 
 async function ensureQaUser(input: {
@@ -471,30 +495,26 @@ async function main() {
     const companyPartner = await ensureServicePartner(COMPANY_CODE, "QA Payment Company");
     const foreignPartner = await ensureServicePartner(FOREIGN_CODE, "QA Payment Foreign");
 
-    const companyAdminRole = await prisma.role.findFirst({
-      where: {
+    const [companyAdminRole, managerRole, foreignManagerRole] = await Promise.all([
+      ensureTenantRole({
         servicePartnerId: companyPartner.id,
         key: "company_admin",
-        deletedAt: null,
-      },
-      select: { id: true, key: true },
-    });
-    const managerRole = await prisma.role.findFirst({
-      where: {
+        name: "Company Admin",
+        description: "Company-wide administrator",
+      }),
+      ensureTenantRole({
         servicePartnerId: companyPartner.id,
         key: "manager",
-        deletedAt: null,
-      },
-      select: { id: true, key: true },
-    });
-    const foreignManagerRole = await prisma.role.findFirst({
-      where: {
+        name: "Manager",
+        description: "Operational manager",
+      }),
+      ensureTenantRole({
         servicePartnerId: foreignPartner.id,
         key: "manager",
-        deletedAt: null,
-      },
-      select: { id: true, key: true },
-    });
+        name: "Manager",
+        description: "Operational manager",
+      }),
+    ]);
     if (!companyAdminRole || !managerRole || !foreignManagerRole) {
       throw new Error("QA tenant roles could not be resolved.");
     }
@@ -882,7 +902,11 @@ async function main() {
         '{ key: "vendor-payments-list", label: "Vendors Payment List", href: "#", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: false }'
       )
     );
-    pushResult(results, "navigation.ledger_nav_inactive", baselineSource.includes('{ key: "ledger", label: "Ledger", href: "#", sortOrder: 23, permissionKey: "ledger.read", isActive: false }'));
+    pushResult(
+      results,
+      "navigation.ledger_nav_active_when_route_exists",
+      baselineSource.includes('{ key: "ledger", label: "Ledger", href: "/ledger", sortOrder: 23, permissionKey: "ledger.read", isActive: true }')
+    );
     pushResult(results, "navigation.invoice_route_exists", existsSync("app/(dashboard)/invoices/[id]/page.tsx"));
   } finally {
     await cleanupQaRecords({

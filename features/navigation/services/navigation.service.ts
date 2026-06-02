@@ -46,6 +46,7 @@ const fallbackHrefByKey: Record<string, string> = {
   rate_cards: "/rate-cards",
   "invoice-list": "/invoices",
   invoices: "/invoices",
+  ledger: "/ledger",
   "activity-log": "/activity-log",
   activity_logs: "/activity-log",
   settings: "/settings",

@@ -42,6 +42,31 @@ function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+async function logLedgerChanges(input: {
+  action: "ledger.entry_create" | "ledger.entry_reverse";
+  paymentId: string;
+  servicePartnerId: string;
+  invoiceId?: string | null;
+  entries?: Array<{ id: string; debitAmount: number; creditAmount: number }>;
+}) {
+  for (const entry of input.entries ?? []) {
+    await logActivity({
+      action: input.action,
+      module: "ledger",
+      entityType: "OTHER",
+      entityId: entry.id,
+      message: input.action === "ledger.entry_create" ? "Ledger entry created from payment" : "Ledger reversal created from payment",
+      metadata: {
+        paymentId: input.paymentId,
+        invoiceId: input.invoiceId ?? null,
+        debitAmount: entry.debitAmount,
+        creditAmount: entry.creditAmount,
+      },
+      servicePartnerId: input.servicePartnerId,
+    });
+  }
+}
+
 export async function createPaymentAction(formData: FormData) {
   const session = await requirePermission("payments.create");
   const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), "/invoices");
@@ -79,6 +104,27 @@ export async function createPaymentAction(formData: FormData) {
     });
 
     if (result.payment.invoiceId) {
+      if ((result.ledger?.createdEntries.length ?? 0) > 0) {
+        await logLedgerChanges({
+          action: "ledger.entry_create",
+          paymentId: result.payment.id,
+          invoiceId: result.payment.invoiceId,
+          servicePartnerId: result.payment.servicePartnerId,
+          entries: result.ledger?.createdEntries,
+        });
+        await logActivity({
+          action: "payment.ledger_posted",
+          module: "payments",
+          entityType: "PAYMENT",
+          entityId: result.payment.id,
+          message: "Ledger posting created for payment",
+          metadata: {
+            invoiceId: result.payment.invoiceId,
+            ledgerEntryCount: result.ledger?.createdEntries.length ?? 0,
+          },
+          servicePartnerId: result.payment.servicePartnerId,
+        });
+      }
       await logActivity({
         action: "invoice.payment_recorded",
         module: "invoices",
@@ -146,6 +192,28 @@ export async function updatePaymentAction(paymentId: string, formData: FormData)
     });
 
     if (result.payment.invoiceId) {
+      if ((result.ledger?.createdEntries.length ?? 0) > 0) {
+        const hasReversal = result.ledger!.createdEntries.some((entry) => entry.creditAmount > 0);
+        await logLedgerChanges({
+          action: hasReversal ? "ledger.entry_reverse" : "ledger.entry_create",
+          paymentId: result.payment.id,
+          invoiceId: result.payment.invoiceId,
+          servicePartnerId: result.payment.servicePartnerId,
+          entries: result.ledger?.createdEntries,
+        });
+        await logActivity({
+          action: hasReversal ? "payment.ledger_reversed" : "payment.ledger_posted",
+          module: "payments",
+          entityType: "PAYMENT",
+          entityId: result.payment.id,
+          message: hasReversal ? "Ledger reversal created from payment update" : "Ledger posting created from payment update",
+          metadata: {
+            invoiceId: result.payment.invoiceId,
+            ledgerEntryCount: result.ledger?.createdEntries.length ?? 0,
+          },
+          servicePartnerId: result.payment.servicePartnerId,
+        });
+      }
       await logActivity({
         action: "invoice.payment_updated",
         module: "invoices",
@@ -201,6 +269,28 @@ export async function updatePaymentStatusAction(paymentId: string, formData: For
     });
 
     if (result.payment.invoiceId) {
+      if ((result.ledger?.createdEntries.length ?? 0) > 0) {
+        const hasReversal = result.ledger!.createdEntries.some((entry) => entry.creditAmount > 0);
+        await logLedgerChanges({
+          action: hasReversal ? "ledger.entry_reverse" : "ledger.entry_create",
+          paymentId: result.payment.id,
+          invoiceId: result.payment.invoiceId,
+          servicePartnerId: result.payment.servicePartnerId,
+          entries: result.ledger?.createdEntries,
+        });
+        await logActivity({
+          action: hasReversal ? "payment.ledger_reversed" : "payment.ledger_posted",
+          module: "payments",
+          entityType: "PAYMENT",
+          entityId: result.payment.id,
+          message: hasReversal ? "Ledger reversal created from payment status update" : "Ledger posting created from payment status update",
+          metadata: {
+            invoiceId: result.payment.invoiceId,
+            ledgerEntryCount: result.ledger?.createdEntries.length ?? 0,
+          },
+          servicePartnerId: result.payment.servicePartnerId,
+        });
+      }
       revalidateInvoicePaymentPaths(result.payment.invoiceId);
     }
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=payment-status-updated`);
@@ -235,6 +325,27 @@ export async function deletePaymentAction(paymentId: string, formData: FormData)
     });
 
     if (result.payment.invoiceId) {
+      if ((result.ledger?.createdEntries.length ?? 0) > 0) {
+        await logLedgerChanges({
+          action: "ledger.entry_reverse",
+          paymentId: result.payment.id,
+          invoiceId: result.payment.invoiceId,
+          servicePartnerId: result.payment.servicePartnerId,
+          entries: result.ledger?.createdEntries,
+        });
+        await logActivity({
+          action: "payment.ledger_reversed",
+          module: "payments",
+          entityType: "PAYMENT",
+          entityId: result.payment.id,
+          message: "Ledger reversal created from payment void",
+          metadata: {
+            invoiceId: result.payment.invoiceId,
+            ledgerEntryCount: result.ledger?.createdEntries.length ?? 0,
+          },
+          servicePartnerId: result.payment.servicePartnerId,
+        });
+      }
       revalidateInvoicePaymentPaths(result.payment.invoiceId);
     }
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=payment-deleted`);

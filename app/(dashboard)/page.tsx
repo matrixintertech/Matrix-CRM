@@ -25,7 +25,8 @@ type KpiCardDefinition = {
     | "serviceRequests"
     | "openServiceRequests"
     | "rfqs"
-    | "invoices";
+    | "invoices"
+    | "ledgerEntries";
 };
 
 type QuickAction = {
@@ -63,6 +64,7 @@ const superAdminKpis: KpiCardDefinition[] = [
   { title: "Service Requests", note: "All requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "RFQs", note: "All RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
   { title: "Invoices", note: "All invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Ledger Entries", note: "All payment postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
 
 const companyKpis: KpiCardDefinition[] = [
@@ -78,6 +80,7 @@ const companyKpis: KpiCardDefinition[] = [
   { title: "Open Service Requests", note: "Open queue", href: "/service-requests", permission: "service_requests.read", key: "openServiceRequests" },
   { title: "RFQs", note: "Company RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
   { title: "Invoices", note: "Company invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Ledger Entries", note: "Company postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
 
 const quickActionDefinitions: QuickAction[] = [
@@ -130,7 +133,7 @@ export default async function DashboardPage() {
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, recentRequests, companyProfile, topCompanyRows] =
+  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, ledgerEntries, recentRequests, companyProfile, topCompanyRows] =
     await Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
@@ -157,6 +160,7 @@ export default async function DashboardPage() {
         : Promise.resolve(0),
       can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
       can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+      can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
       can("service_requests.read")
         ? prisma.serviceRequest.findMany({
             where: scopeByTenant(session, { deletedAt: null }),
@@ -210,6 +214,7 @@ export default async function DashboardPage() {
     openServiceRequests,
     rfqs,
     invoices,
+    ledgerEntries,
   };
 
   const kpiDefinitions = isSuperAdmin ? superAdminKpis : companyKpis;

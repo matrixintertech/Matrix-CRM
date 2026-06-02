@@ -16,9 +16,18 @@ type EnsureTenantRbacInput = {
   includePlatformRole?: boolean;
 };
 
+const RBAC_BATCH_SIZE = 12;
+
+async function runInBatches<T>(items: readonly T[], worker: (item: T) => Promise<unknown>, batchSize = RBAC_BATCH_SIZE) {
+  for (let index = 0; index < items.length; index += batchSize) {
+    const batch = items.slice(index, index + batchSize);
+    await Promise.all(batch.map((item) => worker(item)));
+  }
+}
+
 export async function ensureBaselinePermissions(db: DbLike) {
-  for (const permission of baselinePermissions) {
-    await db.permission.upsert({
+  await runInBatches(baselinePermissions, async (permission) =>
+    db.permission.upsert({
       where: { key: permission.key },
       update: {
         module: permission.module,
@@ -31,8 +40,8 @@ export async function ensureBaselinePermissions(db: DbLike) {
         action: permission.action,
         description: permission.description,
       },
-    });
-  }
+    })
+  );
 
   const permissions = await db.permission.findMany({
     select: { id: true, key: true },
@@ -51,14 +60,14 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
   const permissionIdsByKey = await ensureBaselinePermissions(db);
   const rolesToSeed = getRoleDefinitions(includePlatformRole);
 
-  const roles = [];
-  for (const role of rolesToSeed) {
-    const roleRow = await db.role.upsert({
-      where: {
-        servicePartnerId_key: {
-          servicePartnerId: input.servicePartnerId,
-          key: role.key,
-        },
+  const roles = await Promise.all(
+    rolesToSeed.map((role) =>
+      db.role.upsert({
+        where: {
+          servicePartnerId_key: {
+            servicePartnerId: input.servicePartnerId,
+            key: role.key,
+          },
       },
       update: {
         name: role.name,
@@ -74,9 +83,9 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         scope: role.scope as RoleScope,
         isSystem: role.isSystem,
       },
-    });
-    roles.push(roleRow);
-  }
+      })
+    )
+  );
 
   const roleIdByKey = new Map(roles.map((role) => [role.key, role.id]));
 
@@ -86,10 +95,14 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
       continue;
     }
 
-    for (const permissionKey of permissionKeys) {
+    const allowedPermissionIds = permissionKeys
+      .map((permissionKey) => permissionIdsByKey.get(permissionKey))
+      .filter((permissionId): permissionId is string => Boolean(permissionId));
+
+    await runInBatches(permissionKeys, async (permissionKey) => {
       const permissionId = permissionIdsByKey.get(permissionKey);
       if (!permissionId) {
-        continue;
+        return;
       }
 
       await db.rolePermission.upsert({
@@ -105,10 +118,19 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
           permissionId,
         },
       });
-    }
+    });
+
+    await db.rolePermission.deleteMany({
+      where: {
+        roleId,
+        permissionId: {
+          notIn: allowedPermissionIds,
+        },
+      },
+    });
   }
 
-  for (const item of baselineNavigation) {
+  await runInBatches(baselineNavigation, async (item) => {
     const navigationItem = await db.navigationItem.upsert({
       where: {
         servicePartnerId_key: {
@@ -119,7 +141,7 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
       update: {
         label: item.label,
         href: item.href,
-        isActive: true,
+        isActive: item.isActive ?? true,
         sortOrder: item.sortOrder,
       },
       create: {
@@ -127,14 +149,14 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         key: item.key,
         label: item.label,
         href: item.href,
-        isActive: true,
+        isActive: item.isActive ?? true,
         sortOrder: item.sortOrder,
       },
     });
 
     const permissionId = permissionIdsByKey.get(item.permissionKey);
     if (!permissionId) {
-      continue;
+      return;
     }
 
     await db.navigationItemPermission.upsert({
@@ -150,10 +172,10 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         permissionId,
       },
     });
-  }
+  });
 
-  for (const setting of baselineSettings) {
-    await db.setting.upsert({
+  await runInBatches(baselineSettings, async (setting) =>
+    db.setting.upsert({
       where: {
         servicePartnerId_key: {
           servicePartnerId: input.servicePartnerId,
@@ -170,8 +192,8 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         value: setting.value as Prisma.InputJsonValue,
         isSecret: setting.isSecret,
       },
-    });
-  }
+    })
+  );
 }
 
 export function getTenantBootstrapRoleKeys() {

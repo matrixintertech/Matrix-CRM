@@ -19,6 +19,7 @@
     "qa:purchase-orders": "tsx scripts/purchase-order-qa.ts",
     "qa:invoices": "tsx scripts/invoice-qa.ts",
     "qa:payments": "tsx scripts/payment-qa.ts",
+    "qa:ledger": "tsx scripts/ledger-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
     "prisma:validate": "prisma validate",
