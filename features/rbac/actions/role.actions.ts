@@ -12,6 +12,7 @@ import {
   assignPermissionToRole,
   createRole,
   getServicePartnerIdForRoleWrite,
+  replaceRolePermissions,
   removePermissionFromRole,
   softDeleteRole,
   updateRole,
@@ -106,7 +107,10 @@ export async function updateRoleAction(id: string, formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect(`/roles/${id}/edit?error=duplicate`);
     }
-    if (error instanceof Error && error.message.includes("cannot be edited")) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("cannot be edited") || error.message.includes("System roles cannot be edited"))
+    ) {
       redirect(`/roles/${id}?error=protected`);
     }
     throw error;
@@ -156,7 +160,7 @@ export async function assignRolePermissionAction(roleId: string, formData: FormD
     revalidateRolePaths(role.id);
     redirect(`/roles/${role.id}?success=permission-assigned`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("protected")) {
+    if (error instanceof Error && (error.message.includes("protected") || error.message.includes("cannot grant"))) {
       redirect(`/roles/${roleId}?error=protected`);
     }
     throw error;
@@ -183,7 +187,33 @@ export async function removeRolePermissionAction(roleId: string, formData: FormD
     revalidateRolePaths(role.id);
     redirect(`/roles/${role.id}?success=permission-removed`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("protected")) {
+    if (error instanceof Error && (error.message.includes("protected") || error.message.includes("cannot grant"))) {
+      redirect(`/roles/${roleId}?error=protected`);
+    }
+    throw error;
+  }
+}
+
+export async function updateRolePermissionsAction(roleId: string, formData: FormData) {
+  const session = await requirePermission("roles.assign");
+  const permissionIds = formData
+    .getAll("permissionIds")
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  try {
+    const role = await replaceRolePermissions(session, roleId, permissionIds);
+    await logActivity({
+      action: "role.permissions_replace",
+      module: "roles",
+      entityType: "OTHER",
+      entityId: role.id,
+      message: `Role permissions updated (${permissionIds.length} selected)`,
+      servicePartnerId: role.servicePartnerId,
+    });
+    revalidateRolePaths(role.id);
+    redirect(`/roles/${role.id}?success=permission-updated`);
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes("protected") || error.message.includes("cannot grant"))) {
       redirect(`/roles/${roleId}?error=protected`);
     }
     throw error;

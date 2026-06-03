@@ -73,7 +73,7 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
     <section className="crm-page">
       <PageHeader
         title={role.name}
-        description="Review role/template settings and default permission template."
+        description="Review role settings and the permissions granted to assigned users."
         action={canUpdate ? { label: "Edit role", href: `/roles/${role.id}/edit` } : undefined}
       />
 
@@ -92,7 +92,7 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
         </p>
       ) : null}
       <p className="crm-alert crm-alert--info">
-        Role permissions work as default template suggestions. Final runtime access is assigned per user. Changing this template does not automatically update existing users.
+        Users assigned to this role receive these permissions. Changing role permissions immediately affects role-based access.
       </p>
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
@@ -151,6 +151,26 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
               />
             </div>
           ) : null}
+
+          <div className="crm-panel">
+            <h2 className="mb-3 text-base font-semibold">Assigned users</h2>
+            {role.users.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">No users are currently assigned to this role.</p>
+            ) : (
+              <div className="space-y-2">
+                {role.users.map((assignment) => (
+                  <div key={assignment.user.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                    <div className="font-medium text-slate-900">
+                      {assignment.user.name?.trim() || assignment.user.email || assignment.user.id}
+                    </div>
+                    <div className="text-xs text-[var(--muted)]">
+                      {formatOptional(assignment.user.email)} · {assignment.user.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-5">

@@ -86,32 +86,21 @@ export async function getUserById(session: Session, id: string) {
     },
     include: {
       servicePartner: { select: { id: true, name: true, code: true } },
-      roles: { include: { role: true } },
-      directPermissions: {
-        where: { allowed: true },
-        select: {
-          permission: {
-            select: {
-              id: true,
-              key: true,
-              module: true,
-              action: true,
-              description: true,
+      roles: {
+        include: {
+          role: {
+            include: {
+              permissions: {
+                include: {
+                  permission: true,
+                },
+                orderBy: {
+                  permission: {
+                    key: "asc",
+                  },
+                },
+              },
             },
-          },
-          assignedBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: {
-          permission: {
-            key: "asc",
           },
         },
       },
@@ -185,116 +174,97 @@ export async function listAssignablePermissions(session: Session): Promise<Assig
   return permissions.filter((permission) => !isPlatformOnlyPermissionKey(permission.key));
 }
 
-export async function listRoleTemplatePermissionIds(roleIds: string[]) {
-  if (roleIds.length === 0) {
-    return {} as Record<string, string[]>;
+export async function getPermissionKeysForRoleIds(roleIds: string[]) {
+  const dedupedRoleIds = Array.from(new Set(roleIds));
+  if (dedupedRoleIds.length === 0) {
+    return [];
   }
 
   const rows = await prisma.rolePermission.findMany({
     where: {
       roleId: {
-        in: roleIds,
+        in: dedupedRoleIds,
       },
     },
     select: {
-      roleId: true,
-      permissionId: true,
-    },
-  });
-
-  const map: Record<string, string[]> = {};
-  for (const row of rows) {
-    const current = map[row.roleId] ?? [];
-    current.push(row.permissionId);
-    map[row.roleId] = current;
-  }
-
-  return map;
-}
-
-export async function resolveGrantablePermissionIds(session: Session, requestedPermissionIds: string[]) {
-  const dedupedPermissionIds = Array.from(new Set(requestedPermissionIds));
-  if (dedupedPermissionIds.length === 0) {
-    return [];
-  }
-
-  const permissions = await prisma.permission.findMany({
-    where: {
-      id: {
-        in: dedupedPermissionIds,
+      permission: {
+        select: {
+          key: true,
+        },
       },
     },
-    select: {
-      id: true,
-      key: true,
-    },
   });
 
-  if (permissions.length !== dedupedPermissionIds.length) {
-    throw new Error("One or more permissions are invalid.");
-  }
-
-  if (session.user.isSuperAdmin) {
-    return dedupedPermissionIds;
-  }
-
-  const ownPermissionSet = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
-  const unauthorizedPermission = permissions.find(
-    (permission) => !ownPermissionSet.has(permission.key) || isPlatformOnlyPermissionKey(permission.key)
-  );
-
-  if (unauthorizedPermission) {
-    throw new Error("You cannot grant permissions you do not have.");
-  }
-
-  return dedupedPermissionIds;
+  return Array.from(new Set(rows.map((row) => row.permission.key)));
 }
 
-export async function replaceUserDirectPermissions(input: {
+export async function syncUserRoles(session: Session, input: {
   userId: string;
   servicePartnerId: string;
-  permissionIds: string[];
-  assignedByUserId?: string;
+  roleIds: string[];
 }) {
-  const dedupedPermissionIds = Array.from(new Set(input.permissionIds));
+  const dedupedRoleIds = Array.from(new Set(input.roleIds));
+  const roles = dedupedRoleIds.length
+    ? await prisma.role.findMany({
+        where: {
+          id: {
+            in: dedupedRoleIds,
+          },
+          servicePartnerId: input.servicePartnerId,
+          deletedAt: null,
+          ...(session.user.isSuperAdmin ? {} : { scope: "TENANT" }),
+        },
+        select: {
+          id: true,
+          key: true,
+          scope: true,
+        },
+      })
+    : [];
+
+  if (roles.length !== dedupedRoleIds.length) {
+    throw new Error("One or more roles are invalid.");
+  }
+
+  if (!session.user.isSuperAdmin) {
+    const invalidRole = roles.find((role) => role.scope !== "TENANT" || role.key === "super_admin");
+    if (invalidRole) {
+      throw new Error("You cannot assign platform or super admin roles.");
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
-    await tx.userPermission.deleteMany({
+    await tx.userRole.deleteMany({
       where: {
         userId: input.userId,
-        ...(dedupedPermissionIds.length > 0
+        ...(dedupedRoleIds.length > 0
           ? {
-              permissionId: {
-                notIn: dedupedPermissionIds,
+              roleId: {
+                notIn: dedupedRoleIds,
               },
             }
           : {}),
       },
     });
 
-    for (const permissionId of dedupedPermissionIds) {
-      await tx.userPermission.upsert({
+    for (const role of roles) {
+      await tx.userRole.upsert({
         where: {
-          userId_permissionId: {
+          userId_roleId: {
             userId: input.userId,
-            permissionId,
+            roleId: role.id,
           },
         },
-        update: {
-          allowed: true,
-          servicePartnerId: input.servicePartnerId,
-          assignedByUserId: input.assignedByUserId ?? null,
-        },
+        update: {},
         create: {
           userId: input.userId,
-          permissionId,
-          allowed: true,
-          servicePartnerId: input.servicePartnerId,
-          assignedByUserId: input.assignedByUserId ?? null,
+          roleId: role.id,
         },
       });
     }
   });
+
+  return roles;
 }
 
 export function getServicePartnerIdForWrite(session: Session, inputServicePartnerId?: string) {
@@ -396,11 +366,16 @@ export async function countActiveCompanyAdminsWithPermissions(input: {
         },
       },
       AND: requiredPermissionKeys.map((permissionKey) => ({
-        directPermissions: {
+        roles: {
           some: {
-            allowed: true,
-            permission: {
-              key: permissionKey,
+            role: {
+              permissions: {
+                some: {
+                  permission: {
+                    key: permissionKey,
+                  },
+                },
+              },
             },
           },
         },

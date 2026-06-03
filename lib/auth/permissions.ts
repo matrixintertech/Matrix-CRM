@@ -62,21 +62,38 @@ export async function getUserPermissions(userId: string, roleKeysHint?: string[]
     return permissions.map((permission) => permission.key);
   }
 
-  const permissions = await prisma.userPermission.findMany({
+  const roleAssignments = await prisma.userRole.findMany({
     where: {
       userId,
-      allowed: true,
+      role: {
+        deletedAt: null,
+      },
     },
     select: {
-      permission: {
+      role: {
         select: {
-          key: true,
+          permissions: {
+            select: {
+              permission: {
+                select: {
+                  key: true,
+                },
+              },
+            },
+          },
         },
       },
     },
   });
 
-  return permissions.map((entry) => entry.permission.key);
+  const permissionKeys = new Set<string>();
+  for (const assignment of roleAssignments) {
+    for (const entry of assignment.role.permissions) {
+      permissionKeys.add(entry.permission.key);
+    }
+  }
+
+  return Array.from(permissionKeys);
 }
 
 export async function hasPermission(subject: PermissionSubject, permissionKey: string): Promise<boolean> {

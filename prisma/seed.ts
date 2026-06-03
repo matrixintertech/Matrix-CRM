@@ -79,138 +79,6 @@ async function assignRoleByKey(userId: string, servicePartnerId: string, roleKey
   });
 }
 
-async function ensureDirectPermissionsFromAssignedRoles(userId: string, servicePartnerId: string) {
-  const existingDirectPermissionCount = await prisma.userPermission.count({
-    where: {
-      userId,
-    },
-  });
-
-  if (existingDirectPermissionCount > 0) {
-    return;
-  }
-
-  const assignedRoles = await prisma.userRole.findMany({
-    where: {
-      userId,
-      role: {
-        deletedAt: null,
-      },
-    },
-    select: {
-      role: {
-        select: {
-          key: true,
-          permissions: {
-            select: {
-              permissionId: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (assignedRoles.some((entry) => entry.role.key === "super_admin")) {
-    return;
-  }
-
-  const permissionIds = Array.from(
-    new Set(assignedRoles.flatMap((entry) => entry.role.permissions.map((permission) => permission.permissionId)))
-  );
-  if (permissionIds.length === 0) {
-    return;
-  }
-
-  await prisma.$transaction(
-    permissionIds.map((permissionId) =>
-      prisma.userPermission.upsert({
-        where: {
-          userId_permissionId: {
-            userId,
-            permissionId,
-          },
-        },
-        update: {
-          allowed: true,
-          servicePartnerId,
-          assignedByUserId: null,
-        },
-        create: {
-          userId,
-          permissionId,
-          allowed: true,
-          servicePartnerId,
-          assignedByUserId: null,
-        },
-      })
-    )
-  );
-}
-
-async function backfillDirectPermissionsForExistingUsers() {
-  const users = await prisma.user.findMany({
-    where: {
-      deletedAt: null,
-      roles: {
-        some: {
-          role: {
-            deletedAt: null,
-          },
-        },
-      },
-      directPermissions: {
-        none: {},
-      },
-    },
-    include: {
-      roles: {
-        where: {
-          role: {
-            deletedAt: null,
-          },
-        },
-        select: {
-          role: {
-            select: {
-              key: true,
-              permissions: {
-                select: {
-                  permissionId: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  for (const user of users) {
-    if (user.roles.some((entry) => entry.role.key === "super_admin")) {
-      continue;
-    }
-
-    const permissionIds = Array.from(
-      new Set(user.roles.flatMap((entry) => entry.role.permissions.map((permission) => permission.permissionId)))
-    );
-    if (permissionIds.length === 0) {
-      continue;
-    }
-
-    await prisma.userPermission.createMany({
-      data: permissionIds.map((permissionId) => ({
-        userId: user.id,
-        permissionId,
-        allowed: true,
-        servicePartnerId: user.servicePartnerId,
-        assignedByUserId: null,
-      })),
-      skipDuplicates: true,
-    });
-  }
-}
-
 async function seedBootstrapSuperAdmin(platformServicePartnerId: string) {
   const variables = env();
   const email = variables.BOOTSTRAP_ADMIN_EMAIL?.toLowerCase().trim();
@@ -241,7 +109,6 @@ async function seedBootstrapSuperAdmin(platformServicePartnerId: string) {
       });
 
   await assignRoleByKey(user.id, platformServicePartnerId, "super_admin");
-  await ensureDirectPermissionsFromAssignedRoles(user.id, platformServicePartnerId);
   return true;
 }
 
@@ -290,7 +157,6 @@ async function seedDevTestUsers() {
   });
 
   await assignRoleByKey(companyAdmin.id, devTenant.id, "company_admin");
-  await ensureDirectPermissionsFromAssignedRoles(companyAdmin.id, devTenant.id);
   return true;
 }
 
@@ -335,7 +201,6 @@ async function main(): Promise<SeedResult> {
     seedBootstrapSuperAdmin(platform.id)
   );
   const devUsersSeeded = await runStep("seed development test users", seedDevTestUsers);
-  await runStep("backfill direct permissions", backfillDirectPermissionsForExistingUsers);
   clearInterval(heartbeat);
 
   return {

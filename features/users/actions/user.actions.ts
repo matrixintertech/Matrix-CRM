@@ -16,10 +16,10 @@ import {
   countActiveSuperAdmins,
   countUserSuperAdminRoles,
   createUser,
+  getPermissionKeysForRoleIds,
   getServicePartnerIdForWrite,
   getUserById,
-  replaceUserDirectPermissions,
-  resolveGrantablePermissionIds,
+  syncUserRoles,
   updateUser,
 } from "@/features/users/services/user.service";
 import { userRoleSchema, userStatusSchema, userUpsertSchema } from "@/features/users/validations";
@@ -39,9 +39,9 @@ function toUserInput(formData: FormData) {
   });
 }
 
-function getPermissionIds(formData: FormData) {
+function getRoleIds(formData: FormData) {
   return formData
-    .getAll("permissionIds")
+    .getAll("roleIds")
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
 }
 
@@ -59,30 +59,25 @@ function withErrorCode(path: string, code: string) {
   return `${path}${separator}error=${encodeURIComponent(code)}`;
 }
 
-async function assertCanChangeOwnDirectPermissions(input: {
+async function assertCanChangeOwnRoleAccess(input: {
   sessionUserId: string;
   targetUser: {
     id: string;
     servicePartnerId: string;
-    roles: { role: { key: string } }[];
+    roles: { role: { id: string; key: string } }[];
   };
-  permissionIds: string[];
+  roleIds: string[];
 }) {
-  const { targetUser, sessionUserId, permissionIds } = input;
+  const { targetUser, sessionUserId, roleIds } = input;
   if (!targetUser || targetUser.id !== sessionUserId) {
     return;
   }
 
-  const isCompanyAdmin = targetUser.roles.some((entry) => entry.role.key === "company_admin");
-  if (!isCompanyAdmin) {
-    return;
-  }
-
-  const selectedPermissions = permissionIds.length
-    ? await prisma.permission.findMany({
+  const selectedRoles = roleIds.length
+    ? await prisma.role.findMany({
         where: {
           id: {
-            in: permissionIds,
+            in: roleIds,
           },
         },
         select: {
@@ -90,7 +85,21 @@ async function assertCanChangeOwnDirectPermissions(input: {
         },
       })
     : [];
-  const selectedPermissionKeys = new Set(selectedPermissions.map((permission) => permission.key));
+  const selectedRoleKeys = new Set(selectedRoles.map((role) => role.key));
+
+  if (targetUser.roles.some((entry) => entry.role.key === "super_admin") && !selectedRoleKeys.has("super_admin")) {
+    const activeSuperAdmins = await countActiveSuperAdmins();
+    if (activeSuperAdmins <= 1) {
+      throw new Error("Cannot remove your own last super admin role.");
+    }
+  }
+
+  const isCompanyAdmin = targetUser.roles.some((entry) => entry.role.key === "company_admin");
+  if (!isCompanyAdmin) {
+    return;
+  }
+
+  const selectedPermissionKeys = new Set(await getPermissionKeysForRoleIds(roleIds));
 
   const mandatoryOwnKeys = ["dashboard.read", "users.read", "users.update"];
   const hasLostMandatoryOwnAccess = mandatoryOwnKeys.some((permissionKey) => !selectedPermissionKeys.has(permissionKey));
@@ -114,8 +123,7 @@ export async function createUserAction(formData: FormData) {
   const session = await requirePermission("users.create");
   const errorRedirect = getSafeRedirectPath(formData.get("errorRedirect"), "/users/new");
   const successRedirectOverride = getSafeRedirectPath(formData.get("successRedirect"), "");
-  const selectedRoleId = getFormString(formData, "roleId");
-  const requestedPermissionIds = getPermissionIds(formData);
+  const selectedRoleIds = getRoleIds(formData);
   const parsed = toUserInput(formData);
 
   if (!parsed.success) {
@@ -131,9 +139,7 @@ export async function createUserAction(formData: FormData) {
 
   try {
     const user = await createUser(session, parsed.data);
-    let effectiveRoleId: string | null = null;
-
-    if (selectedRoleId) {
+    if (selectedRoleIds.length > 0) {
       const canAssignRoles =
         (await hasPermission(session, "roles.assign")) || (await hasPermission(session, "users.roles.assign"));
 
@@ -141,55 +147,12 @@ export async function createUserAction(formData: FormData) {
         redirect(withErrorCode(errorRedirect, "role-permission"));
       }
 
-      const role = await prisma.role.findFirst({
-        where: {
-          id: selectedRoleId,
-          deletedAt: null,
-          servicePartnerId: user.servicePartnerId,
-          ...(session.user.isSuperAdmin ? {} : { scope: "TENANT" }),
-        },
-        select: {
-          id: true,
-          key: true,
-        },
+      await syncUserRoles(session, {
+        userId: user.id,
+        servicePartnerId: user.servicePartnerId,
+        roleIds: selectedRoleIds,
       });
-
-      if (!role) {
-        redirect(withErrorCode(errorRedirect, "role"));
-      }
-
-      await prisma.userRole.upsert({
-        where: {
-          userId_roleId: {
-            userId: user.id,
-            roleId: role.id,
-          },
-        },
-        update: {},
-        create: {
-          userId: user.id,
-          roleId: role.id,
-        },
-      });
-      effectiveRoleId = role.id;
     }
-
-    let permissionIdsToAssign = requestedPermissionIds;
-    if (permissionIdsToAssign.length === 0 && effectiveRoleId) {
-      const roleTemplatePermissions = await prisma.rolePermission.findMany({
-        where: { roleId: effectiveRoleId },
-        select: { permissionId: true },
-      });
-      permissionIdsToAssign = roleTemplatePermissions.map((entry) => entry.permissionId);
-    }
-
-    const grantablePermissionIds = await resolveGrantablePermissionIds(session, permissionIdsToAssign);
-    await replaceUserDirectPermissions({
-      userId: user.id,
-      servicePartnerId: user.servicePartnerId,
-      permissionIds: grantablePermissionIds,
-      assignedByUserId: session.user.id,
-    });
 
     await logActivity({
       action: "user.create",
@@ -208,8 +171,8 @@ export async function createUserAction(formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect(withErrorCode(errorRedirect, "duplicate"));
     }
-    if (error instanceof Error && error.message.includes("cannot grant permissions")) {
-      redirect(withErrorCode(errorRedirect, "permission-grant"));
+    if (error instanceof Error && (error.message.includes("invalid") || error.message.includes("assign"))) {
+      redirect(withErrorCode(errorRedirect, "role"));
     }
     throw error;
   }
@@ -218,8 +181,7 @@ export async function createUserAction(formData: FormData) {
 export async function updateUserAction(id: string, formData: FormData) {
   const session = await requirePermission("users.update");
   const parsed = toUserInput(formData);
-  const selectedRoleId = getFormString(formData, "roleId");
-  const requestedPermissionIds = getPermissionIds(formData);
+  const selectedRoleIds = getRoleIds(formData);
 
   if (!parsed.success) {
     redirect(`/users/${id}/edit?error=validation`);
@@ -238,58 +200,27 @@ export async function updateUserAction(id: string, formData: FormData) {
       throw new Error("User not found.");
     }
 
+    await assertCanChangeOwnRoleAccess({
+      sessionUserId: session.user.id,
+      targetUser: existingUser,
+      roleIds: selectedRoleIds,
+    });
+
     const user = await updateUser(session, id, parsed.data);
 
-    if (selectedRoleId) {
+    if (selectedRoleIds.length > 0 || existingUser.roles.length > 0) {
       const canAssignRoles =
         (await hasPermission(session, "roles.assign")) || (await hasPermission(session, "users.roles.assign"));
       if (!canAssignRoles) {
         redirect(`/users/${id}/edit?error=role-permission`);
       }
 
-      const role = await prisma.role.findFirst({
-        where: {
-          id: selectedRoleId,
-          deletedAt: null,
-          servicePartnerId: user.servicePartnerId,
-          ...(session.user.isSuperAdmin ? {} : { scope: "TENANT" }),
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (!role) {
-        redirect(`/users/${id}/edit?error=role`);
-      }
-
-      await prisma.userRole.upsert({
-        where: {
-          userId_roleId: {
-            userId: user.id,
-            roleId: role.id,
-          },
-        },
-        update: {},
-        create: {
-          userId: user.id,
-          roleId: role.id,
-        },
+      await syncUserRoles(session, {
+        userId: user.id,
+        servicePartnerId: user.servicePartnerId,
+        roleIds: selectedRoleIds,
       });
     }
-
-    const grantablePermissionIds = await resolveGrantablePermissionIds(session, requestedPermissionIds);
-    await assertCanChangeOwnDirectPermissions({
-      sessionUserId: session.user.id,
-      targetUser: existingUser,
-      permissionIds: grantablePermissionIds,
-    });
-    await replaceUserDirectPermissions({
-      userId: user.id,
-      servicePartnerId: user.servicePartnerId,
-      permissionIds: grantablePermissionIds,
-      assignedByUserId: session.user.id,
-    });
 
     await logActivity({
       action: "user.update",
@@ -305,10 +236,13 @@ export async function updateUserAction(id: string, formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect(`/users/${id}/edit?error=duplicate`);
     }
-    if (error instanceof Error && error.message.includes("cannot grant permissions")) {
-      redirect(`/users/${id}/edit?error=permission-grant`);
+    if (error instanceof Error && (error.message.includes("invalid") || error.message.includes("assign"))) {
+      redirect(`/users/${id}/edit?error=role`);
     }
-    if (error instanceof Error && error.message.includes("Cannot remove own critical access")) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("Cannot remove own critical access") || error.message.includes("Cannot remove your own last super admin role"))
+    ) {
       redirect(`/users/${id}/edit?error=self-lockout`);
     }
     throw error;
@@ -487,6 +421,17 @@ export async function removeUserRoleAction(id: string, formData: FormData) {
       }
     }
 
+    if (id === session.user.id && role.key === "company_admin") {
+      const remainingRoleIds = user.roles
+        .map((entry) => entry.role.id)
+        .filter((roleId) => roleId !== parsed.data.roleId);
+      await assertCanChangeOwnRoleAccess({
+        sessionUserId: session.user.id,
+        targetUser: user,
+        roleIds: remainingRoleIds,
+      });
+    }
+
     await prisma.userRole.deleteMany({ where: { userId: id, roleId: parsed.data.roleId } });
 
     await logActivity({
@@ -501,7 +446,11 @@ export async function removeUserRoleAction(id: string, formData: FormData) {
     revalidateUserPaths(id);
     redirect(`/users/${id}?success=role-removed`);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Cannot remove your own last super admin role")) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("Cannot remove your own last super admin role") ||
+        error.message.includes("Cannot remove own critical access"))
+    ) {
       redirect(`/users/${id}?error=self-lockout`);
     }
     throw error;

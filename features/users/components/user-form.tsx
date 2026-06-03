@@ -5,7 +5,7 @@ import { useState } from "react";
 import { UserStatus } from "@prisma/client";
 
 import { FormActions } from "@/components/admin/form-actions";
-import { UserPermissionMatrix } from "@/features/users/components/user-permission-matrix";
+import { UserRoleSelector } from "@/features/users/components/user-role-selector";
 
 type ServicePartnerOption = {
   id: string;
@@ -21,26 +21,14 @@ type RoleOption = {
   servicePartnerId: string;
 };
 
-type PermissionOption = {
-  id: string;
-  key: string;
-  module: string;
-  action: string;
-  description: string | null;
-};
-
 type UserFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   cancelHref: string;
   servicePartners: ServicePartnerOption[];
   roles?: RoleOption[];
-  permissions?: PermissionOption[];
-  roleTemplatePermissionIds?: Record<string, string[]>;
-  initialPermissionIds?: string[];
-  defaultRoleId?: string;
+  initialRoleIds?: string[];
   hiddenFields?: Record<string, string>;
   errorMessage?: string;
-  permissionPresetMode?: "default" | "companyAdmin";
   user?: {
     name: string | null;
     email: string | null;
@@ -56,18 +44,13 @@ export function UserForm({
   cancelHref,
   servicePartners,
   roles = [],
-  permissions = [],
-  roleTemplatePermissionIds = {},
-  initialPermissionIds = [],
-  defaultRoleId,
+  initialRoleIds = [],
   hiddenFields,
   user,
   canChooseServicePartner,
   errorMessage,
-  permissionPresetMode = "default",
 }: UserFormProps) {
   const selectedServicePartnerId = user?.servicePartnerId ?? servicePartners[0]?.id ?? "";
-  const selectedRoleId = defaultRoleId ?? "";
   const [servicePartnerId, setServicePartnerId] = useState(selectedServicePartnerId);
 
   return (
@@ -150,18 +133,14 @@ export function UserForm({
       </div>
 
       <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">4. Role & Permissions</h3>
-        <UserPermissionMatrix
+        <h3 className="text-sm font-semibold text-slate-900">4. Role Access</h3>
+        <UserRoleSelector
           roles={roles}
-          permissions={permissions}
-          roleTemplatePermissionIds={roleTemplatePermissionIds}
-          defaultRoleId={selectedRoleId}
-          initialPermissionIds={initialPermissionIds}
+          initialRoleIds={initialRoleIds}
           selectedServicePartnerId={servicePartnerId}
-          presetMode={permissionPresetMode}
         />
         <p className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-          Role only pre-fills permissions. Final access is controlled by selected user permissions.
+          Access is controlled by assigned roles. Edit role permissions from the Roles module.
         </p>
       </div>
 

@@ -7,9 +7,9 @@ import {
   getServicePartnerIdForWrite,
   listAssignableRoles,
   listServicePartnersForUserForm,
-  replaceUserDirectPermissions,
-  resolveGrantablePermissionIds,
+  syncUserRoles,
 } from "../features/users/services/user.service";
+import { ensureQaRoleWithPermissions, replaceUserRoles } from "./qa-rbac";
 
 const prisma = new PrismaClient();
 
@@ -33,6 +33,7 @@ type SessionLike = {
 };
 
 const QA_PREFIX = "qa.access";
+const SHARED_ROLE_KEY = "qa_access_shared_role";
 
 function pushResult(results: QAResult[], key: string, condition: boolean, details?: string) {
   results.push({
@@ -201,74 +202,46 @@ async function main() {
     visiblePartnersForCompanyAdmin.length === 1 && visiblePartnersForCompanyAdmin[0]?.id === companySession.user.servicePartnerId
   );
 
-  const platformOnlyPermission = await prisma.permission.findFirst({
-    where: {
-      OR: [{ key: "dashboard.platform" }, { key: { startsWith: "platform." } }, { key: { startsWith: "service_partners." } }],
-    },
-    select: { id: true, key: true },
-  });
-
-  if (!platformOnlyPermission) {
-    throw new Error("Platform-only permission key not found.");
-  }
-
-  const platformGrantRejected = await expectThrow(async () =>
-    resolveGrantablePermissionIds(companySession as never, [platformOnlyPermission.id])
-  );
-  pushResult(results, "company_admin.cannot_grant_platform_only_permissions", platformGrantRejected);
-
-  const companyAdminOwnPermissionKeys = new Set(await getUserPermissions(companySession.user.id, companySession.user.roleKeys));
-  const forbiddenNonPlatformPermission = await prisma.permission.findFirst({
-    where: {
-      key: {
-        notIn: Array.from(companyAdminOwnPermissionKeys),
-      },
-    },
-    orderBy: { key: "asc" },
-    select: {
-      id: true,
-      key: true,
-    },
-  });
-  if (!forbiddenNonPlatformPermission) {
-    throw new Error("Could not find a permission outside company admin grants.");
-  }
-
-  const missingGrantRejected = await expectThrow(async () =>
-    resolveGrantablePermissionIds(companySession as never, [forbiddenNonPlatformPermission.id])
-  );
-  pushResult(results, "company_admin.cannot_grant_permissions_they_do_not_have", missingGrantRejected);
-
   const assignableRolesForCompanyAdmin = await listAssignableRoles(companySession as never);
+  pushResult(
+    results,
+    "company_admin.assignable_roles_are_tenant_scoped",
+    assignableRolesForCompanyAdmin.every(
+      (role) => role.servicePartnerId === companySession.user.servicePartnerId && role.scope === "TENANT"
+    )
+  );
   pushResult(
     results,
     "company_admin.cannot_create_super_admin",
     !assignableRolesForCompanyAdmin.some((role) => role.key === "super_admin")
   );
 
-  const qaTenantRole =
-    (await prisma.role.findFirst({
+  const [platformRole, superAdminRole, foreignTenantRole] = await Promise.all([
+    prisma.role.findFirst({
       where: {
-        servicePartnerId: companySession.user.servicePartnerId,
-        key: "manager",
-        scope: "TENANT",
+        scope: "PLATFORM",
         deletedAt: null,
       },
       select: { id: true, key: true },
-    })) ??
-    (await prisma.role.findFirst({
+    }),
+    prisma.role.findFirst({
       where: {
-        servicePartnerId: companySession.user.servicePartnerId,
-        scope: "TENANT",
+        key: "super_admin",
         deletedAt: null,
       },
       select: { id: true, key: true },
-      orderBy: { createdAt: "asc" },
-    }));
-
-  if (!qaTenantRole) {
-    throw new Error("No tenant role found for same-role permission QA.");
-  }
+    }),
+    foreignPartnerId
+      ? prisma.role.findFirst({
+          where: {
+            servicePartnerId: foreignPartnerId,
+            scope: "TENANT",
+            deletedAt: null,
+          },
+          select: { id: true, key: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
   const userAEmail = `${QA_PREFIX}.same-role-a@matrixcrm.local`;
   const userBEmail = `${QA_PREFIX}.same-role-b@matrixcrm.local`;
@@ -312,89 +285,74 @@ async function main() {
     }),
   ]);
 
-  await Promise.all([
-    prisma.userRole.upsert({
-      where: {
-        userId_roleId: {
+  const platformAssignmentRejected = platformRole
+    ? await expectThrow(() =>
+        syncUserRoles(companySession as never, {
           userId: userA.id,
-          roleId: qaTenantRole.id,
-        },
-      },
-      update: {},
-      create: {
-        userId: userA.id,
-        roleId: qaTenantRole.id,
-      },
-    }),
-    prisma.userRole.upsert({
-      where: {
-        userId_roleId: {
-          userId: userB.id,
-          roleId: qaTenantRole.id,
-        },
-      },
-      update: {},
-      create: {
-        userId: userB.id,
-        roleId: qaTenantRole.id,
-      },
-    }),
-  ]);
+          servicePartnerId: companySession.user.servicePartnerId,
+          roleIds: [platformRole.id],
+        })
+      )
+    : true;
+  pushResult(results, "company_admin.cannot_assign_platform_roles", platformAssignmentRejected);
 
-  const targetPermissionKeysA = ["dashboard.read", "clients.read", "service_requests.read"];
-  const targetPermissionKeysB = ["dashboard.read", "items.read", "rate_cards.read"];
-  const requestedPermissionKeys = Array.from(new Set([...targetPermissionKeysA, ...targetPermissionKeysB]));
-  const grantedPermissionRows = await prisma.permission.findMany({
-    where: {
-      key: {
-        in: requestedPermissionKeys,
-      },
-    },
-    select: {
-      id: true,
-      key: true,
-    },
+  const superAdminAssignmentRejected = superAdminRole
+    ? await expectThrow(() =>
+        syncUserRoles(companySession as never, {
+          userId: userA.id,
+          servicePartnerId: companySession.user.servicePartnerId,
+          roleIds: [superAdminRole.id],
+        })
+      )
+    : true;
+  pushResult(results, "company_admin.cannot_assign_super_admin_role", superAdminAssignmentRejected);
+
+  const foreignRoleAssignmentRejected = foreignTenantRole
+    ? await expectThrow(() =>
+        syncUserRoles(companySession as never, {
+          userId: userA.id,
+          servicePartnerId: companySession.user.servicePartnerId,
+          roleIds: [foreignTenantRole.id],
+        })
+      )
+    : true;
+  pushResult(results, "company_admin.cannot_assign_foreign_tenant_roles", foreignRoleAssignmentRejected);
+
+  const initialPermissionKeys = ["dashboard.read", "clients.read", "service_requests.read"];
+  const updatedPermissionKeys = ["dashboard.read", "items.read", "rate_cards.read"];
+
+  const sharedRole = await ensureQaRoleWithPermissions(prisma, {
+    servicePartnerId: companySession.user.servicePartnerId,
+    key: SHARED_ROLE_KEY,
+    name: "QA Shared Access Role",
+    description: "QA shared role for role-based access verification.",
+    permissionKeys: initialPermissionKeys,
   });
-  const permissionIdByKey = new Map(grantedPermissionRows.map((row) => [row.key, row.id]));
-
-  const permissionIdsA = targetPermissionKeysA
-    .map((key) => permissionIdByKey.get(key))
-    .filter((value): value is string => Boolean(value));
-  const permissionIdsB = targetPermissionKeysB
-    .map((key) => permissionIdByKey.get(key))
-    .filter((value): value is string => Boolean(value));
 
   await Promise.all([
-    replaceUserDirectPermissions({
-      userId: userA.id,
-      servicePartnerId: userA.servicePartnerId,
-      permissionIds: permissionIdsA,
-      assignedByUserId: companySession.user.id,
-    }),
-    replaceUserDirectPermissions({
-      userId: userB.id,
-      servicePartnerId: userB.servicePartnerId,
-      permissionIds: permissionIdsB,
-      assignedByUserId: companySession.user.id,
-    }),
+    replaceUserRoles(prisma, { userId: userA.id, roleIds: [sharedRole.id] }),
+    replaceUserRoles(prisma, { userId: userB.id, roleIds: [sharedRole.id] }),
   ]);
 
   const [resolvedPermissionsA, resolvedPermissionsB] = await Promise.all([
-    getUserPermissions(userA.id, [qaTenantRole.key]),
-    getUserPermissions(userB.id, [qaTenantRole.key]),
+    getUserPermissions(userA.id, [sharedRole.key]),
+    getUserPermissions(userB.id, [sharedRole.key]),
   ]);
+  const resolvedA = [...new Set(resolvedPermissionsA)].sort();
+  const resolvedB = [...new Set(resolvedPermissionsB)].sort();
 
   pushResult(
     results,
-    "company_admin.can_create_same_role_users_with_different_direct_permissions",
-    JSON.stringify([...new Set(resolvedPermissionsA)].sort()) !== JSON.stringify([...new Set(resolvedPermissionsB)].sort())
+    "same_role_users_share_same_permissions",
+    JSON.stringify(resolvedA) === JSON.stringify(resolvedB) &&
+      JSON.stringify(resolvedA) === JSON.stringify([...initialPermissionKeys].sort())
   );
 
   const userASession: SessionLike = {
     user: {
       id: userA.id,
       servicePartnerId: userA.servicePartnerId,
-      roleKeys: [qaTenantRole.key],
+      roleKeys: [sharedRole.key],
       isSuperAdmin: false,
     },
   };
@@ -402,7 +360,7 @@ async function main() {
     user: {
       id: userB.id,
       servicePartnerId: userB.servicePartnerId,
-      roleKeys: [qaTenantRole.key],
+      roleKeys: [sharedRole.key],
       isSuperAdmin: false,
     },
   };
@@ -411,13 +369,66 @@ async function main() {
     getNavigationForSession(userASession as never),
     getNavigationForSession(userBSession as never),
   ]);
-  const userANavKeys = flattenNavKeys(userANav);
-  const userBNavKeys = flattenNavKeys(userBNav);
+  const userANavKeys = flattenNavKeys(userANav).sort();
+  const userBNavKeys = flattenNavKeys(userBNav).sort();
 
-  pushResult(results, "company_user.clients_nav_visible_with_permission", userANavKeys.includes("clients"));
-  pushResult(results, "company_user.clients_nav_hidden_without_permission", !userBNavKeys.includes("clients"));
-  pushResult(results, "company_user.service_requests_nav_visible_with_permission", userANavKeys.includes("service-requests"));
-  pushResult(results, "company_user.service_requests_nav_hidden_without_permission", !userBNavKeys.includes("service-requests"));
+  pushResult(
+    results,
+    "same_role_users_share_same_navigation",
+    JSON.stringify(userANavKeys) === JSON.stringify(userBNavKeys)
+  );
+  pushResult(results, "company_user.clients_nav_visible_with_role_permission", userANavKeys.includes("clients"));
+  pushResult(
+    results,
+    "company_user.service_requests_nav_visible_with_role_permission",
+    userANavKeys.includes("service-requests")
+  );
+
+  await ensureQaRoleWithPermissions(prisma, {
+    servicePartnerId: companySession.user.servicePartnerId,
+    key: SHARED_ROLE_KEY,
+    name: "QA Shared Access Role",
+    description: "QA shared role for role-based access verification.",
+    permissionKeys: updatedPermissionKeys,
+  });
+
+  const [resolvedPermissionsAfterA, resolvedPermissionsAfterB] = await Promise.all([
+    getUserPermissions(userA.id, [sharedRole.key]),
+    getUserPermissions(userB.id, [sharedRole.key]),
+  ]);
+  const resolvedAfterA = [...new Set(resolvedPermissionsAfterA)].sort();
+  const resolvedAfterB = [...new Set(resolvedPermissionsAfterB)].sort();
+
+  pushResult(
+    results,
+    "role_permission_change_updates_all_assigned_users",
+    JSON.stringify(resolvedAfterA) === JSON.stringify(resolvedAfterB) &&
+      JSON.stringify(resolvedAfterA) === JSON.stringify([...updatedPermissionKeys].sort())
+  );
+
+  const [userANavAfter, userBNavAfter] = await Promise.all([
+    getNavigationForSession(userASession as never),
+    getNavigationForSession(userBSession as never),
+  ]);
+  const userANavKeysAfter = flattenNavKeys(userANavAfter);
+  const userBNavKeysAfter = flattenNavKeys(userBNavAfter);
+
+  pushResult(
+    results,
+    "role_permission_removal_revokes_access_from_assigned_users",
+    !resolvedAfterA.includes("clients.read") &&
+      !resolvedAfterB.includes("clients.read") &&
+      !userANavKeysAfter.includes("clients") &&
+      !userBNavKeysAfter.includes("clients")
+  );
+  pushResult(
+    results,
+    "role_permission_addition_grants_access_to_assigned_users",
+    resolvedAfterA.includes("items.read") &&
+      resolvedAfterB.includes("items.read") &&
+      userANavKeysAfter.includes("items") &&
+      userBNavKeysAfter.includes("items")
+  );
 
   const userBCanReadClients = await hasPermission(userBSession as never, "clients.read");
   pushResult(results, "company_user.direct_route_permission_check_blocks_missing_permission", !userBCanReadClients);
@@ -425,17 +436,6 @@ async function main() {
     results,
     "company_user.forbidden_path_safe_redirect",
     "/forbidden?returnTo=%2Fclients".startsWith("/forbidden")
-  );
-
-  pushResult(
-    results,
-    "same_role_different_permission_resolver_differs",
-    JSON.stringify([...resolvedPermissionsA].sort()) !== JSON.stringify([...resolvedPermissionsB].sort())
-  );
-  pushResult(
-    results,
-    "same_role_different_permission_navigation_differs",
-    JSON.stringify([...userANavKeys].sort()) !== JSON.stringify([...userBNavKeys].sort())
   );
 
   const allUsersCount = await prisma.user.count({
@@ -462,7 +462,7 @@ async function main() {
       companyScopeMarker.servicePartnerId === companySession.user.servicePartnerId
   );
 
-  const userBPermissionSet = new Set(resolvedPermissionsB);
+  const userBPermissionSet = new Set(resolvedPermissionsAfterB);
   const companyDashboardCards = [
     { title: "Users", permission: "users.read" },
     { title: "Roles", permission: "roles.read" },
@@ -493,41 +493,26 @@ async function main() {
     throw new Error("Company admin role is required for grant QA.");
   }
 
-  const companyAdminRolePermissionIds = (
+  const companyAdminPermissionKeys = (
     await prisma.rolePermission.findMany({
       where: {
         roleId: companyAdminRole.id,
       },
       select: {
-        permissionId: true,
-      },
-    })
-  ).map((row) => row.permissionId);
-
-  const superAdminCanGrantCompanyAdminSet = await resolveGrantablePermissionIds(
-    superSession as never,
-    companyAdminRolePermissionIds
-  );
-  pushResult(
-    results,
-    "super_admin.can_grant_company_admin_permissions",
-    superAdminCanGrantCompanyAdminSet.length === companyAdminRolePermissionIds.length
-  );
-
-  const companyAdminPlatformLeak = (
-    await prisma.permission.findMany({
-      where: {
-        id: {
-          in: companyAdminRolePermissionIds,
+        permission: {
+          select: {
+            key: true,
+          },
         },
       },
-      select: {
-        key: true,
-      },
     })
-  ).some((permission) => isPlatformOnlyPermissionKey(permission.key));
+  ).map((row) => row.permission.key);
 
-  pushResult(results, "company_admin.role_template_has_no_platform_only_permissions", !companyAdminPlatformLeak);
+  pushResult(
+    results,
+    "company_admin.role_has_no_platform_only_permissions",
+    !companyAdminPermissionKeys.some((permissionKey) => isPlatformOnlyPermissionKey(permissionKey))
+  );
 
   const failed = results.filter((result) => result.status === "FAIL");
   const passed = results.filter((result) => result.status === "PASS");

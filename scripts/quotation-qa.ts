@@ -20,6 +20,7 @@ import {
 } from "../features/quotations/services/quotation.service";
 import { hasPermission } from "../lib/auth/permissions";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
+import { configureQaUserRoleAccess } from "./qa-rbac";
 
 const prisma = new PrismaClient();
 
@@ -198,42 +199,14 @@ async function replaceDirectPermissions(input: {
   assignedByUserId: string;
   permissionKeys: string[];
 }) {
-  await prisma.userPermission.deleteMany({
-    where: {
-      userId: input.userId,
-    },
-  });
-
-  if (input.permissionKeys.length === 0) {
-    return;
-  }
-
-  const permissions = await prisma.permission.findMany({
-    where: {
-      key: {
-        in: input.permissionKeys,
-      },
-    },
-    select: {
-      id: true,
-      key: true,
-    },
-  });
-  const idByKey = new Map(permissions.map((permission) => [permission.key, permission.id]));
-
-  const permissionIds = input.permissionKeys
-    .map((key) => idByKey.get(key))
-    .filter((value): value is string => Boolean(value));
-
-  await prisma.userPermission.createMany({
-    data: permissionIds.map((permissionId) => ({
-      userId: input.userId,
-      permissionId,
-      allowed: true,
-      servicePartnerId: input.servicePartnerId,
-      assignedByUserId: input.assignedByUserId,
-    })),
-    skipDuplicates: true,
+  const qaKeyPrefix = QA_PREFIX.replace(/[^a-z0-9]+/gi, "_");
+  await configureQaUserRoleAccess(prisma, {
+    userId: input.userId,
+    servicePartnerId: input.servicePartnerId,
+    key: `${qaKeyPrefix}_${input.userId.slice(-8)}_access`,
+    name: `QA access ${input.userId.slice(-4)}`,
+    description: `QA access role for ${QA_PREFIX}`,
+    permissionKeys: input.permissionKeys,
   });
 }
 

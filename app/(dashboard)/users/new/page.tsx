@@ -5,9 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { createUserAction } from "@/features/users/actions/user.actions";
 import { UserForm } from "@/features/users/components/user-form";
 import {
-  listAssignablePermissions,
   listAssignableRoles,
-  listRoleTemplatePermissionIds,
   listServicePartnersForUserForm,
 } from "@/features/users/services/user.service";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -34,9 +32,6 @@ function getErrorMessage(code?: string) {
   if (code === "role-permission") {
     return "You do not have permission to assign roles.";
   }
-  if (code === "permission-grant") {
-    return "You can only assign permissions that you currently have.";
-  }
   return undefined;
 }
 
@@ -49,17 +44,13 @@ export default async function NewUserPage({ searchParams }: NewUserPageProps) {
       ([canAssignByRole, canAssignByUser]) => canAssignByRole || canAssignByUser
     ),
   ]);
-  const [roles, permissions] = await Promise.all([
-    canAssignRoles ? listAssignableRoles(session) : Promise.resolve([]),
-    listAssignablePermissions(session),
-  ]);
-  const roleTemplatePermissionIds = await listRoleTemplatePermissionIds(roles.map((role) => role.id));
+  const roles = canAssignRoles ? await listAssignableRoles(session) : [];
 
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Create User" description="Create a new user, choose role template, and assign direct permissions." />
+      <PageHeader title="Create User" description="Create a new user and assign one or more roles for access." />
       <div>
         <Link href="/users" className="text-sm text-[var(--muted)] underline">
           Back to users
@@ -79,9 +70,7 @@ export default async function NewUserPage({ searchParams }: NewUserPageProps) {
             scope: role.scope,
             servicePartnerId: role.servicePartnerId,
           }))}
-          permissions={permissions}
-          roleTemplatePermissionIds={roleTemplatePermissionIds}
-          initialPermissionIds={[]}
+          initialRoleIds={[]}
           canChooseServicePartner={session.user.isSuperAdmin}
           errorMessage={errorMessage}
         />

@@ -66,7 +66,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
     <section className="space-y-5">
       <PageHeader
         title="Users"
-        description="Manage tenant and platform users, statuses, and role assignments."
+        description="Manage tenant and platform users, statuses, and role-based access."
         action={canCreate ? { label: "New user", href: "/users/new" } : undefined}
       />
 

@@ -59,18 +59,34 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
   ]);
   const canAssignRoles = canAssignByRole || canAssignByUserRole;
   const roles = canAssignRoles ? await listAssignableRoles(session) : [];
-  const permissionGroups = new Map<string, { id: string; key: string; assignedBy: string; updatedAt: Date }[]>();
-  for (const entry of user.directPermissions) {
-    const group = permissionGroups.get(entry.permission.module) ?? [];
-    group.push({
-      id: entry.permission.id,
-      key: entry.permission.key,
-      assignedBy: entry.assignedBy?.name?.trim() || entry.assignedBy?.email || "System",
-      updatedAt: entry.updatedAt,
-    });
-    permissionGroups.set(entry.permission.module, group);
+  const effectivePermissionByKey = new Map<
+    string,
+    { id: string; key: string; module: string; fromRoles: Set<string> }
+  >();
+  for (const assignment of user.roles) {
+    for (const entry of assignment.role.permissions) {
+      const current =
+        effectivePermissionByKey.get(entry.permission.key) ?? {
+          id: entry.permission.id,
+          key: entry.permission.key,
+          module: entry.permission.module,
+          fromRoles: new Set<string>(),
+        };
+      current.fromRoles.add(assignment.role.name);
+      effectivePermissionByKey.set(entry.permission.key, current);
+    }
   }
-  const directPermissionKeySet = new Set(user.directPermissions.map((entry) => entry.permission.key));
+  const permissionGroups = new Map<string, { id: string; key: string; fromRoles: string[] }[]>();
+  for (const permission of effectivePermissionByKey.values()) {
+    const group = permissionGroups.get(permission.module) ?? [];
+    group.push({
+      id: permission.id,
+      key: permission.key,
+      fromRoles: Array.from(permission.fromRoles).sort(),
+    });
+    permissionGroups.set(permission.module, group);
+  }
+  const effectivePermissionKeySet = new Set(Array.from(effectivePermissionByKey.keys()));
   const moduleAccessSummary = [
     { label: "Users", key: "users.read" },
     { label: "Clients", key: "clients.read" },
@@ -149,9 +165,9 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
           ) : null}
 
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Direct User Permissions</h2>
+            <h2 className="mb-3 text-base font-semibold">Effective Access</h2>
             <p className="mb-3 text-sm text-[var(--muted)]">
-              Final runtime access is based on these user-level permissions.
+              Access is derived from assigned roles. Changing role permissions updates this user automatically.
             </p>
             <div className="mb-4 rounded-md border border-slate-200">
               <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
@@ -159,7 +175,7 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
               </div>
               <div className="grid gap-2 p-3 md:grid-cols-2">
                 {moduleAccessSummary.map((module) => {
-                  const hasAccess = directPermissionKeySet.has(module.key);
+                  const hasAccess = effectivePermissionKeySet.has(module.key);
                   return (
                     <div key={module.key} className="flex items-center justify-between rounded-md border border-slate-100 px-2 py-1.5 text-sm">
                       <span>{module.label}</span>
@@ -170,7 +186,7 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
               </div>
             </div>
             {permissionGroups.size === 0 ? (
-              <p className="text-sm text-[var(--muted)]">No direct permissions assigned.</p>
+              <p className="text-sm text-[var(--muted)]">No role-derived permissions available.</p>
             ) : (
               <div className="space-y-3">
                 {Array.from(permissionGroups.entries())
@@ -184,9 +200,7 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
                         {entries.map((entry) => (
                           <div key={entry.id} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
                             <p className="font-medium text-slate-800">{entry.key}</p>
-                            <p className="text-[var(--muted)]">
-                              Assigned by {entry.assignedBy} | Updated {formatDateTime(entry.updatedAt)}
-                            </p>
+                            <p className="text-[var(--muted)]">From roles: {entry.fromRoles.join(", ")}</p>
                           </div>
                         ))}
                       </div>

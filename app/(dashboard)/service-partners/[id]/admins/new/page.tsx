@@ -5,7 +5,6 @@ import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
 import { createUserAction } from "@/features/users/actions/user.actions";
 import { UserForm } from "@/features/users/components/user-form";
-import { listAssignablePermissions } from "@/features/users/services/user.service";
 import { canManageServicePartners, getServicePartnerById } from "@/features/service-partners/services/service-partner.service";
 import { redirectForbidden } from "@/lib/auth/access-control";
 import { requirePermission } from "@/lib/auth/rbac";
@@ -27,11 +26,8 @@ function getErrorMessage(code?: string) {
   if (code === "role") {
     return "Company admin role not found for this tenant.";
   }
-  if (code === "role-permission") {
-    return "You do not have permission to assign company admin role.";
-  }
-  if (code === "permission-grant") {
-    return "You can only assign permissions that you currently have.";
+  if (code === "role-permission" || code === "permission-grant") {
+    return "You do not have permission to assign that role.";
   }
   return undefined;
 }
@@ -49,35 +45,19 @@ export default async function NewCompanyAdminPage({ params, searchParams }: NewC
     notFound();
   }
 
-  const [companyAdminRole, assignablePermissions] = await Promise.all([
-    prisma.role.findFirst({
-      where: {
-        servicePartnerId: servicePartner.id,
-        key: "company_admin",
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        key: true,
-        scope: true,
-      },
-    }),
-    listAssignablePermissions(session),
-  ]);
-  const roleTemplatePermissions = companyAdminRole
-    ? await prisma.rolePermission.findMany({
-        where: {
-          roleId: companyAdminRole.id,
-        },
-        select: {
-          permissionId: true,
-        },
-      })
-    : [];
-  const roleTemplatePermissionIds = companyAdminRole
-    ? { [companyAdminRole.id]: roleTemplatePermissions.map((entry) => entry.permissionId) }
-    : {};
+  const companyAdminRole = await prisma.role.findFirst({
+    where: {
+      servicePartnerId: servicePartner.id,
+      key: "company_admin",
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      name: true,
+      key: true,
+      scope: true,
+    },
+  });
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
@@ -112,11 +92,7 @@ export default async function NewCompanyAdminPage({ params, searchParams }: NewC
               servicePartnerId: servicePartner.id,
             },
           ]}
-          defaultRoleId={companyAdminRole.id}
-          permissions={assignablePermissions}
-          roleTemplatePermissionIds={roleTemplatePermissionIds}
-          initialPermissionIds={roleTemplatePermissionIds[companyAdminRole.id] ?? []}
-          permissionPresetMode="companyAdmin"
+          initialRoleIds={[companyAdminRole.id]}
           canChooseServicePartner={false}
           hiddenFields={{
             errorRedirect: `/service-partners/${servicePartner.id}/admins/new`,

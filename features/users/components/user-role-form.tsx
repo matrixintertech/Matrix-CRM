@@ -32,8 +32,8 @@ export function UserRoleForm({
   return (
     <div className="space-y-4 rounded-md border border-[var(--border)] bg-white p-5">
       <div>
-        <h2 className="font-semibold">Roles</h2>
-        <p className="text-sm text-[var(--muted)]">Assign or remove access roles for this user.</p>
+        <h2 className="font-semibold">Assigned Roles</h2>
+        <p className="text-sm text-[var(--muted)]">Users receive access from assigned roles. Update role permissions from the Roles module.</p>
       </div>
       <div className="space-y-2">
         {assignedRoles.length === 0 ? <p className="text-sm text-[var(--muted)]">No roles assigned.</p> : null}

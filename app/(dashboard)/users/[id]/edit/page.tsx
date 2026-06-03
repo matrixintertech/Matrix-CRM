@@ -6,9 +6,7 @@ import { updateUserAction } from "@/features/users/actions/user.actions";
 import { UserForm } from "@/features/users/components/user-form";
 import {
   getUserById,
-  listAssignablePermissions,
   listAssignableRoles,
-  listRoleTemplatePermissionIds,
   listServicePartnersForUserForm,
 } from "@/features/users/services/user.service";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -36,9 +34,6 @@ function getErrorMessage(code?: string) {
   if (code === "role-permission") {
     return "You do not have permission to assign roles.";
   }
-  if (code === "permission-grant") {
-    return "You can only assign permissions that you currently have.";
-  }
   if (code === "self-lockout") {
     return "Blocked to prevent removing your own critical company admin access.";
   }
@@ -48,13 +43,12 @@ function getErrorMessage(code?: string) {
 export default async function EditUserPage({ params, searchParams }: EditUserPageProps) {
   const session = await requirePermission("users.update");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
-  const [user, servicePartners, canAssignRoles, permissions] = await Promise.all([
+  const [user, servicePartners, canAssignRoles] = await Promise.all([
     getUserById(session, id),
     listServicePartnersForUserForm(session),
     Promise.all([hasPermission(session, "roles.assign"), hasPermission(session, "users.roles.assign")]).then(
       ([canAssignByRole, canAssignByUser]) => canAssignByRole || canAssignByUser
     ),
-    listAssignablePermissions(session),
   ]);
 
   if (!user) {
@@ -62,13 +56,11 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
   }
 
   const roles = canAssignRoles ? await listAssignableRoles(session) : [];
-  const roleTemplatePermissionIds = await listRoleTemplatePermissionIds(roles.map((role) => role.id));
-  const defaultRoleId = user.roles[0]?.role.id;
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Edit User" description="Update user identity, role template, and direct permissions." />
+      <PageHeader title="Edit User" description="Update user identity and role-based access." />
       <div>
         <Link href={`/users/${id}`} className="text-sm text-[var(--muted)] underline">
           Back to details
@@ -85,10 +77,7 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
           scope: role.scope,
           servicePartnerId: role.servicePartnerId,
         }))}
-        defaultRoleId={defaultRoleId}
-        permissions={permissions}
-        roleTemplatePermissionIds={roleTemplatePermissionIds}
-        initialPermissionIds={user.directPermissions.map((entry) => entry.permission.id)}
+        initialRoleIds={user.roles.map((entry) => entry.role.id)}
         canChooseServicePartner={session.user.isSuperAdmin}
         errorMessage={errorMessage}
         user={{
