@@ -14,7 +14,7 @@ import { listPaymentsForInvoice } from "@/features/payments/services/payment.ser
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
-import { formatDateTime, formatOptional } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type InvoiceDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -80,14 +80,6 @@ function getErrorMessage(code?: string) {
   return undefined;
 }
 
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
-}
-
 export default async function InvoiceDetailPage({ params, searchParams }: InvoiceDetailPageProps) {
   const session = await requirePermission("invoices.read");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
@@ -115,24 +107,24 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={invoice.invoiceNumber}
         description="Review invoice details, linked records, line items, and status."
         action={canUpdate ? { label: "Edit Invoice", href: `/invoices/${invoice.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/invoices" className="text-sm text-[var(--muted)] underline">
+        <Link href="/invoices" className="crm-back-link">
           Back to invoice list
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -179,19 +171,19 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Subtotal</dt>
-                <dd>{toMoney(invoice.subtotal)}</dd>
+                <dd>{formatCurrencyInr(invoice.subtotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Tax Total</dt>
-                <dd>{toMoney(invoice.taxTotal)}</dd>
+                <dd>{formatCurrencyInr(invoice.taxTotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Grand Total</dt>
-                <dd>{toMoney(invoice.grandTotal)}</dd>
+                <dd>{formatCurrencyInr(invoice.grandTotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Balance Due</dt>
-                <dd>{toMoney(paymentData?.summary.balanceDue ?? Number(invoice.grandTotal))}</dd>
+                <dd>{formatCurrencyInr(paymentData?.summary.balanceDue ?? Number(invoice.grandTotal))}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Approved</dt>
@@ -204,7 +196,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
             </dl>
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Line Items</h2>
             {invoice.items.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No line items added.</p>
@@ -229,9 +221,9 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
                         </td>
                         <td className="px-3 py-2">{Number(line.quantity).toFixed(3)}</td>
                         <td className="px-3 py-2">{line.item.unit}</td>
-                        <td className="px-3 py-2">{toMoney(line.unitRate)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(line.unitRate)}</td>
                         <td className="px-3 py-2">{line.taxPercent === null ? "-" : Number(line.taxPercent).toFixed(2)}</td>
-                        <td className="px-3 py-2">{toMoney(line.amount)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(line.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -239,7 +231,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
               </div>
             )}
           </div>
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Payment History</h2>
               {canCreatePayments ? (
@@ -259,7 +251,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
                   canStatusUpdate={canUpdatePaymentStatus}
                 />
                 {canCreatePayments ? (
-                  <div className="rounded-md border border-[var(--border)] p-3">
+                  <div className="rounded-xl border border-[var(--border)] bg-[#fbfcff] p-4">
                     <h3 className="mb-2 text-sm font-semibold">Record Payment</h3>
                     <PaymentForm
                       action={createPaymentAction}
@@ -290,7 +282,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
             />
           ) : null}
           {canStatusUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
               <InvoiceStatusActions invoiceId={invoice.id} currentStatus={invoice.status} canDelete={canDelete} />
             </div>

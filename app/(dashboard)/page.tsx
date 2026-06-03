@@ -1,10 +1,13 @@
 import { ServiceRequestStatus } from "@prisma/client";
 import Link from "next/link";
 
+import { EmptyState } from "@/components/admin/empty-state";
+import { StatusBadge } from "@/components/admin/status-badge";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
+import { formatDateTime } from "@/lib/utils/format";
 
 type KpiCardDefinition = {
   title: string;
@@ -31,6 +34,7 @@ type KpiCardDefinition = {
 };
 
 type QuickAction = {
+  group: "Organization" | "Inventory & Services" | "Service Requests" | "Procurement" | "Finance" | "Reports";
   title: string;
   subtitle: string;
   href: string;
@@ -87,48 +91,22 @@ const companyKpis: KpiCardDefinition[] = [
 ];
 
 const quickActionDefinitions: QuickAction[] = [
-  { title: "Add Company", subtitle: "Create service partner", href: "/service-partners/new", permission: "service_partners.create", superAdminOnly: true },
-  { title: "Add Company Admin", subtitle: "Open company and create admin", href: "/service-partners", permission: "users.create", superAdminOnly: true },
-  { title: "Add User", subtitle: "Create user", href: "/users/new", permission: "users.create" },
-  { title: "Add Role", subtitle: "Create role", href: "/roles/new", permission: "roles.create" },
-  { title: "Add Client", subtitle: "Create client", href: "/clients/new", permission: "clients.create" },
-  { title: "Add Branch", subtitle: "Create branch", href: "/branches/new", permission: "branches.create" },
-  { title: "Add Category", subtitle: "Create category", href: "/categories/new", permission: "categories.create" },
-  { title: "Add Item", subtitle: "Create item", href: "/items/new", permission: "items.create" },
-  { title: "Add Vendor", subtitle: "Create vendor", href: "/vendors/new", permission: "vendors.create" },
-  { title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
-  { title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
-  { title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
-  { title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
-  { title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
-  { title: "Finance Reports", subtitle: "View finance reports", href: "/finance-reports", permission: "reports.read" },
+  { group: "Organization", title: "Add Company", subtitle: "Create service partner", href: "/service-partners/new", permission: "service_partners.create", superAdminOnly: true },
+  { group: "Organization", title: "Add Company Admin", subtitle: "Open company and create admin", href: "/service-partners", permission: "users.create", superAdminOnly: true },
+  { group: "Organization", title: "Add User", subtitle: "Create user", href: "/users/new", permission: "users.create" },
+  { group: "Organization", title: "Add Role", subtitle: "Create role", href: "/roles/new", permission: "roles.create" },
+  { group: "Organization", title: "Add Client", subtitle: "Create client", href: "/clients/new", permission: "clients.create" },
+  { group: "Organization", title: "Add Branch", subtitle: "Create branch", href: "/branches/new", permission: "branches.create" },
+  { group: "Inventory & Services", title: "Add Category", subtitle: "Create category", href: "/categories/new", permission: "categories.create" },
+  { group: "Inventory & Services", title: "Add Item", subtitle: "Create item", href: "/items/new", permission: "items.create" },
+  { group: "Inventory & Services", title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
+  { group: "Service Requests", title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
+  { group: "Procurement", title: "Add Vendor", subtitle: "Create vendor", href: "/vendors/new", permission: "vendors.create" },
+  { group: "Procurement", title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
+  { group: "Finance", title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
+  { group: "Finance", title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
+  { group: "Reports", title: "Finance Reports", subtitle: "View finance reports", href: "/finance-reports", permission: "reports.read" },
 ];
-
-function formatStatusLabel(status: ServiceRequestStatus) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function formatDateTime(value: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
-}
-
-function statusClass(status: ServiceRequestStatus) {
-  if (status === ServiceRequestStatus.IN_PROGRESS) return "bg-[#e8efff] text-[#2854e8]";
-  if (status === ServiceRequestStatus.RAISED || status === ServiceRequestStatus.TRIAGED) return "bg-[#e9f1ff] text-[#325eff]";
-  if (status === ServiceRequestStatus.COMPLETED || status === ServiceRequestStatus.CLOSED) return "bg-[#e8faf1] text-[#109a4a]";
-  if (status === ServiceRequestStatus.BLOCKED) return "bg-[#fff2e8] text-[#ee7a16]";
-  if (status === ServiceRequestStatus.CANCELLED) return "bg-[#ffecec] text-[#ef4444]";
-  return "bg-[#eef2ff] text-[#435c85]";
-}
 
 export default async function DashboardPage() {
   const session = await requirePermission("dashboard.read");
@@ -238,6 +216,10 @@ export default async function DashboardPage() {
     }
     return can(action.permission);
   });
+  const quickActionGroups = quickActions.reduce<Record<string, QuickAction[]>>((accumulator, action) => {
+    accumulator[action.group] = [...(accumulator[action.group] ?? []), action];
+    return accumulator;
+  }, {});
 
   const title = isSuperAdmin ? "Platform Dashboard" : isCompanyAdmin ? "Company Dashboard" : "Dashboard";
   const subtitle = isSuperAdmin
@@ -250,28 +232,46 @@ export default async function DashboardPage() {
   const companyName = isSuperAdmin ? "Platform" : companyProfile?.name ?? "Company";
 
   return (
-    <section className="space-y-6">
-      <div className="rounded-2xl border border-[#e3eaf6] bg-white p-5 shadow-[0_10px_30px_rgba(18,48,102,0.04)]">
-        <h1 className="text-3xl font-semibold text-[#111f3d]">{title}</h1>
-        <p className="text-sm text-[#667b9f]">{subtitle}</p>
-        <p className="mt-2 text-sm text-[#516a95]">
-          Logged in as <span className="font-semibold">{displayName}</span> | Company <span className="font-semibold">{companyName}</span> | Role{" "}
-          <span className="font-semibold">{roleLabel}</span>
-        </p>
+    <section className="crm-page">
+      <div className="crm-panel">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex w-fit items-center rounded-full border border-[#dbe5f4] bg-[#f7faff] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#5d76a7]">
+              {isSuperAdmin ? "Platform view" : "Tenant view"}
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-[#111f3d]">{title}</h1>
+              <p className="max-w-3xl text-sm leading-6 text-[#667b9f]">{subtitle}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              { label: "Signed in as", value: displayName },
+              { label: "Workspace", value: companyName },
+              { label: "Access", value: roleLabel },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-[#e6edf8] bg-[#fbfcff] px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7f91b2]">{item.label}</p>
+                <p className="mt-1 text-sm font-semibold text-[#123064]">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
-          <Link key={card.title} href={card.href} className="rounded-xl border border-[#e5ebf6] bg-white p-4 shadow-sm hover:bg-[#f8fbff]">
+          <Link key={card.title} href={card.href} className="crm-stat-card transition hover:border-[#bfd0f2] hover:bg-[#f8fbff]">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#7d8eaf]">{card.title}</p>
             <p className="mt-1 text-3xl font-bold text-[#123064]">{card.value}</p>
-            <p className="text-sm text-[#6f84a9]">{card.note}</p>
+            <p className="mt-1 text-sm text-[#6f84a9]">{card.note}</p>
           </Link>
         ))}
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[2fr_1fr]">
-        <section className="rounded-2xl border border-[#e3eaf6] bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-[#e3eaf6] bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-[#edf2fb] px-5 py-4">
             <h2 className="text-xl font-semibold text-[#122447]">Recent Service Requests</h2>
             {can("service_requests.read") ? (
@@ -281,14 +281,18 @@ export default async function DashboardPage() {
             ) : null}
           </div>
           {!can("service_requests.read") ? (
-            <p className="px-5 py-4 text-sm text-[#6f84a9]">You do not have permission to view service requests.</p>
+            <div className="p-5">
+              <EmptyState title="No request access" description="Your current role does not allow service request visibility on the dashboard." />
+            </div>
           ) : recentRequests.length === 0 ? (
-            <p className="px-5 py-4 text-sm text-[#6f84a9]">No recent service requests found.</p>
+            <div className="p-5">
+              <EmptyState title="No recent requests" description="New service requests will appear here once they are created for this workspace." />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-[#7c8fb2]">
+                  <tr className="bg-[#f7faff] text-left text-xs uppercase tracking-[0.16em] text-[#7c8fb2]">
                     <th className="px-5 py-3">Request #</th>
                     <th className="px-5 py-3">Title</th>
                     {isSuperAdmin ? <th className="px-5 py-3">Company</th> : null}
@@ -299,18 +303,16 @@ export default async function DashboardPage() {
                     <th className="px-5 py-3">Action</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {recentRequests.map((request) => (
-                    <tr key={request.id} className="border-t border-[#edf2fb] text-[#1d335d]">
+                  <tbody>
+                    {recentRequests.map((request) => (
+                      <tr key={request.id} className="border-t border-[#edf2fb] text-[#1d335d] hover:bg-[#fafcff]">
                       <td className="px-5 py-3 font-semibold text-[#2454e6]">{request.serviceNumber}</td>
                       <td className="px-5 py-3">{request.title}</td>
                       {isSuperAdmin ? <td className="px-5 py-3">{request.servicePartner.name}</td> : null}
                       <td className="px-5 py-3">{request.client.name}</td>
                       <td className="px-5 py-3">{request.branch?.name ?? "-"}</td>
                       <td className="px-5 py-3">
-                        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${statusClass(request.status)}`}>
-                          {formatStatusLabel(request.status)}
-                        </span>
+                          <StatusBadge value={request.status} />
                       </td>
                       <td className="px-5 py-3">{formatDateTime(request.requestedAt ?? request.createdAt)}</td>
                       <td className="px-5 py-3">
@@ -330,16 +332,24 @@ export default async function DashboardPage() {
           <section className="rounded-2xl border border-[#e3eaf6] bg-white shadow-sm">
             <div className="border-b border-[#edf2fb] px-5 py-4">
               <h2 className="text-xl font-semibold text-[#122447]">Quick Actions</h2>
+              <p className="mt-1 text-sm text-[#6f84a9]">Only actions available to your current permissions are shown.</p>
             </div>
-            <div className="space-y-1 p-3">
+            <div className="space-y-4 p-4">
               {quickActions.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-[#6f84a9]">No quick actions available for your permissions.</p>
+                <EmptyState title="No quick actions available" description="This dashboard stays permission-aware, so available actions appear here when enabled." />
               ) : (
-                quickActions.map((action) => (
-                  <Link key={action.title} href={action.href} className="block rounded-xl px-3 py-3 hover:bg-[#f5f8ff]">
-                    <p className="text-base font-semibold text-[#132445]">{action.title}</p>
-                    <p className="text-sm text-[#6f84a9]">{action.subtitle}</p>
-                  </Link>
+                Object.entries(quickActionGroups).map(([group, actions]) => (
+                  <div key={group} className="space-y-2">
+                    <p className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#7d8eaf]">{group}</p>
+                    <div className="space-y-2">
+                      {actions.map((action) => (
+                        <Link key={action.title} href={action.href} className="block rounded-xl border border-[#edf2fb] px-3 py-3 transition hover:border-[#cedcf5] hover:bg-[#f7faff]">
+                          <p className="text-sm font-semibold text-[#132445]">{action.title}</p>
+                          <p className="mt-1 text-sm text-[#6f84a9]">{action.subtitle}</p>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
                 ))
               )}
             </div>
@@ -348,19 +358,18 @@ export default async function DashboardPage() {
           {!isSuperAdmin && companyProfile ? (
             <section className="rounded-2xl border border-[#e3eaf6] bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-[#122447]">Company Profile</h2>
-              <div className="mt-3 space-y-1 text-sm text-[#1d335d]">
-                <p>
-                  <span className="text-[#6f84a9]">Name:</span> {companyProfile.name}
-                </p>
-                <p>
-                  <span className="text-[#6f84a9]">Code:</span> {companyProfile.code}
-                </p>
-                <p>
-                  <span className="text-[#6f84a9]">Status:</span> {companyProfile.status}
-                </p>
-                <p>
-                  <span className="text-[#6f84a9]">Contact:</span> {companyProfile.email ?? companyProfile.phone ?? "-"}
-                </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {[
+                  { label: "Name", value: companyProfile.name },
+                  { label: "Code", value: companyProfile.code },
+                  { label: "Status", value: companyProfile.status },
+                  { label: "Contact", value: companyProfile.email ?? companyProfile.phone ?? "-" },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-xl border border-[#edf2fb] bg-[#fbfcff] px-3 py-3 text-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7d8eaf]">{item.label}</p>
+                    <p className="mt-1 font-medium text-[#1d335d]">{item.value}</p>
+                  </div>
+                ))}
               </div>
             </section>
           ) : null}
@@ -370,11 +379,12 @@ export default async function DashboardPage() {
       {isSuperAdmin && topCompanyRows.length > 0 ? (
         <section className="rounded-2xl border border-[#e3eaf6] bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-[#122447]">Top Companies by Service Requests</h2>
+          <p className="mt-1 text-sm text-[#6f84a9]">Tenant activity ranking based on service request volume.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {topCompanyRows.map((row) => (
-              <div key={row.servicePartnerId} className="rounded-md border border-[#e5ebf6] p-3 text-sm">
-                <p className="font-medium">{topCompanyNameMap.get(row.servicePartnerId) ?? row.servicePartnerId}</p>
-                <p className="text-[#6f84a9]">Requests: {row._count.id}</p>
+              <div key={row.servicePartnerId} className="rounded-xl border border-[#e5ebf6] bg-[#fbfcff] p-4 text-sm">
+                <p className="font-medium text-[#10254b]">{topCompanyNameMap.get(row.servicePartnerId) ?? row.servicePartnerId}</p>
+                <p className="mt-1 text-[#6f84a9]">Requests: {row._count.id}</p>
               </div>
             ))}
           </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -18,15 +17,26 @@ type NavSection = {
   items: SidebarNavItem[];
 };
 
-const SECTION_KEY_MAP: Record<string, string[]> = {
-  MAIN: ["dashboard"],
-  "USER MANAGEMENT": ["users", "roles", "permissions"],
-  OPERATIONS: ["service-partners", "service_partners", "clients", "branches", "service-requests", "service_requests"],
-  "INVENTORY & SERVICES": ["inventory-management", "categories", "items", "rate-cards", "rate_cards"],
-  PROCUREMENT: ["supplier-management", "vendor-quotations", "rfq-list", "po-list", "invoice-list", "vendor-payments-list"],
-  FINANCE: ["ledger", "finance-reports", "payments", "expenses"],
-  "WORK MANAGEMENT": ["tasks", "activity-log", "activity_logs"],
-  SETTINGS: ["settings"],
+const NAV_SECTION_ORDER = [
+  "Dashboard",
+  "User Management",
+  "Organization",
+  "Inventory & Services",
+  "Service Requests",
+  "Procurement",
+  "Finance",
+  "Reports",
+] as const;
+
+const SECTION_MATCHERS: Record<(typeof NAV_SECTION_ORDER)[number], string[]> = {
+  Dashboard: ["dashboard"],
+  "User Management": ["users", "/users", "roles", "/roles", "permissions", "/permissions"],
+  Organization: ["service-partners", "/service-partners", "clients", "/clients", "branches", "/branches"],
+  "Inventory & Services": ["categories", "/categories", "items", "/items", "rate-cards", "/rate-cards"],
+  "Service Requests": ["service-requests", "/service-requests", "quotations", "/quotations", "tasks", "/tasks"],
+  Procurement: ["vendors", "/vendors", "rfq", "/rfqs", "purchase-order", "/purchase-orders"],
+  Finance: ["invoice", "/invoices", "payments", "/vendor-payments", "ledger", "/ledger"],
+  Reports: ["finance-reports", "/finance-reports", "activity-log", "/activity-log", "notifications", "/notifications"],
 };
 
 function MatrixLogo() {
@@ -38,7 +48,7 @@ function MatrixLogo() {
           <path d="M14 18V6l7 12V6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <span className="text-[34px] font-semibold leading-none text-white">Matrix CRM</span>
+      <span className="text-[22px] font-semibold leading-none text-white">Matrix CRM</span>
     </div>
   );
 }
@@ -189,23 +199,28 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
 }
 
 function resolveSections(items: SidebarNavItem[]): NavSection[] {
-  const sectionOrder = ["MAIN", "USER MANAGEMENT", "OPERATIONS", "INVENTORY & SERVICES", "PROCUREMENT", "FINANCE", "WORK MANAGEMENT", "SETTINGS"];
   const mappedItemIds = new Set<string>();
+  const matchesSection = (item: SidebarNavItem, title: (typeof NAV_SECTION_ORDER)[number]): boolean => {
+    const matchers = SECTION_MATCHERS[title] ?? [];
+    const haystacks = [item.key.toLowerCase(), item.href.toLowerCase()];
 
-  const sections: NavSection[] = sectionOrder.map((title) => {
-    const keys = SECTION_KEY_MAP[title] ?? [];
+    if (matchers.some((matcher) => haystacks.some((haystack) => haystack.includes(matcher)))) {
+      return true;
+    }
+
+    return item.children.some((child) => matchesSection(child, title));
+  };
+
+  const sections: NavSection[] = NAV_SECTION_ORDER.map((title) => {
     const sectionItems = items.filter((item) => {
-      const isMapped = keys.includes(item.key);
+      const isMapped = matchesSection(item, title);
       if (isMapped) {
         mappedItemIds.add(item.id);
       }
       return isMapped;
     });
 
-    return {
-      title: title === "MAIN" ? "" : title,
-      items: sectionItems,
-    };
+    return { title, items: sectionItems };
   });
 
   const ungroupedItems = items.filter((item) => !mappedItemIds.has(item.id));
@@ -262,8 +277,8 @@ function MenuItem({ item, pathname, level, openKeys, onToggle, onNavigate }: Men
 
   const linkBase =
     level === 0
-      ? "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[17px] font-medium"
-      : "flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-medium";
+      ? "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium"
+      : "flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium";
 
   const linkState = isActive
     ? "bg-gradient-to-r from-[#2854e8] to-[#2f64ff] text-white shadow-[0_10px_24px_rgba(47,100,255,0.35)]"
@@ -378,22 +393,17 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
     });
   };
 
-  const handleSignOut = async () => {
-    await signOut({ callbackUrl: "/login" });
-  };
-
   return (
     <aside
-      className={`${visibilityClass} ${desktopVisibilityClass} fixed inset-y-0 left-0 z-30 w-[290px] shrink-0 border-r border-[#102a63] bg-gradient-to-b from-[#08214f] via-[#061f4a] to-[#061a42] px-5 py-6 text-white lg:static lg:z-auto lg:flex-col`}
+      className={`${visibilityClass} ${desktopVisibilityClass} fixed inset-y-0 left-0 z-30 w-[296px] shrink-0 border-r border-[#102a63] bg-gradient-to-b from-[#08214f] via-[#061f4a] to-[#061a42] px-5 py-6 text-white lg:static lg:z-auto lg:flex-col`}
     >
       <MatrixLogo />
+      <p className="mt-4 text-sm leading-6 text-[#a8bee8]">Operations, procurement, finance, and access control in one workspace.</p>
 
       <nav aria-label="Primary navigation" className="mt-8 flex-1 overflow-y-auto pr-1">
         {sections.map((section) => (
-          <div key={section.title || "main"} className={section.title ? "mb-6" : "mb-4"}>
-            {section.title ? (
-              <p className="mb-3 px-2 text-xs font-semibold tracking-wide text-[#9db6e8]">{section.title}</p>
-            ) : null}
+          <div key={section.title || "main"} className="mb-6">
+            <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#9db6e8]">{section.title}</p>
             <ul className="space-y-1.5">
               {section.items.map((item) => (
                 <MenuItem
@@ -416,24 +426,10 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
           Development navigation fallback is active.
         </p>
       ) : null}
-
-      <button
-        type="button"
-        onClick={handleSignOut}
-        className="mt-4 w-full rounded-2xl border border-[#3a568f] bg-[#0b2a67]/70 p-3 text-left text-[#dbe8ff] transition hover:bg-[#0f3276]/80"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
-              <path d="m16 17 5-5-5-5" />
-              <path d="M21 12H9" />
-            </svg>
-            <span className="text-[15px]">Logout</span>
-          </div>
-          <span className="rounded-full border border-[#4f6ea9] bg-[#0c326f] px-2 py-1 text-xs">{">"}</span>
-        </div>
-      </button>
+      <div className="mt-4 rounded-2xl border border-[#24457d] bg-white/5 px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9db6e8]">Navigation</p>
+        <p className="mt-2 text-sm text-[#dbe8ff]">Use the header menu on smaller screens. Long module lists stay scrollable here.</p>
+      </div>
     </aside>
   );
 }

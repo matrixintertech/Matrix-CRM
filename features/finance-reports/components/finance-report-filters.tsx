@@ -29,12 +29,12 @@ export function FinanceReportFilters({
             name="q"
             defaultValue={q ?? ""}
             placeholder="Invoice, payment, vendor, or PO"
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="h-10 w-full rounded-xl border border-[var(--border)] px-3"
           />
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">Invoice Status</span>
-          <select name="invoiceStatus" defaultValue={invoiceStatus ?? ""} className="h-9 w-full rounded-md border border-[var(--border)] px-3">
+          <select name="invoiceStatus" defaultValue={invoiceStatus ?? ""} className="h-10 w-full rounded-xl border border-[var(--border)] px-3">
             <option value="">All</option>
             {Object.values(InvoiceStatus).map((status) => (
               <option key={status} value={status}>
@@ -45,7 +45,7 @@ export function FinanceReportFilters({
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">Payment Status</span>
-          <select name="paymentStatus" defaultValue={paymentStatus ?? ""} className="h-9 w-full rounded-md border border-[var(--border)] px-3">
+          <select name="paymentStatus" defaultValue={paymentStatus ?? ""} className="h-10 w-full rounded-xl border border-[var(--border)] px-3">
             <option value="">All</option>
             {Object.values(PaymentStatus).map((status) => (
               <option key={status} value={status}>
@@ -56,7 +56,7 @@ export function FinanceReportFilters({
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">Ledger Source</span>
-          <select name="sourceType" defaultValue={sourceType ?? ""} className="h-9 w-full rounded-md border border-[var(--border)] px-3">
+          <select name="sourceType" defaultValue={sourceType ?? ""} className="h-10 w-full rounded-xl border border-[var(--border)] px-3">
             <option value="">All</option>
             {Object.values(LedgerSourceType).map((value) => (
               <option key={value} value={value}>
@@ -67,19 +67,19 @@ export function FinanceReportFilters({
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">From</span>
-          <input type="date" name="dateFrom" defaultValue={dateFrom ?? ""} className="h-9 w-full rounded-md border border-[var(--border)] px-3" />
+          <input type="date" name="dateFrom" defaultValue={dateFrom ?? ""} className="h-10 w-full rounded-xl border border-[var(--border)] px-3" />
         </label>
         <label className="space-y-1 text-sm">
           <span className="font-medium">To</span>
-          <input type="date" name="dateTo" defaultValue={dateTo ?? ""} className="h-9 w-full rounded-md border border-[var(--border)] px-3" />
+          <input type="date" name="dateTo" defaultValue={dateTo ?? ""} className="h-10 w-full rounded-xl border border-[var(--border)] px-3" />
         </label>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="submit" className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white">
+        <button type="submit" className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)]">
           Apply
         </button>
-        <a href="/finance-reports" className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium">
+        <a href="/finance-reports" className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium">
           Reset
         </a>
       </div>

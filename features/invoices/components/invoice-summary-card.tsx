@@ -1,7 +1,7 @@
 import { InvoiceStatus } from "@prisma/client";
 
 import { StatusBadge } from "@/components/admin/status-badge";
-import { formatDateTime } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime, formatEnumLabel } from "@/lib/utils/format";
 
 type InvoiceSummaryCardProps = {
   invoice: {
@@ -23,34 +23,26 @@ type InvoiceSummaryCardProps = {
   paymentStatus?: "UNPAID" | "PARTIALLY_PAID" | "PAID";
 };
 
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
-}
-
 export function InvoiceSummaryCard({ invoice, paidAmount, balanceDue, paymentStatus }: InvoiceSummaryCardProps) {
   const paidValue = typeof paidAmount === "number" ? paidAmount : 0;
   const balanceValue = typeof balanceDue === "number" ? balanceDue : Number(invoice.grandTotal);
   return (
-    <div className="rounded-md border border-[var(--border)] bg-white p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Invoice Summary</h3>
+    <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#6f84ab]">Invoice Summary</h3>
         <StatusBadge value={invoice.status} />
       </div>
-      <p className="text-sm font-medium">{invoice.invoiceNumber}</p>
-      <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
+      <p className="text-base font-semibold text-[#10254b]">{invoice.invoiceNumber}</p>
+      <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
         <p>Invoice Date: {formatDateTime(invoice.invoiceDate)}</p>
         <p>Due Date: {formatDateTime(invoice.dueDate)}</p>
         <p>Lines: {invoice._count.items}</p>
-        <p>Subtotal: {toMoney(invoice.subtotal)}</p>
-        <p>Tax Total: {toMoney(invoice.taxTotal)}</p>
-        <p className="font-medium text-slate-700">Grand Total: {toMoney(invoice.grandTotal)}</p>
-        <p>Paid Amount: {toMoney(paidValue)}</p>
-        <p>Balance Due: {toMoney(balanceValue)}</p>
-        {paymentStatus ? <p>Payment Status: {paymentStatus.replaceAll("_", " ")}</p> : null}
+        <p>Subtotal: {formatCurrencyInr(invoice.subtotal)}</p>
+        <p>Tax Total: {formatCurrencyInr(invoice.taxTotal)}</p>
+        <p className="font-medium text-slate-700">Grand Total: {formatCurrencyInr(invoice.grandTotal)}</p>
+        <p>Paid Amount: {formatCurrencyInr(paidValue)}</p>
+        <p>Balance Due: {formatCurrencyInr(balanceValue)}</p>
+        {paymentStatus ? <p>Payment Status: {formatEnumLabel(paymentStatus)}</p> : null}
         <p>Created: {formatDateTime(invoice.createdAt)}</p>
         <p>Updated: {formatDateTime(invoice.updatedAt)}</p>
       </div>

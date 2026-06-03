@@ -70,7 +70,7 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={role.name}
         description="Review role/template settings and default permission template."
@@ -78,26 +78,26 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
       />
 
       <div>
-        <Link href="/roles" className="text-sm text-[var(--muted)] underline">
+        <Link href="/roles" className="crm-back-link">
           Back to roles
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       {isProtectedRole ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="crm-alert crm-alert--warning">
           This is a protected system role.
         </p>
       ) : null}
-      <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+      <p className="crm-alert crm-alert--info">
         Role permissions work as default template suggestions. Final runtime access is assigned per user. Changing this template does not automatically update existing users.
       </p>
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Role details</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -140,7 +140,7 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
           </div>
 
           {canDelete && !isProtectedRole ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Delete role</h2>
               <p className="mb-3 text-sm text-[var(--muted)]">Soft-delete this role when it is no longer needed.</p>
               <ConfirmAction

@@ -1,7 +1,7 @@
 import { PurchaseOrderStatus } from "@prisma/client";
 
 import { StatusBadge } from "@/components/admin/status-badge";
-import { formatDateTime } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime } from "@/lib/utils/format";
 
 type PurchaseOrderSummaryCardProps = {
   purchaseOrder: {
@@ -20,29 +20,21 @@ type PurchaseOrderSummaryCardProps = {
   };
 };
 
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
-}
-
 export function PurchaseOrderSummaryCard({ purchaseOrder }: PurchaseOrderSummaryCardProps) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-white p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">PO Summary</h3>
+    <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#6f84ab]">PO Summary</h3>
         <StatusBadge value={purchaseOrder.status} />
       </div>
-      <p className="text-sm font-medium">{purchaseOrder.poNumber}</p>
-      <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
+      <p className="text-base font-semibold text-[#10254b]">{purchaseOrder.poNumber}</p>
+      <div className="mt-3 space-y-2 text-sm text-[var(--muted)]">
         <p>Order Date: {formatDateTime(purchaseOrder.orderDate)}</p>
         <p>Expected Date: {formatDateTime(purchaseOrder.expectedDate)}</p>
         <p>Lines: {purchaseOrder._count.items}</p>
-        <p>Subtotal: {toMoney(purchaseOrder.subtotal)}</p>
-        <p>Tax Total: {toMoney(purchaseOrder.taxTotal)}</p>
-        <p className="font-medium text-slate-700">Grand Total: {toMoney(purchaseOrder.grandTotal)}</p>
+        <p>Subtotal: {formatCurrencyInr(purchaseOrder.subtotal)}</p>
+        <p>Tax Total: {formatCurrencyInr(purchaseOrder.taxTotal)}</p>
+        <p className="font-medium text-slate-700">Grand Total: {formatCurrencyInr(purchaseOrder.grandTotal)}</p>
         <p>Created: {formatDateTime(purchaseOrder.createdAt)}</p>
         <p>Updated: {formatDateTime(purchaseOrder.updatedAt)}</p>
       </div>

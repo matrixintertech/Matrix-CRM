@@ -1,11 +1,7 @@
 import Link from "next/link";
 
 import { StatusBadge } from "@/components/admin/status-badge";
-import { formatDateTime, formatOptional } from "@/lib/utils/format";
-
-function toMoney(value: number) {
-  return `INR ${value.toFixed(2)}`;
-}
+import { formatCurrencyInr, formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type ReceivableRow = {
   id: string;
@@ -78,9 +74,9 @@ export function ReceivablesReport({ rows }: { rows: ReceivableRow[] }) {
                   <td className="px-4 py-3">
                     <StatusBadge value={row.status} />
                   </td>
-                  <td className="px-4 py-3">{toMoney(row.grandTotal)}</td>
-                  <td className="px-4 py-3">{toMoney(row.paidAmount)}</td>
-                  <td className="px-4 py-3">{toMoney(row.balanceDue)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.grandTotal)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.paidAmount)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.balanceDue)}</td>
                 </tr>
               ))}
             </tbody>

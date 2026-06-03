@@ -36,7 +36,7 @@ export default async function FinanceReportsPage({ searchParams }: FinanceReport
   });
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title="Finance Reports"
         description="Read-only tenant-scoped finance reporting built from invoices, payments, vendor payments, and ledger postings."

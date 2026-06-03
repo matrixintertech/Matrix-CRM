@@ -10,7 +10,7 @@ import { deleteVendorPaymentAction } from "@/features/vendor-payments/actions/ve
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
-import { formatDateTime, formatOptional } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type VendorPaymentDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -44,14 +44,6 @@ function getErrorMessage(code?: string) {
     return "Vendor payment action blocked by tenant scope mismatch.";
   }
   return undefined;
-}
-
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
 }
 
 function getLedgerStatus(
@@ -92,20 +84,20 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
   const ledgerStatus = getLedgerStatus(vendorPayment.ledgerEntries);
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={vendorPayment.paymentNumber}
         description="Review vendor payment details, linked purchase order, and ledger postings."
         action={canUpdate ? { label: "Edit Vendor Payment", href: `/vendor-payments/${vendorPayment.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/vendor-payments" className="text-sm text-[var(--muted)] underline">
+        <Link href="/vendor-payments" className="crm-back-link">
           Back to vendor payments
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <VendorPaymentSummaryCard
         count={1}
@@ -116,7 +108,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -171,7 +163,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Amount</dt>
-                <dd>{toMoney(vendorPayment.amount)}</dd>
+                <dd>{formatCurrencyInr(vendorPayment.amount)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Ledger Status</dt>
@@ -179,7 +171,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Approved Amount</dt>
-                <dd>{toMoney(vendorPayment.approvedAmount)}</dd>
+                <dd>{formatCurrencyInr(vendorPayment.approvedAmount)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Requested By</dt>
@@ -200,7 +192,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
             </dl>
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Ledger Entries</h2>
             {vendorPayment.ledgerEntries.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No ledger entries posted for this vendor payment yet.</p>
@@ -219,8 +211,8 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
                     {vendorPayment.ledgerEntries.map((entry) => (
                       <tr key={entry.id}>
                         <td className="px-3 py-2">{formatDateTime(entry.entryDate)}</td>
-                        <td className="px-3 py-2">{toMoney(entry.debitAmount)}</td>
-                        <td className="px-3 py-2">{toMoney(entry.creditAmount)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(entry.debitAmount)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(entry.creditAmount)}</td>
                         <td className="px-3 py-2">{entry.description?.trim() || "-"}</td>
                       </tr>
                     ))}
@@ -233,7 +225,7 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
 
         <div className="space-y-5">
           {canStatusUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status</h2>
               <VendorPaymentStatusActions
                 vendorPaymentId={vendorPayment.id}
@@ -243,11 +235,11 @@ export default async function VendorPaymentDetailPage({ params, searchParams }: 
             </div>
           ) : null}
           {canDelete ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Void Payment</h2>
               <form action={deleteVendorPaymentAction.bind(null, vendorPayment.id)}>
                 <input type="hidden" name="redirectTo" value={`/vendor-payments/${vendorPayment.id}`} />
-                <button type="submit" className="rounded-md border border-red-200 px-3 py-2 text-sm text-red-700">
+                <button type="submit" className="inline-flex h-10 items-center justify-center rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700">
                   Void Vendor Payment
                 </button>
               </form>

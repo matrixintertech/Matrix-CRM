@@ -192,20 +192,20 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={serviceRequest.title}
         description="Review service request details, status, and timeline."
         action={canUpdate ? { label: "Edit service request", href: `/service-requests/${serviceRequest.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/service-requests" className="text-sm text-[var(--muted)] underline">
+        <Link href="/service-requests" className="crm-back-link">
           Back to service requests
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
@@ -219,13 +219,13 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
               canUpdate={canResponsibilityUpdate}
             />
           ) : (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-2 text-base font-semibold">Responsibility</h2>
               <p className="text-sm text-[var(--muted)]">You do not have permission to view service request responsibility.</p>
             </div>
           )}
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Work Items</h2>
             {canTaskRead && taskBundle ? (
               <TasksTable
@@ -255,7 +255,7 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
             ) : null}
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Quotations</h2>
             {canQuotationRead && quotationBundle ? (
               <div className="space-y-4">
@@ -294,14 +294,14 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
             ) : null}
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Status timeline</h2>
             <ServiceRequestTimeline entries={serviceRequest.statusHistory} />
           </div>
         </div>
 
         {canUpdate ? (
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
             <ServiceRequestStatusActions
               serviceRequestId={serviceRequest.id}

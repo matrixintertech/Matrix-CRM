@@ -13,7 +13,7 @@ import { listVendorPaymentsForPurchaseOrder } from "@/features/vendor-payments/s
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
-import { formatDateTime, formatOptional } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type PurchaseOrderDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -47,14 +47,6 @@ function getErrorMessage(code?: string) {
     return "Purchase order record could not be found.";
   }
   return undefined;
-}
-
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
 }
 
 export default async function PurchaseOrderDetailPage({ params, searchParams }: PurchaseOrderDetailPageProps) {
@@ -97,24 +89,24 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={purchaseOrder.poNumber}
         description="Review purchase order details, linked records, line items, and status."
         action={canUpdate ? { label: "Edit PO", href: `/purchase-orders/${purchaseOrder.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/purchase-orders" className="text-sm text-[var(--muted)] underline">
+        <Link href="/purchase-orders" className="crm-back-link">
           Back to PO list
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -157,15 +149,15 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Subtotal</dt>
-                <dd>{toMoney(purchaseOrder.subtotal)}</dd>
+                <dd>{formatCurrencyInr(purchaseOrder.subtotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Tax Total</dt>
-                <dd>{toMoney(purchaseOrder.taxTotal)}</dd>
+                <dd>{formatCurrencyInr(purchaseOrder.taxTotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Grand Total</dt>
-                <dd>{toMoney(purchaseOrder.grandTotal)}</dd>
+                <dd>{formatCurrencyInr(purchaseOrder.grandTotal)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Approved</dt>
@@ -179,14 +171,14 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                 <div className="md:col-span-2 flex flex-wrap gap-2">
                   <Link
                     href={`/invoices/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
-                    className="inline-flex rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                    className="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
                   >
                     Create Invoice
                   </Link>
                   {canCreateVendorPaymentFromPo ? (
                     <Link
                       href={`/vendor-payments/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
-                      className="inline-flex rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                      className="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
                     >
                       Record Vendor Payment
                     </Link>
@@ -196,7 +188,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
             </dl>
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Line Items</h2>
             {purchaseOrder.items.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No line items added.</p>
@@ -221,9 +213,9 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                         </td>
                         <td className="px-3 py-2">{Number(line.quantity).toFixed(3)}</td>
                         <td className="px-3 py-2">{line.item.unit}</td>
-                        <td className="px-3 py-2">{toMoney(line.unitRate)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(line.unitRate)}</td>
                         <td className="px-3 py-2">{line.taxPercent === null ? "-" : Number(line.taxPercent).toFixed(2)}</td>
-                        <td className="px-3 py-2">{toMoney(line.amount)}</td>
+                        <td className="px-3 py-2">{formatCurrencyInr(line.amount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -233,7 +225,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
           </div>
 
           {canReadInvoices ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Related Invoices</h2>
               {relatedInvoices.length === 0 ? (
                 <p className="text-sm text-[var(--muted)]">No invoices created for this purchase order yet.</p>
@@ -262,7 +254,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                           </td>
                           <td className="px-3 py-2">{formatDateTime(invoice.invoiceDate)}</td>
                           <td className="px-3 py-2">{invoice._count.items}</td>
-                          <td className="px-3 py-2">{toMoney(invoice.grandTotal)}</td>
+                          <td className="px-3 py-2">{formatCurrencyInr(invoice.grandTotal)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -273,13 +265,13 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
           ) : null}
 
           {canReadVendorPayments ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold">Vendor Payments</h2>
                 {canCreateVendorPaymentFromPo ? (
                   <Link
                     href={`/vendor-payments/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
+                    className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
                   >
                     Record Vendor Payment
                   </Link>
@@ -299,7 +291,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
         <div className="space-y-5">
           <PurchaseOrderSummaryCard purchaseOrder={purchaseOrder} />
           {canStatusUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
               <PurchaseOrderStatusActions
                 purchaseOrderId={purchaseOrder.id}

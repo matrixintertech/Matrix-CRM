@@ -85,7 +85,7 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={user.name?.trim() || user.email || user.phone || "User"}
         description="Review user details, status, and role assignments."
@@ -93,17 +93,17 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
       />
 
       <div>
-        <Link href="/users" className="text-sm text-[var(--muted)] underline">
+        <Link href="/users" className="crm-back-link">
           Back to users
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">User details</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -142,13 +142,13 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
           </div>
 
           {canUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status & access</h2>
               <UserStatusActions userId={user.id} canDelete={canDelete} />
             </div>
           ) : null}
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Direct User Permissions</h2>
             <p className="mb-3 text-sm text-[var(--muted)]">
               Final runtime access is based on these user-level permissions.

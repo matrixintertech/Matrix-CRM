@@ -50,24 +50,24 @@ export default async function ClientDetailPage({ params, searchParams }: ClientD
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={client.name}
         description="Review client profile, status, and related branches."
         action={canUpdate ? { label: "Edit client", href: `/clients/${client.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/clients" className="text-sm text-[var(--muted)] underline">
+        <Link href="/clients" className="crm-back-link">
           Back to clients
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -134,7 +134,7 @@ export default async function ClientDetailPage({ params, searchParams }: ClientD
           </div>
 
           {canUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status & deletion</h2>
               <ClientStatusActions clientId={client.id} canDelete={canDelete} />
             </div>
@@ -142,7 +142,7 @@ export default async function ClientDetailPage({ params, searchParams }: ClientD
         </div>
 
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-semibold">Branches</h2>
               {canCreateBranch ? (

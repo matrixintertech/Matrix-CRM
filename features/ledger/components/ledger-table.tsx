@@ -1,6 +1,6 @@
 import { DataTable } from "@/components/admin/data-table";
 import { LedgerSourceLink } from "@/features/ledger/components/ledger-source-link";
-import { formatDateTime } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime } from "@/lib/utils/format";
 
 type LedgerRow = {
   id: string;
@@ -40,14 +40,6 @@ type LedgerRow = {
   } | null;
 };
 
-function toMoney(value: unknown) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return "-";
-  }
-  return `INR ${numeric.toFixed(2)}`;
-}
-
 function actorLabel(actor: LedgerRow["createdBy"]) {
   if (!actor) {
     return "-";
@@ -82,11 +74,11 @@ export function LedgerTable({ entries }: { entries: LedgerRow[] }) {
         },
         {
           header: "Debit",
-          cell: (entry) => toMoney(entry.debitAmount),
+          cell: (entry) => formatCurrencyInr(entry.debitAmount),
         },
         {
           header: "Credit",
-          cell: (entry) => toMoney(entry.creditAmount),
+          cell: (entry) => formatCurrencyInr(entry.creditAmount),
         },
         {
           header: "Description",

@@ -1,11 +1,7 @@
 import Link from "next/link";
 
 import { StatusBadge } from "@/components/admin/status-badge";
-import { formatDateTime } from "@/lib/utils/format";
-
-function toMoney(value: number) {
-  return `INR ${value.toFixed(2)}`;
-}
+import { formatCurrencyInr, formatDateTime } from "@/lib/utils/format";
 
 type PayableRow = {
   id: string;
@@ -68,7 +64,7 @@ export function PayablesReport({ rows }: { rows: PayableRow[] }) {
                     )}
                   </td>
                   <td className="px-4 py-3">{row.paidAt ? formatDateTime(row.paidAt) : "-"}</td>
-                  <td className="px-4 py-3">{toMoney(row.amount)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.amount)}</td>
                   <td className="px-4 py-3">
                     <StatusBadge value={row.status} />
                   </td>

@@ -57,7 +57,7 @@ export default async function LedgerPage({ searchParams }: LedgerPageProps) {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader title="Ledger" description="Tenant-scoped ledger entries generated from invoice payment postings." />
 
       <LedgerSummaryCard

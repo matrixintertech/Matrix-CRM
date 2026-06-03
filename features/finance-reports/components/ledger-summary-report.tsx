@@ -1,6 +1,4 @@
-function toMoney(value: number) {
-  return `INR ${value.toFixed(2)}`;
-}
+import { formatCurrencyInr } from "@/lib/utils/format";
 
 type LedgerSourceRow = {
   sourceType: string;
@@ -33,9 +31,9 @@ export function LedgerSummaryReport({
       <div className="grid gap-3 border-b border-[var(--border)] px-5 py-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           { label: "Entries", value: String(entriesCount) },
-          { label: "Total Debit", value: toMoney(totalDebit) },
-          { label: "Total Credit", value: toMoney(totalCredit) },
-          { label: "Net", value: toMoney(netAmount) },
+          { label: "Total Debit", value: formatCurrencyInr(totalDebit) },
+          { label: "Total Credit", value: formatCurrencyInr(totalCredit) },
+          { label: "Net", value: formatCurrencyInr(netAmount) },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-[#e5ebf6] bg-[#f9fbff] p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#7d8eaf]">{item.label}</p>
@@ -63,9 +61,9 @@ export function LedgerSummaryReport({
                 <tr key={row.sourceType} className="border-t border-[var(--border)]">
                   <td className="px-4 py-3">{row.sourceType}</td>
                   <td className="px-4 py-3">{row.count}</td>
-                  <td className="px-4 py-3">{toMoney(row.totalDebit)}</td>
-                  <td className="px-4 py-3">{toMoney(row.totalCredit)}</td>
-                  <td className="px-4 py-3">{toMoney(row.netAmount)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.totalDebit)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.totalCredit)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.netAmount)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,4 @@
-function toMoney(value: number) {
-  return `INR ${value.toFixed(2)}`;
-}
+import { formatCurrencyInr } from "@/lib/utils/format";
 
 type CashMovementRow = {
   period: string;
@@ -35,9 +33,9 @@ export function CashMovementReport({ rows }: { rows: CashMovementRow[] }) {
               {rows.map((row) => (
                 <tr key={row.period} className="border-t border-[var(--border)]">
                   <td className="px-4 py-3">{row.label}</td>
-                  <td className="px-4 py-3">{toMoney(row.incoming)}</td>
-                  <td className="px-4 py-3">{toMoney(row.outgoing)}</td>
-                  <td className="px-4 py-3">{toMoney(row.net)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.incoming)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.outgoing)}</td>
+                  <td className="px-4 py-3">{formatCurrencyInr(row.net)}</td>
                 </tr>
               ))}
             </tbody>

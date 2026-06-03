@@ -11,7 +11,7 @@ import { updateRfqVendorQuoteAction } from "@/features/rfqs/actions/rfq.actions"
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
-import { formatDateTime, formatOptional } from "@/lib/utils/format";
+import { formatCurrencyInr, formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type RfqDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -59,13 +59,6 @@ function getErrorMessage(code?: string) {
   return undefined;
 }
 
-function toFixedOrDash(value: number | null | undefined) {
-  if (value === null || value === undefined) {
-    return "-";
-  }
-  return `INR ${value.toFixed(2)}`;
-}
-
 export default async function RfqDetailPage({ params, searchParams }: RfqDetailPageProps) {
   const session = await requirePermission("rfq.read");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
@@ -87,24 +80,24 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
-    <section className="space-y-5">
+    <section className="crm-page">
       <PageHeader
         title={rfq.title}
         description="Review RFQ details, line items, vendor coverage, and quote capture."
         action={canUpdate ? { label: "Edit RFQ", href: `/rfqs/${rfq.id}/edit` } : undefined}
       />
       <div>
-        <Link href="/rfqs" className="text-sm text-[var(--muted)] underline">
+        <Link href="/rfqs" className="crm-back-link">
           Back to RFQs
         </Link>
       </div>
 
-      {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
+      {errorMessage ? <p className="crm-alert crm-alert--error">{errorMessage}</p> : null}
+      {successMessage ? <p className="crm-alert crm-alert--success">{successMessage}</p> : null}
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -150,7 +143,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
             </dl>
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Line Items</h2>
             {rfq.items.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No line items added.</p>
@@ -184,7 +177,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
             )}
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">RFQ Vendors</h2>
             {rfq.vendorQuotes.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No vendors assigned.</p>
@@ -210,7 +203,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
                           <td className="px-3 py-2">
                             <StatusBadge value={quote.status} />
                           </td>
-                          <td className="px-3 py-2">{toFixedOrDash(quote.quotedAmount === null ? null : Number(quote.quotedAmount))}</td>
+                          <td className="px-3 py-2">{formatCurrencyInr(quote.quotedAmount === null ? null : Number(quote.quotedAmount))}</td>
                           <td className="px-3 py-2">{formatOptional(quote.notes)}</td>
                           <td className="px-3 py-2">{formatDateTime(quote.submittedAt)}</td>
                         </tr>
@@ -226,7 +219,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
                       <form
                         key={`${quote.id}-capture`}
                         action={updateRfqVendorQuoteAction.bind(null, rfq.id)}
-                        className="grid gap-2 rounded-md border border-[var(--border)] p-3 md:grid-cols-12"
+                        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[#fbfcff] p-4 md:grid-cols-12"
                       >
                         <input type="hidden" name="redirectTo" value={`/rfqs/${rfq.id}`} />
                         <input type="hidden" name="vendorId" value={quote.vendorId} />
@@ -235,7 +228,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
                         </p>
                         <label className="space-y-1 text-sm md:col-span-2">
                           <span className="font-medium">Status</span>
-                          <select name="status" defaultValue={quote.status} className="h-9 w-full rounded-md border border-[var(--border)] px-3">
+                          <select name="status" defaultValue={quote.status} className="h-10 w-full rounded-xl border border-[var(--border)] px-3">
                             {Object.values(RfqVendorStatus).map((status) => (
                               <option key={status} value={status}>
                                 {status}
@@ -251,7 +244,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
                             step="0.01"
                             name="quotedAmount"
                             defaultValue={quote.quotedAmount === null ? "" : Number(quote.quotedAmount).toFixed(2)}
-                            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                            className="h-10 w-full rounded-xl border border-[var(--border)] px-3"
                           />
                         </label>
                         <label className="space-y-1 text-sm md:col-span-4">
@@ -259,12 +252,12 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
                           <input
                             name="notes"
                             defaultValue={quote.notes ?? ""}
-                            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+                            className="h-10 w-full rounded-xl border border-[var(--border)] px-3"
                             maxLength={600}
                           />
                         </label>
                         <div className="flex items-end md:col-span-1">
-                          <button type="submit" className="h-9 w-full rounded-md border border-slate-200 px-2 text-xs">
+                          <button type="submit" className="h-10 w-full rounded-xl bg-[var(--primary)] px-3 text-sm font-semibold text-white">
                             Save
                           </button>
                         </div>
@@ -282,7 +275,7 @@ export default async function RfqDetailPage({ params, searchParams }: RfqDetailP
         <div className="space-y-5">
           <RfqSummaryCard rfq={rfq} />
           {canStatusUpdate ? (
-            <div className="rounded-md border border-[var(--border)] bg-white p-5">
+            <div className="crm-panel">
               <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
               <RfqStatusActions
                 rfqId={rfq.id}

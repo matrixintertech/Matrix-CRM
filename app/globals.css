@@ -4,11 +4,13 @@
 
 :root {
   --background: #f5f7fb;
-  --foreground: #0f172a;
-  --muted: #64748b;
-  --border: #dbe1ea;
+  --foreground: #0f2347;
+  --muted: #647aa3;
+  --border: #d7e3f4;
   --card: #ffffff;
-  --primary: #0f766e;
+  --primary: #2f5ef8;
+  --primary-soft: #eef3ff;
+  --workspace: #f4f7fb;
 }
 
 html,
@@ -18,6 +20,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -27,4 +31,1134 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(47, 94, 248, 0.18);
+  outline-offset: 2px;
+}
+
+.crm-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.crm-panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+  padding: 1.25rem;
+  box-shadow: 0 10px 28px rgba(18, 49, 105, 0.05);
+}
+
+.crm-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #5f7398;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: color 0.18s ease;
+}
+
+.crm-back-link:hover {
+  color: #274fdd;
+}
+
+.crm-alert {
+  border-radius: 0.875rem;
+  border: 1px solid transparent;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.crm-alert--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.crm-alert--success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.crm-alert--info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.crm-alert--warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.crm-stat-card {
+  border: 1px solid #e5ebf6;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 1rem;
+  box-shadow: 0 6px 18px rgba(18, 49, 105, 0.05);
+}
+
+.crm-stat-card p:first-child {
+  color: #7d8eaf;
+}
+
+.crm-form-panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+  padding: 1.25rem;
+  box-shadow: 0 10px 28px rgba(18, 49, 105, 0.05);
+}
+
+.matrix-auth-page {
+  display: grid;
+  height: 100svh;
+  grid-template-columns: 358px 1fr;
+  background: #f4f7ff;
+  color: #071735;
+  overflow: hidden;
+}
+
+.matrix-auth-sidebar {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 45px 39px 28px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 12% 88%, rgba(42, 93, 196, 0.5), transparent 30%),
+    linear-gradient(165deg, #031733 0%, #05224c 52%, #061b42 100%);
+}
+
+.matrix-auth-sidebar::before {
+  position: absolute;
+  right: -70px;
+  bottom: -40px;
+  width: 310px;
+  height: 380px;
+  content: "";
+  background: rgba(37, 84, 174, 0.22);
+  filter: blur(45px);
+  transform: rotate(-14deg);
+}
+
+.matrix-auth-sidebar::after {
+  position: absolute;
+  left: -42px;
+  right: -42px;
+  bottom: 112px;
+  height: 118px;
+  content: "";
+  opacity: 0.24;
+  background:
+    repeating-radial-gradient(ellipse at 55% 70%, transparent 0 10px, rgba(75, 118, 255, 0.34) 11px 12px, transparent 13px 18px);
+  transform: rotate(2deg);
+}
+
+.matrix-auth-logo {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.matrix-auth-logo-mark {
+  position: relative;
+  width: 42px;
+  height: 42px;
+}
+
+.matrix-auth-logo-mark span {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 38px;
+  border-radius: 999px;
+}
+
+.matrix-auth-logo-mark span:nth-child(1) {
+  left: 0;
+  background: #3765ff;
+}
+
+.matrix-auth-logo-mark span:nth-child(2) {
+  left: 14px;
+  top: 1px;
+  background: #67a0ff;
+  transform: rotate(-38deg);
+}
+
+.matrix-auth-logo-mark span:nth-child(3) {
+  right: 0;
+  background: #3158ef;
+}
+
+.matrix-auth-welcome {
+  position: relative;
+  z-index: 1;
+  max-width: 278px;
+  margin-top: clamp(96px, 12.5vh, 112px);
+}
+
+.matrix-auth-welcome h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.28;
+  letter-spacing: 0;
+}
+
+.matrix-auth-welcome p {
+  margin: 20px 0 0;
+  color: #d4e0f7;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.matrix-auth-features {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 31px;
+  margin-top: clamp(42px, 4.8vh, 46px);
+}
+
+.matrix-auth-feature {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 18px;
+}
+
+.matrix-auth-feature-icon {
+  color: #6fa0ff;
+  padding-top: 3px;
+}
+
+.matrix-auth-feature-icon svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.matrix-auth-feature h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.matrix-auth-feature p {
+  max-width: 228px;
+  margin: 8px 0 0;
+  color: #c7d5ef;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.matrix-auth-footer {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  color: #c6d4ef;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.matrix-auth-content {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 24px 40px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.9), transparent 28%),
+    radial-gradient(circle at 82% 22%, rgba(204, 221, 255, 0.28), transparent 26%),
+    #f4f7ff;
+}
+
+.matrix-auth-content:has(.matrix-login-stack) {
+  align-items: flex-start;
+  padding-top: 47px;
+}
+
+.matrix-auth-stage {
+  display: grid;
+  width: 100%;
+  max-width: 1090px;
+  grid-template-columns: minmax(0, 520px) minmax(0, 430px);
+  align-items: center;
+  gap: clamp(40px, 4vw, 72px);
+}
+
+.matrix-auth-content:has(.matrix-login-stack) .matrix-auth-stage {
+  max-width: 1090px;
+  grid-template-columns: minmax(0, 596px) minmax(0, 430px);
+  gap: 64px;
+}
+
+.matrix-auth-card-slot {
+  width: min(520px, 100%);
+  display: flex;
+  justify-content: center;
+}
+
+.matrix-auth-card-slot > * {
+  width: 100%;
+}
+
+.matrix-auth-content:has(.matrix-login-stack) .matrix-auth-card-slot {
+  width: min(596px, 100%);
+}
+
+.matrix-auth-content:has(.matrix-login-stack) .matrix-auth-stage {
+  align-items: start;
+}
+
+.matrix-auth-art {
+  position: relative;
+  width: min(430px, 100%);
+  height: 430px;
+  justify-self: end;
+}
+
+.matrix-auth-content:has(.matrix-login-stack) .matrix-auth-art {
+  margin-top: 168px;
+}
+
+.matrix-art-dot,
+.matrix-art-ring,
+.matrix-art-phone,
+.matrix-art-bubble,
+.matrix-art-envelope,
+.matrix-art-note {
+  position: absolute;
+}
+
+.matrix-art-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #9dc5ff;
+}
+
+.matrix-art-dot.dot-one {
+  top: 18px;
+  right: 58px;
+}
+
+.matrix-art-dot.dot-two {
+  top: 40px;
+  right: 172px;
+  width: 9px;
+  height: 9px;
+}
+
+.matrix-art-dot.dot-three {
+  top: 80px;
+  left: 28px;
+}
+
+.matrix-art-ring {
+  border-radius: 50%;
+  border: 1px solid #c8dcff;
+}
+
+.matrix-art-ring.ring-one {
+  top: 55px;
+  right: 48px;
+  width: 176px;
+  height: 176px;
+}
+
+.matrix-art-ring.ring-two {
+  top: 95px;
+  right: 30px;
+  width: 120px;
+  height: 120px;
+  border-style: dashed;
+}
+
+.matrix-art-phone {
+  top: 88px;
+  left: 56px;
+  width: 214px;
+  height: 284px;
+  border: 4px solid rgba(130, 160, 255, 0.42);
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 22px 48px rgba(80, 119, 205, 0.12);
+  transform: rotate(8deg);
+}
+
+.matrix-art-phone-notch {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 78px;
+  height: 18px;
+  border-radius: 0 0 16px 16px;
+  background: rgba(130, 160, 255, 0.42);
+  transform: translateX(-50%);
+}
+
+.matrix-art-phone-screen {
+  position: absolute;
+  inset: 18px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(240, 246, 255, 0.65));
+}
+
+.matrix-art-phone-avatar {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  margin: 42px auto 0;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #dbe7ff, #8aaaff);
+}
+
+.matrix-art-phone-avatar svg {
+  width: 42px;
+  height: 42px;
+  color: #315ff1;
+  fill: currentColor;
+}
+
+.matrix-art-phone-lines {
+  display: grid;
+  gap: 10px;
+  margin: 18px auto 0;
+  width: 126px;
+}
+
+.matrix-art-phone-lines span {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: #dce8fb;
+}
+
+.matrix-art-phone-lines span:last-child {
+  width: 94px;
+  background: #e7effc;
+}
+
+.matrix-art-phone-code {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 26px;
+}
+
+.matrix-art-phone-code span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6f95ff;
+}
+
+.matrix-art-bubble {
+  top: 136px;
+  right: 36px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, #3557ef, #315cff);
+  box-shadow: 0 18px 34px rgba(53, 87, 239, 0.24);
+}
+
+.matrix-art-bubble::after {
+  position: absolute;
+  left: 20px;
+  bottom: -10px;
+  width: 0;
+  height: 0;
+  content: "";
+  border-top: 12px solid #315cff;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+}
+
+.matrix-art-bubble span {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.matrix-art-envelope {
+  right: 16px;
+  bottom: 76px;
+  width: 170px;
+  height: 120px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #eef4ff 0%, #d7e4ff 100%);
+  box-shadow: 0 18px 40px rgba(80, 119, 205, 0.18);
+}
+
+.matrix-art-envelope-body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.matrix-art-envelope-body::before,
+.matrix-art-envelope-body::after {
+  position: absolute;
+  top: 28px;
+  width: 0;
+  height: 0;
+  content: "";
+  border-top: 52px solid #7ea0ff;
+}
+
+.matrix-art-envelope-body::before {
+  left: 0;
+  border-right: 85px solid transparent;
+}
+
+.matrix-art-envelope-body::after {
+  right: 0;
+  border-left: 85px solid transparent;
+}
+
+.matrix-art-envelope-flap {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(130, 160, 255, 0.35);
+}
+
+.matrix-art-envelope-shield {
+  position: absolute;
+  top: -36px;
+  left: 47px;
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #4b76ff, #2554ef);
+  box-shadow: 0 18px 28px rgba(56, 91, 231, 0.24);
+}
+
+.matrix-art-envelope-shield svg {
+  width: 38px;
+  height: 38px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.matrix-art-note {
+  right: 12px;
+  bottom: 4px;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 14px;
+  width: 368px;
+  padding: 18px 20px;
+  border: 1px solid rgba(181, 197, 255, 0.22);
+  border-radius: 20px;
+  background: rgba(241, 245, 255, 0.94);
+  box-shadow: 0 16px 34px rgba(80, 119, 205, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.matrix-art-note-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  color: #3557ef;
+  background: #eef2ff;
+}
+
+.matrix-art-note-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.matrix-art-note strong {
+  display: block;
+  color: #18244a;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.matrix-art-note p {
+  margin: 6px 0 0;
+  color: #5c6b92;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.matrix-login-card {
+  width: 100%;
+  max-width: 520px;
+  min-height: 664px;
+  padding: 44px 42px 38px;
+  border: 1px solid rgba(218, 228, 245, 0.96);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(251, 252, 255, 0.98));
+  box-shadow:
+    0 24px 70px rgba(30, 61, 122, 0.12),
+    0 4px 12px rgba(30, 61, 122, 0.04);
+}
+
+.matrix-login-card--verify {
+  max-width: 596px;
+  min-height: min(808px, calc(100svh - 126px));
+  padding: 42px 40px 42px;
+}
+
+.matrix-login-stack {
+  display: flex;
+  width: 100%;
+  max-width: 596px;
+  flex-direction: column;
+  gap: 44px;
+  justify-self: center;
+}
+
+.matrix-login-lock {
+  display: grid;
+  width: 86px;
+  height: 86px;
+  margin: 2px auto 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #355bf0;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.75), transparent 60%),
+    #eef2ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.matrix-login-lock-verify {
+  margin-bottom: 14px;
+}
+
+.matrix-login-lock svg {
+  width: 40px;
+  height: 40px;
+}
+
+.matrix-login-heading {
+  text-align: center;
+}
+
+.matrix-login-heading h1 {
+  margin: 0;
+  color: #0b1736;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.matrix-login-heading p {
+  max-width: 380px;
+  margin: 8px auto 0;
+  color: #5d6f98;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.matrix-login-heading-verify p strong {
+  color: #18244a;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.matrix-login-field {
+  margin-top: 32px;
+}
+
+.matrix-login-field label,
+.matrix-login-verify label {
+  display: block;
+  margin-bottom: 10px;
+  color: #0b1736;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.matrix-login-input-wrap {
+  display: flex;
+  height: 58px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border: 1px solid #d1dbef;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.matrix-login-input-wrap svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: #8a9cbf;
+}
+
+.matrix-login-input-wrap input,
+.matrix-login-otp-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #11254f;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+}
+
+.matrix-login-input-wrap input::placeholder,
+.matrix-login-otp-input::placeholder {
+  color: #8b9bbc;
+}
+
+.matrix-login-primary {
+  display: block;
+  width: 100%;
+  height: 56px;
+  margin-top: 28px;
+  border: 0;
+  border-radius: 14px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #4668ff 0%, #3658f6 100%);
+  box-shadow: 0 16px 34px rgba(53, 87, 239, 0.24);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    filter 0.18s ease;
+}
+
+.matrix-login-primary:hover:not(:disabled),
+.matrix-login-secondary:hover:not(:disabled),
+.matrix-login-google:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.01);
+}
+
+.matrix-login-primary:focus-visible,
+.matrix-login-secondary:focus-visible,
+.matrix-login-google:focus-visible,
+.matrix-login-code-box:focus-visible {
+  outline: 2px solid rgba(53, 87, 239, 0.2);
+  outline-offset: 2px;
+}
+
+.matrix-login-primary:disabled,
+.matrix-login-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.matrix-login-verify {
+  margin-top: 28px;
+}
+
+.matrix-login-code-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 31px;
+}
+
+.matrix-login-code-box {
+  display: grid;
+  height: 72px;
+  place-items: center;
+  border: 1px solid #d9e4f6;
+  border-radius: 14px;
+  color: #0b1736;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 251, 255, 0.98));
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 1px 0 rgba(30, 61, 122, 0.02);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.matrix-login-code-box.is-active {
+  border-color: #315cff;
+  box-shadow:
+    0 0 0 1px #315cff,
+    0 14px 24px rgba(49, 92, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.matrix-login-code-box.has-digit {
+  color: #0b1736;
+}
+
+.matrix-login-code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  opacity: 0;
+  caret-color: transparent;
+}
+
+.matrix-login-resend-count {
+  margin-top: 20px;
+  color: #5d6f98;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.matrix-login-resend-count span {
+  color: #315cff;
+  font-weight: 700;
+}
+
+.matrix-login-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 52px;
+  margin-top: 14px;
+  border: 1px solid #d1dbef;
+  border-radius: 14px;
+  color: #425a92;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.98));
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.matrix-login-secondary svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.matrix-login-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 20px;
+  margin-top: 32px;
+}
+
+.matrix-login-divider span {
+  height: 1px;
+  background: #d9e2f4;
+}
+
+.matrix-login-divider em {
+  color: #6f7fa3;
+  font-size: 14px;
+  font-style: normal;
+}
+
+.matrix-login-google {
+  display: flex;
+  width: 100%;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 22px;
+  border: 1px solid #d1dbef;
+  border-radius: 14px;
+  color: #14264b;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.matrix-login-google span {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+}
+
+.matrix-login-google b {
+  color: #4285f4;
+  font-size: 16px;
+}
+
+.matrix-login-terms {
+  max-width: 392px;
+  margin: 20px auto 0;
+  color: #6d7fa4;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.matrix-login-terms a {
+  color: #2f55ea;
+  font-weight: 600;
+}
+
+.matrix-login-feedback {
+  min-height: 20px;
+  margin-top: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.matrix-login-feedback p {
+  margin: 8px 0 0;
+}
+
+.matrix-login-muted {
+  color: #6f7fa3;
+}
+
+.matrix-login-success {
+  color: #047857;
+}
+
+.matrix-login-error {
+  color: #b91c1c;
+}
+
+.matrix-login-dev-otp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 19px;
+  padding: 12px 15px;
+  border: 1px solid #f8d48a;
+  border-radius: 16px;
+  color: #c2410c;
+  background:
+    linear-gradient(180deg, rgba(255, 247, 221, 0.98), rgba(255, 240, 208, 0.98));
+  box-shadow: 0 10px 22px rgba(245, 158, 11, 0.08);
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.matrix-login-dev-otp-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #f59e0b;
+  border-radius: 50%;
+  color: #f59e0b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.matrix-login-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 0 0;
+  padding: 0;
+  border: 0;
+  color: #51628f;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.matrix-login-back-link--outside {
+  align-self: flex-start;
+}
+
+.matrix-login-back-link svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.matrix-login-change-link {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #315cff;
+  cursor: pointer;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-align: center;
+}
+
+@media (min-width: 1440px) {
+  .matrix-login-card--verify {
+    transform: translateX(28px);
+  }
+}
+
+@media (max-width: 1199px) {
+  .matrix-auth-stage {
+    max-width: 596px;
+    grid-template-columns: minmax(0, 596px);
+    justify-content: center;
+  }
+
+  .matrix-auth-card-slot,
+  .matrix-auth-content:has(.matrix-login-stack) .matrix-auth-card-slot {
+    width: min(596px, 100%);
+  }
+
+  .matrix-auth-art {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .matrix-auth-page {
+    display: block;
+  }
+
+  .matrix-auth-sidebar {
+    display: none;
+  }
+
+  .matrix-auth-content {
+    padding: 28px 18px;
+  }
+}
+
+@media (max-height: 820px) {
+  .matrix-auth-sidebar {
+    padding-top: 36px;
+    padding-bottom: 22px;
+  }
+
+  .matrix-auth-welcome {
+    margin-top: 92px;
+  }
+
+  .matrix-auth-features {
+    gap: 22px;
+    margin-top: 28px;
+  }
+
+  .matrix-auth-footer {
+    padding-top: 16px;
+  }
+
+  .matrix-auth-content {
+    padding-top: 22px;
+    padding-bottom: 22px;
+  }
+
+  .matrix-login-card {
+    min-height: 604px;
+    padding-top: 38px;
+    padding-bottom: 28px;
+  }
+}
+
+@media (max-width: 560px) {
+  .matrix-auth-card-slot,
+  .matrix-login-card {
+    width: 100%;
+  }
+
+  .matrix-login-card {
+    min-height: auto;
+    padding: 34px 22px 28px;
+  }
+
+  .matrix-login-card--verify {
+    min-height: auto;
+    padding: 34px 22px 28px;
+  }
+
+  .matrix-login-back-link {
+    margin: 0 0 12px 0;
+  }
+
+  .matrix-login-heading h1 {
+    font-size: 30px;
+  }
+
+  .matrix-login-code-grid {
+    gap: 8px;
+  }
+
+  .matrix-login-code-box {
+    height: 62px;
+    font-size: 22px;
+  }
+
 }
