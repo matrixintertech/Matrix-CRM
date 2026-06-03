@@ -124,7 +124,7 @@ async function main() {
     results,
     "super_admin.no_direct_permission_rows_required",
     syntheticSuperBypassAllowed,
-    "Bypass validated via super-admin subject without persisted UserPermission rows."
+    "Bypass validated via super-admin subject without persisted per-user permission rows."
   );
 
   const superNav = await getNavigationForSession(superSession as never);

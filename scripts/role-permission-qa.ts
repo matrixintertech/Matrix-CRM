@@ -14,15 +14,6 @@ type NavRow = {
   permissionKeys: string[];
 };
 
-type SessionLike = {
-  user: {
-    id: string;
-    servicePartnerId: string;
-    roleKeys: string[];
-    isSuperAdmin: boolean;
-  };
-};
-
 function canSeeNavItem(item: NavRow, permissionSet: Set<string>, isSuperAdmin: boolean) {
   if (isSuperAdmin) {
     return true;
