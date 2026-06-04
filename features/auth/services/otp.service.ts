@@ -22,7 +22,9 @@ type ActorContext = {
 
 type OtpErrorCode =
   | "RATE_LIMITED"
+  | "RATE_LIMIT_UNAVAILABLE"
   | "OTP_PROVIDER_NOT_CONFIGURED"
+  | "OTP_DELIVERY_FAILED"
   | "OTP_COOLDOWN"
   | "OTP_INVALID"
   | "OTP_EXPIRED"
@@ -103,11 +105,22 @@ export async function sendOtpChallenge(
 
   const maskedTarget = maskOtpTarget(normalizedTarget);
 
-  const sendRateLimit = consumeRateLimit(
+  const sendRateLimit = await consumeRateLimit(
     makeRateLimitKey("send", input.purpose, normalizedTarget, input.ipAddress),
     otpConfig.sendRateLimitWindowSeconds,
     otpConfig.sendRateLimitMax
   );
+
+  if (sendRateLimit.reason === "backend_unavailable") {
+    return {
+      ok: false,
+      code: "RATE_LIMIT_UNAVAILABLE",
+      status: 503,
+      message: "OTP is temporarily unavailable. Please try again shortly.",
+      retryAfterSeconds: sendRateLimit.retryAfterSeconds,
+      maskedTarget,
+    };
+  }
 
   if (!sendRateLimit.allowed) {
     return {
@@ -128,6 +141,7 @@ export async function sendOtpChallenge(
     },
     select: {
       id: true,
+      email: true,
       servicePartnerId: true,
     },
   });
@@ -138,6 +152,28 @@ export async function sendOtpChallenge(
       maskedTarget,
       expiresInSeconds: otpConfig.expirySeconds,
       resendAfterSeconds: otpConfig.resendCooldownSeconds,
+    };
+  }
+
+  const config = env();
+  let deliveryChannel: "EMAIL" | "SMS";
+  let deliveryTarget: string;
+
+  if (config.OTP_DELIVERY_CHANNEL === "email") {
+    deliveryChannel = "EMAIL";
+    deliveryTarget = channel === "EMAIL" ? normalizedTarget : user.email?.trim().toLowerCase() ?? "";
+  } else {
+    deliveryChannel = channel;
+    deliveryTarget = normalizedTarget;
+  }
+
+  if (!deliveryTarget) {
+    return {
+      ok: false,
+      code: "OTP_PROVIDER_NOT_CONFIGURED",
+      status: 503,
+      message: "OTP delivery is temporarily unavailable. Please contact support.",
+      maskedTarget,
     };
   }
 
@@ -177,7 +213,7 @@ export async function sendOtpChallenge(
       servicePartnerId: user.servicePartnerId,
       userId: user.id,
       purpose: input.purpose,
-      channel,
+      channel: deliveryChannel,
       target: normalizedTarget,
       codeHash: hashOtpCode(normalizedTarget, input.purpose, code),
       expiresAt,
@@ -189,19 +225,30 @@ export async function sendOtpChallenge(
   });
 
   const delivery = await sendOtpMessage({
-    channel,
-    target: normalizedTarget,
+    channel: deliveryChannel,
+    target: deliveryTarget,
     code,
     purpose: input.purpose,
   });
 
-  if (!delivery.ok && delivery.code === "PROVIDER_NOT_CONFIGURED") {
+  if (!delivery.ok) {
     await prisma.otpChallenge.delete({ where: { id: challenge.id } });
+
+    if (delivery.code === "PROVIDER_NOT_CONFIGURED") {
+      return {
+        ok: false,
+        code: "OTP_PROVIDER_NOT_CONFIGURED",
+        status: 503,
+        message: "OTP delivery is temporarily unavailable. Please contact support.",
+        maskedTarget,
+      };
+    }
+
     return {
       ok: false,
-      code: "OTP_PROVIDER_NOT_CONFIGURED",
-      status: 503,
-      message: "OTP delivery is temporarily unavailable. Please contact support.",
+      code: "OTP_DELIVERY_FAILED",
+      status: 502,
+      message: "Unable to deliver OTP right now. Please try again.",
       maskedTarget,
     };
   }
@@ -211,7 +258,7 @@ export async function sendOtpChallenge(
     maskedTarget,
     expiresInSeconds: otpConfig.expirySeconds,
     resendAfterSeconds: otpConfig.resendCooldownSeconds,
-    ...(env().OTP_DEV_MODE && !env().IS_PRODUCTION && delivery.ok && delivery.mode === "dev"
+    ...(config.OTP_DEV_MODE && !config.IS_PRODUCTION && delivery.ok && delivery.mode === "dev"
       ? { devOtpPreview: code }
       : {}),
   };
@@ -243,11 +290,21 @@ export async function verifyOtpForLogin(
   }
 
   const otpConfig = getOtpConfig();
-  const verifyRateLimit = consumeRateLimit(
+  const verifyRateLimit = await consumeRateLimit(
     makeRateLimitKey("verify", input.purpose, normalizedTarget, input.ipAddress),
     otpConfig.verifyRateLimitWindowSeconds,
     otpConfig.verifyRateLimitMax
   );
+
+  if (verifyRateLimit.reason === "backend_unavailable") {
+    return {
+      ok: false,
+      code: "RATE_LIMIT_UNAVAILABLE",
+      status: 503,
+      message: "OTP verification is temporarily unavailable. Please try again shortly.",
+      retryAfterSeconds: verifyRateLimit.retryAfterSeconds,
+    };
+  }
 
   if (!verifyRateLimit.allowed) {
     return {

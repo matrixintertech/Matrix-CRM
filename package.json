@@ -2,6 +2,9 @@
   "name": "matrixcrm-next-postgres-v2",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,9 +14,11 @@
     "db:validate": "prisma validate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:prisma": "prisma db seed",
     "db:studio": "prisma studio",
+    "prod:check": "npm run db:validate && npm run db:generate && npm run typecheck && npm run lint && npm run build",
     "qa:access": "tsx scripts/access-governance-qa.ts",
     "qa:service-requests": "tsx scripts/service-request-work-items-qa.ts",
     "qa:purchase-orders": "tsx scripts/purchase-order-qa.ts",
@@ -25,12 +30,10 @@
     "qa:rbac": "tsx scripts/role-permission-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
+    "qa:production-readiness": "tsx scripts/production-readiness-qa.ts",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

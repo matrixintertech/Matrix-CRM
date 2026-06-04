@@ -1,26 +1,26 @@
 import { NextResponse } from "next/server";
 
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 
-export async function GET() {
-  const databaseUrl = process.env.DATABASE_URL ?? "";
-  const directUrl = process.env.DIRECT_URL ?? "";
-  const runtimeEnv = {
-    databaseUrlPresent: databaseUrl.length > 0,
-    directUrlPresent: directUrl.length > 0,
-    databaseUrlPooledHost: /pooler/i.test(databaseUrl),
-    directUrlPooledHost: /pooler/i.test(directUrl),
-    databaseUrlHasSchema: /schema=matrixcrm_v2/i.test(databaseUrl),
-    directUrlHasSchema: /schema=matrixcrm_v2/i.test(directUrl),
-    databaseUrlHasSslModeRequire: /sslmode=require/i.test(databaseUrl),
-    directUrlHasSslModeRequire: /sslmode=require/i.test(directUrl),
-  };
+function canShowHealthDetails() {
+  const config = env();
+  return config.HEALTH_SHOW_DETAILS && !config.IS_PRODUCTION;
+}
 
+function sanitizeErrorMessage(message: string) {
+  return message
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, "[redacted_url]")
+    .replace(/(password|token|secret)=\S+/gi, "$1=[redacted]");
+}
+
+export async function GET() {
   const basePayload = {
     service: "matrixcrm-next-postgres-v2",
     milestone: 1,
     timestamp: new Date().toISOString(),
   };
+  const includeDetails = canShowHealthDetails();
 
   try {
     await prisma.$connect();
@@ -32,7 +32,15 @@ export async function GET() {
       ok: true,
       ...basePayload,
       database: "connected",
-      runtimeEnv,
+      ...(includeDetails
+        ? {
+            details: {
+              nodeEnv: env().NODE_ENV,
+              otpDeliveryChannel: env().OTP_DELIVERY_CHANNEL,
+              rateLimitDriver: env().RATE_LIMIT_DRIVER,
+            },
+          }
+        : {}),
     });
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
@@ -51,8 +59,7 @@ export async function GET() {
           : rawMessage.includes("TLS connection")
             ? "tls_error"
             : "database_error");
-    const devMessage =
-      process.env.NODE_ENV === "development" && error instanceof Error ? error.message : undefined;
+    const safeMessage = includeDetails ? sanitizeErrorMessage(rawMessage).slice(0, 240) : undefined;
 
     return NextResponse.json(
       {
@@ -60,8 +67,7 @@ export async function GET() {
         ...basePayload,
         database: "disconnected",
         reason,
-        runtimeEnv,
-        ...(devMessage ? { message: devMessage } : {}),
+        ...(safeMessage ? { message: safeMessage } : {}),
       },
       { status: 503 }
     );
