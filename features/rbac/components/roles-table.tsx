@@ -7,6 +7,7 @@ type RoleRow = {
   name: string;
   key: string;
   scope: "TENANT" | "PLATFORM";
+  level: number;
   isSystem: boolean;
   createdAt: Date;
   servicePartner: { name: string; code: string };
@@ -33,6 +34,7 @@ export function RolesTable({ roles }: { roles: RoleRow[] }) {
           ),
         },
         { header: "Scope", cell: (role) => <StatusBadge value={role.scope} /> },
+        { header: "Level", cell: (role) => role.level },
         {
           header: "Type",
           cell: (role) =>

@@ -304,6 +304,7 @@ model User {
   assignments                  Assignment[]
   taskAssignments              Task[]                        @relation("TaskAssignee")
   tasksCreated                 Task[]                        @relation("TaskCreator")
+  tasksAssignedBy              Task[]                        @relation("TaskAssignedBy")
   timeLogs                     TimeLog[]
   activityLogs                 ActivityLog[]                 @relation("ActivityActor")
   serviceRequestStatusChanges  ServiceRequestStatusHistory[] @relation("ServiceRequestStatusChangedBy")
@@ -414,6 +415,7 @@ model Role {
   key              String
   description      String?
   scope            RoleScope @default(TENANT)
+  level            Int       @default(0)
   isSystem         Boolean   @default(false)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -859,12 +861,14 @@ model Task {
   id               String     @id @default(uuid())
   servicePartnerId String
   serviceRequestId String
+  parentTaskId     String?
   taskNumber       String
   title            String
   description      String?
   status           TaskStatus @default(YET_TO_START)
   assigneeUserId   String?
   createdByUserId  String?
+  assignedByUserId String?
   requestedAt      DateTime?
   startDate        DateTime?
   dueDate          DateTime?
@@ -875,8 +879,11 @@ model Task {
 
   servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
   serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  parentTask     Task?          @relation("TaskHierarchy", fields: [parentTaskId], references: [id])
+  childTasks     Task[]         @relation("TaskHierarchy")
   assignee       User?          @relation("TaskAssignee", fields: [assigneeUserId], references: [id])
   createdBy      User?          @relation("TaskCreator", fields: [createdByUserId], references: [id])
+  assignedBy     User?          @relation("TaskAssignedBy", fields: [assignedByUserId], references: [id])
 
   lines       TaskLine[]
   timeLogs    TimeLog[]
@@ -885,6 +892,10 @@ model Task {
   @@unique([servicePartnerId, taskNumber])
   @@index([servicePartnerId])
   @@index([serviceRequestId])
+  @@index([parentTaskId])
+  @@index([assigneeUserId])
+  @@index([createdByUserId])
+  @@index([assignedByUserId])
   @@index([status])
   @@index([createdAt])
 }

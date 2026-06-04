@@ -19,6 +19,7 @@ type TaskFormProps = {
   redirectTo: string;
   users: TaskUserOption[];
   submitLabel: string;
+  parentTaskId?: string | null;
   task?: {
     title: string;
     description: string | null;
@@ -75,12 +76,14 @@ export function TaskForm({
   redirectTo,
   users,
   submitLabel,
+  parentTaskId,
   task,
   compact = false,
 }: TaskFormProps) {
   return (
     <form action={action} className={compact ? "space-y-2" : "space-y-3 rounded-md border border-[var(--border)] p-3"}>
       <input type="hidden" name="serviceRequestId" value={serviceRequestId} />
+      {parentTaskId ? <input type="hidden" name="parentTaskId" value={parentTaskId} /> : null}
       <input type="hidden" name="redirectTo" value={redirectTo} />
 
       <label className="space-y-1 text-sm">

@@ -73,6 +73,7 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         name: role.name,
         description: role.description,
         scope: role.scope as RoleScope,
+        level: role.level,
         isSystem: role.isSystem,
       },
       create: {
@@ -81,6 +82,7 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
         name: role.name,
         description: role.description,
         scope: role.scope as RoleScope,
+        level: role.level,
         isSystem: role.isSystem,
       },
       })

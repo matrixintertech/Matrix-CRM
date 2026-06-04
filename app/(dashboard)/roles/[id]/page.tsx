@@ -119,6 +119,10 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
                 <dd>{role.isSystem ? "System" : "Custom"}</dd>
               </div>
               <div>
+                <dt className="text-[var(--muted)]">Level</dt>
+                <dd>{role.level}</dd>
+              </div>
+              <div>
                 <dt className="text-[var(--muted)]">Service partner</dt>
                 <dd>
                   {role.servicePartner.name} ({role.servicePartner.code})

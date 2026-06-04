@@ -16,6 +16,7 @@ export const roleUpsertSchema = z.object({
     .regex(/^[a-z0-9_]+$/, "Use lowercase letters, numbers, and underscores only."),
   description: optionalDescription,
   scope: z.nativeEnum(RoleScope).default(RoleScope.TENANT),
+  level: z.coerce.number().int().min(0).max(1000),
   servicePartnerId: z.string().uuid(),
 });
 

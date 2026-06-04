@@ -60,6 +60,7 @@ export default async function EditRolePage({ params, searchParams }: EditRolePag
           key: role.key,
           description: role.description,
           scope: role.scope,
+          level: role.level,
           servicePartnerId: role.servicePartnerId,
           isSystem: role.isSystem || role.key === "super_admin",
         }}

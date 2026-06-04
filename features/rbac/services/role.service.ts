@@ -51,7 +51,7 @@ export async function listRoles(session: Session, input: ListRolesInput) {
       where,
       skip: pagination.skip,
       take: pagination.take,
-      orderBy: [{ isSystem: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ level: "desc" }, { isSystem: "desc" }, { createdAt: "desc" }],
       include: {
         servicePartner: { select: { id: true, name: true, code: true } },
         _count: {
@@ -158,6 +158,7 @@ export async function createRole(session: Session, input: RoleUpsertInput) {
       key: roleKey,
       description: input.description ?? null,
       scope: roleScope,
+      level: input.level,
       isSystem: false,
     },
   });
@@ -186,6 +187,7 @@ export async function updateRole(session: Session, id: string, input: RoleUpsert
       key: nextKey,
       description: input.description ?? null,
       scope: nextScope,
+      level: input.level,
     },
   });
 }

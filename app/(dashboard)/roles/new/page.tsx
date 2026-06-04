@@ -59,6 +59,7 @@ export default async function NewRolePage({ searchParams }: NewRolePageProps) {
             key: "",
             description: "",
             scope: RoleScope.TENANT,
+            level: 0,
             servicePartnerId: defaultServicePartner.id,
             isSystem: false,
           }}

@@ -556,6 +556,9 @@ async function main() {
           "service_requests.responsibility.update",
           "tasks.read",
           "tasks.create",
+          "tasks.assign",
+          "tasks.assign.any",
+          "tasks.delegate",
           "tasks.update",
           "tasks.delete",
           "tasks.status.update",
@@ -838,8 +841,8 @@ async function main() {
     );
     pushResult(
       results,
-      "permissions.task_action_has_create_guard",
-      taskActionSource.includes('requirePermission("tasks.create")')
+      "permissions.task_action_has_create_or_delegate_guard",
+      taskActionSource.includes('requireAnyPermission(["tasks.create", "tasks.delegate"])')
     );
     pushResult(
       results,

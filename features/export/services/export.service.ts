@@ -9,6 +9,7 @@ import {
 import type { Session } from "next-auth";
 
 import { getFinanceReportData } from "@/features/finance-reports/services/finance-report.service";
+import { listTasks } from "@/features/tasks/services/task.service";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import type { ExportRow } from "@/lib/export/csv";
@@ -282,46 +283,43 @@ async function getTaskRows(session: Session, searchParams: SearchParamsLike) {
   const q = getStringParam(searchParams, "q");
   const status = toStatus(getStringParam(searchParams, "status"), Object.values(TaskStatus));
   const serviceRequestId = getStringParam(searchParams, "serviceRequestId");
+  const assigneeUserId = getStringParam(searchParams, "assigneeUserId");
+  const assignedByUserId = getStringParam(searchParams, "assignedByUserId");
+  const requestedFrom = getDateParam(searchParams, "requestedFrom");
+  const requestedTo = getDateParam(searchParams, "requestedTo");
+  const dueFrom = getDateParam(searchParams, "dueFrom");
+  const dueTo = getDateParam(searchParams, "dueTo");
+  const overdue = getStringParam(searchParams, "overdue") === "true";
+  const scope = getStringParam(searchParams, "scope") as "all" | "my" | "delegated" | "downline" | "company" | undefined;
 
-  const where: Prisma.TaskWhereInput = {
-    ...scopeByTenant(session as never, {}),
-    deletedAt: null,
-  };
-
-  if (status) {
-    where.status = status;
-  }
-  if (serviceRequestId) {
-    where.serviceRequestId = serviceRequestId;
-  }
-  if (q) {
-    where.OR = [
-      { taskNumber: { contains: q, mode: "insensitive" } },
-      { title: { contains: q, mode: "insensitive" } },
-      { description: { contains: q, mode: "insensitive" } },
-    ];
-  }
-
-  const rows = await prisma.task.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }],
-    include: {
-      serviceRequest: { select: { serviceNumber: true } },
-      assignee: { select: { name: true, email: true } },
-      createdBy: { select: { name: true, email: true } },
-    },
+  const result = await listTasks(session as never, {
+    q,
+    status,
+    serviceRequestId,
+    assigneeUserId,
+    assignedByUserId,
+    requestedFrom,
+    requestedTo,
+    dueFrom,
+    dueTo,
+    overdue,
+    scope,
   });
 
-  return rows.map((row) => ({
+  return result.tasks.map((row) => ({
     taskNumber: row.taskNumber,
-    serviceRequest: row.serviceRequest.serviceNumber,
+    serviceRequest: row.serviceRequestSummary.serviceNumber,
     title: row.title,
+    parentTask: row.parentTaskSummary?.taskNumber || "",
+    hierarchyLevel: row.hierarchyDepth,
     status: row.status,
     assignee: row.assignee?.name || row.assignee?.email || "",
+    assignedBy: row.assignedBy?.name || row.assignedBy?.email || "",
     createdBy: row.createdBy?.name || row.createdBy?.email || "",
     requestedAt: toRowDate(row.requestedAt),
     dueDate: toRowDate(row.dueDate),
     createdAt: toRowDate(row.createdAt),
+    assignmentChain: row.assignmentChain.join(" | "),
   }));
 }
 

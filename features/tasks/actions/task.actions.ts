@@ -3,16 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { createTaskSchema, updateTaskSchema, updateTaskStatusSchema } from "@/features/tasks/validations";
+import {
+  createTaskRemarkSchema,
+  createTaskSchema,
+  updateTaskSchema,
+  updateTaskStatusSchema,
+} from "@/features/tasks/validations";
 import {
   createTask,
+  createTaskRemark,
   getTaskById,
   softDeleteTask,
   updateTask,
   updateTaskStatus,
 } from "@/features/tasks/services/task.service";
 import { logActivity } from "@/lib/activity/activity-log";
-import { requirePermission } from "@/lib/auth/rbac";
+import { requireAnyPermission, requirePermission } from "@/lib/auth/rbac";
 import { notifyTaskAssigned, notifyTaskStatusChanged, notifyTaskUpdated } from "@/lib/notifications/notification.service";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
@@ -27,16 +33,22 @@ function withErrorCode(path: string, code: string) {
 }
 
 function revalidateServiceRequestTaskPaths(serviceRequestId: string) {
+  revalidatePath("/tasks");
   revalidatePath("/service-requests");
   revalidatePath(`/service-requests/${serviceRequestId}`);
 }
 
+function revalidateTaskDetailPath(taskId: string) {
+  revalidatePath(`/tasks/${taskId}`);
+}
+
 export async function createTaskAction(formData: FormData) {
-  const session = await requirePermission("tasks.create");
+  const session = await requireAnyPermission(["tasks.create", "tasks.delegate"]);
   const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), "/service-requests");
 
   const parsed = createTaskSchema.safeParse({
     serviceRequestId: getFormString(formData, "serviceRequestId"),
+    parentTaskId: getFormString(formData, "parentTaskId"),
     title: getFormString(formData, "title"),
     description: getFormString(formData, "description"),
     assigneeUserId: getFormString(formData, "assigneeUserId"),
@@ -53,14 +65,17 @@ export async function createTaskAction(formData: FormData) {
   try {
     const created = await createTask(session, parsed.data);
     await logActivity({
-      action: "work_item.create",
+      action: parsed.data.parentTaskId ? "task.delegate" : "task.create",
       module: "tasks",
       entityType: "TASK",
       entityId: created.id,
-      message: "Work item created",
+      message: parsed.data.parentTaskId ? "Sub-task delegated" : "Task created",
       metadata: {
         taskNumber: created.taskNumber,
         serviceRequestId: created.serviceRequestId,
+        parentTaskId: created.parentTaskId,
+        assigneeUserId: created.assigneeUserId,
+        assignedByUserId: created.assignedByUserId,
       },
       servicePartnerId: created.servicePartnerId,
     });
@@ -73,12 +88,16 @@ export async function createTaskAction(formData: FormData) {
       });
     }
     revalidateServiceRequestTaskPaths(created.serviceRequestId);
+    revalidateTaskDetailPath(created.id);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-created`);
   } catch (error) {
     if (error instanceof Error) {
       const lower = error.message.toLowerCase();
       if (lower.includes("assignee") || lower.includes("tenant")) {
         redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
+      }
+      if (lower.includes("delegate") || lower.includes("lower-level") || lower.includes("parent task")) {
+        redirect(withErrorCode(redirectTo, "task-delegation-blocked"));
       }
       if (lower.includes("service request not found")) {
         redirect(withErrorCode(redirectTo, "task-service-request-not-found"));
@@ -107,16 +126,20 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
   }
 
   try {
+    const before = await getTaskById(session, taskId);
     const updated = await updateTask(session, taskId, parsed.data);
     await logActivity({
-      action: "work_item.update",
+      action: before?.assigneeUserId !== updated.assigneeUserId ? "task.assign" : "task.update",
       module: "tasks",
       entityType: "TASK",
       entityId: updated.id,
-      message: "Work item updated",
+      message: before?.assigneeUserId !== updated.assigneeUserId ? "Task assignment updated" : "Task updated",
       metadata: {
+        previousAssigneeUserId: before?.assigneeUserId ?? null,
         status: updated.status,
         assigneeUserId: updated.assigneeUserId,
+        parentTaskId: updated.parentTaskId,
+        assignedByUserId: updated.assignedByUserId,
       },
       servicePartnerId: updated.servicePartnerId,
     });
@@ -129,12 +152,16 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
       });
     }
     revalidateServiceRequestTaskPaths(updated.serviceRequestId);
+    revalidateTaskDetailPath(updated.id);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-updated`);
   } catch (error) {
     if (error instanceof Error) {
       const lower = error.message.toLowerCase();
       if (lower.includes("assignee") || lower.includes("tenant")) {
         redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
+      }
+      if (lower.includes("delegate") || lower.includes("lower-level")) {
+        redirect(withErrorCode(redirectTo, "task-delegation-blocked"));
       }
       if (lower.includes("not found")) {
         redirect(withErrorCode(redirectTo, "task-not-found"));
@@ -157,15 +184,17 @@ export async function updateTaskStatusAction(taskId: string, formData: FormData)
   }
 
   try {
+    const before = await getTaskById(session, taskId);
     const updated = await updateTaskStatus(session, taskId, parsed.data);
     await logActivity({
-      action: "work_item.status_change",
+      action: "task.status_change",
       module: "tasks",
       entityType: "TASK",
       entityId: updated.id,
-      message: `Work item status changed to ${updated.status}`,
+      message: `Task status changed to ${updated.status}`,
       metadata: {
-        status: updated.status,
+        fromStatus: before?.status ?? null,
+        toStatus: updated.status,
       },
       servicePartnerId: updated.servicePartnerId,
     });
@@ -178,6 +207,7 @@ export async function updateTaskStatusAction(taskId: string, formData: FormData)
       });
     }
     revalidateServiceRequestTaskPaths(updated.serviceRequestId);
+    revalidateTaskDetailPath(updated.id);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-status-updated`);
   } catch (error) {
     if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
@@ -194,17 +224,19 @@ export async function deleteTaskAction(taskId: string, formData: FormData) {
   try {
     const deleted = await softDeleteTask(session, taskId);
     await logActivity({
-      action: "work_item.delete",
+      action: "task.delete",
       module: "tasks",
       entityType: "TASK",
       entityId: deleted.id,
-      message: "Work item deleted",
+      message: "Task deleted",
       metadata: {
         taskNumber: deleted.taskNumber,
+        parentTaskId: deleted.parentTaskId,
       },
       servicePartnerId: deleted.servicePartnerId,
     });
     revalidateServiceRequestTaskPaths(deleted.serviceRequestId);
+    revalidateTaskDetailPath(deleted.id);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-deleted`);
   } catch (error) {
     if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
@@ -222,14 +254,50 @@ export async function logTaskResponsibilityChange(taskId: string) {
   }
 
   await logActivity({
-    action: "work_item.responsibility_update",
+    action: "task.assign",
     module: "tasks",
     entityType: "TASK",
     entityId: task.id,
-    message: "Work item responsibility updated",
+    message: "Task responsibility updated",
     metadata: {
       assigneeUserId: task.assigneeUserId ?? null,
+      assignedByUserId: task.assignedByUserId ?? null,
     },
     servicePartnerId: task.servicePartnerId,
   });
+}
+
+export async function createTaskRemarkAction(taskId: string, formData: FormData) {
+  const session = await requirePermission("tasks.remark.create");
+  const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), `/tasks/${taskId}`);
+  const parsed = createTaskRemarkSchema.safeParse({
+    remark: getFormString(formData, "remark"),
+  });
+
+  if (!parsed.success) {
+    redirect(withErrorCode(redirectTo, "task-remark-validation"));
+  }
+
+  try {
+    const task = await createTaskRemark(session, taskId, parsed.data);
+    await logActivity({
+      action: "task.remark_create",
+      module: "tasks",
+      entityType: "TASK",
+      entityId: task.id,
+      message: "Task remark added",
+      metadata: {
+        remark: parsed.data.remark,
+      },
+      servicePartnerId: task.servicePartnerId,
+    });
+    revalidateServiceRequestTaskPaths(task.serviceRequestId);
+    revalidateTaskDetailPath(task.id);
+    redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-remark-created`);
+  } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+      redirect(withErrorCode(redirectTo, "task-not-found"));
+    }
+    throw error;
+  }
 }

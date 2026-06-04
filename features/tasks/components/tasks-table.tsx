@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TaskStatus } from "@prisma/client";
 
 import { StatusBadge } from "@/components/admin/status-badge";
@@ -17,6 +18,7 @@ type TaskRow = {
   startDate: Date | null;
   dueDate: Date | null;
   completedAt: Date | null;
+  parentTaskId: string | null;
   assignee: {
     id: string;
     name: string | null;
@@ -29,6 +31,27 @@ type TaskRow = {
     email: string | null;
     phone: string | null;
   } | null;
+  assignedBy: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  hierarchyDepth: number;
+  assignmentChain: string[];
+  childTaskCount: number;
+  latestChildStatus: TaskStatus | null;
+  isSubTask: boolean;
+  parentTaskSummary: {
+    id: string;
+    taskNumber: string;
+    title: string;
+  } | null;
+  serviceRequestSummary: {
+    id: string;
+    serviceNumber: string;
+    title: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 };
@@ -54,6 +77,7 @@ type TasksTableProps = {
   canUpdate: boolean;
   canDelete: boolean;
   canUpdateStatus: boolean;
+  showServiceRequest?: boolean;
 };
 
 function userLabel(user: { name: string | null; email: string | null; phone: string | null } | null) {
@@ -71,6 +95,7 @@ export function TasksTable({
   canUpdate,
   canDelete,
   canUpdateStatus,
+  showServiceRequest = false,
 }: TasksTableProps) {
   if (tasks.length === 0) {
     return <p className="text-sm text-[var(--muted)]">No work items yet.</p>;
@@ -83,12 +108,14 @@ export function TasksTable({
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
               <th className="px-3 py-2">Work Item</th>
+              {showServiceRequest ? <th className="px-3 py-2">Service Request</th> : null}
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Responsible</th>
+              <th className="px-3 py-2">Assigned By</th>
               <th className="px-3 py-2">Created At</th>
               <th className="px-3 py-2">Requested At</th>
               <th className="px-3 py-2">Due Date</th>
-              <th className="px-3 py-2">Completed At</th>
+              <th className="px-3 py-2">Hierarchy</th>
               <th className="px-3 py-2">Updated</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
@@ -97,22 +124,49 @@ export function TasksTable({
             {tasks.map((task) => (
               <tr key={task.id} className="border-t border-[var(--border)]">
                 <td className="px-3 py-2">
-                  <p className="font-medium">{task.title}</p>
-                  <p className="text-xs text-[var(--muted)]">
-                    {task.taskNumber} | {task.description?.trim() ? task.description : "-"}
-                  </p>
+                  <div style={{ paddingLeft: `${task.hierarchyDepth * 16}px` }}>
+                    <p className="font-medium">
+                      <Link href={`/tasks/${task.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                        {task.title}
+                      </Link>
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">
+                      {task.taskNumber}
+                      {task.parentTaskSummary ? ` | Parent: ${task.parentTaskSummary.taskNumber}` : ""}
+                    </p>
+                    <p className="text-xs text-[var(--muted)]">{task.description?.trim() ? task.description : "-"}</p>
+                  </div>
                 </td>
+                {showServiceRequest ? (
+                  <td className="px-3 py-2">
+                    <Link href={`/service-requests/${task.serviceRequestSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                      {task.serviceRequestSummary.serviceNumber}
+                    </Link>
+                  </td>
+                ) : null}
                 <td className="px-3 py-2">
-                  <StatusBadge value={task.status} />
+                  <div className="space-y-1">
+                    <StatusBadge value={task.status} />
+                    {task.latestChildStatus ? <p className="text-xs text-[var(--muted)]">Latest child: {task.latestChildStatus}</p> : null}
+                  </div>
                 </td>
                 <td className="px-3 py-2">{userLabel(task.assignee)}</td>
+                <td className="px-3 py-2">{userLabel(task.assignedBy)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.createdAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.requestedAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.dueDate)}</td>
-                <td className="px-3 py-2">{formatDateTime(task.completedAt)}</td>
+                <td className="px-3 py-2">
+                  <div className="space-y-1 text-xs text-[var(--muted)]">
+                    <p>{task.childTaskCount} child task(s)</p>
+                    {task.assignmentChain.length > 0 ? <p>{task.assignmentChain.join(" | ")}</p> : null}
+                  </div>
+                </td>
                 <td className="px-3 py-2">{formatDateTime(task.updatedAt)}</td>
                 <td className="px-3 py-2">
                   <div className="space-y-2">
+                    <Link href={`/tasks/${task.id}`} className="block rounded-md border border-[var(--border)] px-2 py-1 text-center text-xs">
+                      View
+                    </Link>
                     {canUpdateStatus ? (
                       <TaskStatusActions taskId={task.id} currentStatus={task.status} redirectTo={redirectTo} />
                     ) : null}

@@ -20,6 +20,7 @@ type RoleFormProps = {
     key: string;
     description: string | null;
     scope: RoleScope;
+    level: number;
     servicePartnerId: string;
     isSystem: boolean;
   };
@@ -76,6 +77,18 @@ export function RoleForm({
             <option value={RoleScope.PLATFORM}>PLATFORM</option>
           </select>
           {!canChooseScope ? <input type="hidden" name="scope" value={selectedScope} /> : null}
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Role level</span>
+          <input
+            type="number"
+            name="level"
+            defaultValue={role?.level ?? 0}
+            min={0}
+            max={1000}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            required
+          />
         </label>
         <label className="space-y-1 text-sm md:col-span-2">
           <span className="font-medium">Description</span>

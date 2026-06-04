@@ -21,6 +21,7 @@ export type RoleSeedDefinition = {
   name: string;
   description: string;
   scope: RoleScope;
+  level: number;
   isSystem: boolean;
 };
 
@@ -62,7 +63,7 @@ const moduleActionMap: Record<string, string[]> = {
   items: ["read", "create", "update", "delete"],
   rate_cards: ["read", "create", "update", "delete"],
   service_requests: ["read", "create", "update", "delete", "assign", "status.update", "responsibility.read", "responsibility.update", "timeline", "approve", "export"],
-  tasks: ["read", "create", "update", "delete", "assign", "status.update", "export"],
+  tasks: ["read", "create", "update", "delete", "assign", "assign.downline", "assign.any", "delegate", "status.update", "remark.create", "history.read", "export"],
   quotations: ["read", "create", "update", "delete", "submit", "approve", "status.update", "export"],
   vendors: ["read", "create", "update", "delete", "export"],
   rfq: ["read", "create", "update", "delete", "send", "status.update", "export"],
@@ -117,7 +118,7 @@ export const baselineNavigation: NavigationSeedItem[] = [
   { key: "settings", label: "Settings", href: "/settings", sortOrder: 14, permissionKey: "settings.read" },
   { key: "inventory-management", label: "Inventory Management", href: "#", sortOrder: 20, permissionKey: "inventory.read", isActive: false },
   { key: "supplier-management", label: "Supplier Management", href: "/vendors", sortOrder: 21, permissionKey: "vendors.read", isActive: true },
-  { key: "tasks", label: "Tasks", href: "#", sortOrder: 22, permissionKey: "tasks.read", isActive: false },
+  { key: "tasks", label: "Tasks", href: "/tasks", sortOrder: 22, permissionKey: "tasks.read", isActive: true },
   { key: "ledger", label: "Ledger", href: "/ledger", sortOrder: 23, permissionKey: "ledger.read", isActive: true },
   { key: "quotations", label: "Quotations", href: "#", sortOrder: 24, permissionKey: "quotations.read", isActive: false },
   { key: "payments", label: "Payments", href: "#", sortOrder: 25, permissionKey: "payments.read", isActive: false },
@@ -136,6 +137,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Super Admin",
     description: "Platform super administrator",
     scope: RoleScope.PLATFORM,
+    level: 100,
     isSystem: true,
   },
   {
@@ -143,6 +145,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Company Admin",
     description: "Company-wide administrator",
     scope: RoleScope.TENANT,
+    level: 90,
     isSystem: true,
   },
   {
@@ -150,6 +153,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Manager",
     description: "Operational manager",
     scope: RoleScope.TENANT,
+    level: 70,
     isSystem: true,
   },
   {
@@ -157,6 +161,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Operator",
     description: "Operations user",
     scope: RoleScope.TENANT,
+    level: 50,
     isSystem: true,
   },
   {
@@ -164,6 +169,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Technician",
     description: "Field technician",
     scope: RoleScope.TENANT,
+    level: 40,
     isSystem: true,
   },
   {
@@ -171,6 +177,7 @@ export const baselineRoleDefinitions: RoleSeedDefinition[] = [
     name: "Support",
     description: "Support desk user",
     scope: RoleScope.TENANT,
+    level: 30,
     isSystem: true,
   },
 ];
@@ -239,7 +246,12 @@ const companyAdminPermissions = grantSet([
   "tasks.update",
   "tasks.delete",
   "tasks.assign",
+  "tasks.assign.downline",
+  "tasks.assign.any",
+  "tasks.delegate",
   "tasks.status.update",
+  "tasks.remark.create",
+  "tasks.history.read",
   "tasks.export",
   "vendors.read",
   "vendors.create",
@@ -335,7 +347,12 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "tasks.create",
     "tasks.update",
     "tasks.assign",
+    "tasks.assign.downline",
+    "tasks.assign.any",
+    "tasks.delegate",
     "tasks.status.update",
+    "tasks.remark.create",
+    "tasks.history.read",
     "tasks.export",
     "vendors.read",
     "vendors.create",
@@ -413,7 +430,11 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "tasks.create",
     "tasks.update",
     "tasks.assign",
+    "tasks.assign.downline",
+    "tasks.delegate",
     "tasks.status.update",
+    "tasks.remark.create",
+    "tasks.history.read",
     "vendors.read",
     "vendors.create",
     "vendors.update",
@@ -461,7 +482,12 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "service_requests.status.update",
     "tasks.read",
     "tasks.update",
+    "tasks.assign",
+    "tasks.assign.downline",
+    "tasks.delegate",
     "tasks.status.update",
+    "tasks.remark.create",
+    "tasks.history.read",
     "vendors.read",
     "vendors.create",
     "vendors.update",
@@ -495,6 +521,7 @@ export const rolePermissionGrants: Record<string, readonly string[]> = {
     "service_requests.timeline",
     "activity_logs.read",
     "tasks.read",
+    "tasks.history.read",
     "vendors.read",
     "rfq.read",
     "vendor_quotations.read",

@@ -92,6 +92,9 @@ function getErrorMessage(code?: string) {
   if (code === "task-assignee-mismatch") {
     return "Work item update blocked: responsible user must belong to this company and be active.";
   }
+  if (code === "task-delegation-blocked") {
+    return "Task delegation was blocked by hierarchy or parent-task access rules.";
+  }
   if (code === "task-service-request-not-found") {
     return "Work item creation failed: service request was not found.";
   }
@@ -254,6 +257,9 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
             {canTaskCreate ? (
               <div className="mt-4">
                 <h3 className="mb-2 text-sm font-semibold">Add Work Item</h3>
+                <p className="mb-3 text-xs text-[var(--muted)]">
+                  Create top-level tasks here. Use an individual task detail page to delegate sub-tasks and view the full assignment chain.
+                </p>
                 <TaskForm
                   action={createTaskAction}
                   serviceRequestId={serviceRequest.id}

@@ -27,6 +27,7 @@ const optionalDate = z.preprocess((value) => {
 
 export const createTaskSchema = z.object({
   serviceRequestId: z.string().uuid(),
+  parentTaskId: optionalUuid,
   title: z.string().trim().min(2).max(240),
   description: optionalString(1000),
   assigneeUserId: optionalUuid,
@@ -50,6 +51,11 @@ export const updateTaskStatusSchema = z.object({
   status: z.nativeEnum(TaskStatus),
 });
 
+export const createTaskRemarkSchema = z.object({
+  remark: z.string().trim().min(2).max(1000),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export type UpdateTaskStatusInput = z.infer<typeof updateTaskStatusSchema>;
+export type CreateTaskRemarkInput = z.infer<typeof createTaskRemarkSchema>;

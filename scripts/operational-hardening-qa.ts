@@ -479,8 +479,10 @@ async function main() {
   }
 
   const companySession = toSession(companyAdmin);
+  const managerRoleId = await getRoleIdByKey(devTenant.id, "manager");
   const supportRoleId = await getRoleIdByKey(devTenant.id, "support");
   const operatorRoleId = await getRoleIdByKey(devTenant.id, "operator");
+  const technicianRoleId = await getRoleIdByKey(devTenant.id, "technician");
   const foreignOperatorRoleId = await getRoleIdByKey(foreignTenant.id, "operator");
 
   const [
@@ -572,10 +574,10 @@ async function main() {
   ]);
 
   await Promise.all([
-    assignSingleRole(qaTenantUser.id, supportRoleId),
+    assignSingleRole(qaTenantUser.id, managerRoleId),
     assignSingleRole(qaEmailUser.id, operatorRoleId),
     assignSingleRole(qaRequester.id, operatorRoleId),
-    assignSingleRole(qaAssignee.id, operatorRoleId),
+    assignSingleRole(qaAssignee.id, technicianRoleId),
     assignSingleRole(qaRelated.id, operatorRoleId),
     assignSingleRole(qaUnrelated.id, operatorRoleId),
     assignSingleRole(qaInactive.id, operatorRoleId),

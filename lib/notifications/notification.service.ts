@@ -150,6 +150,42 @@ export async function getTaskNotificationContext(taskId: string) {
           deletedAt: true,
         },
       },
+      assignedBy: {
+        select: {
+          id: true,
+          servicePartnerId: true,
+          email: true,
+          name: true,
+          status: true,
+          deletedAt: true,
+        },
+      },
+      parentTask: {
+        select: {
+          id: true,
+          taskNumber: true,
+          assignee: {
+            select: {
+              id: true,
+              servicePartnerId: true,
+              email: true,
+              name: true,
+              status: true,
+              deletedAt: true,
+            },
+          },
+          assignedBy: {
+            select: {
+              id: true,
+              servicePartnerId: true,
+              email: true,
+              name: true,
+              status: true,
+              deletedAt: true,
+            },
+          },
+        },
+      },
       serviceRequest: {
         select: {
           id: true,
@@ -209,6 +245,9 @@ export async function getTaskNotificationContext(taskId: string) {
   const recipients: ServiceRequestUserRecord[] = [];
   pushUser(recipients, task.assignee);
   pushUser(recipients, task.createdBy);
+  pushUser(recipients, task.assignedBy);
+  pushUser(recipients, task.parentTask?.assignee);
+  pushUser(recipients, task.parentTask?.assignedBy);
   pushUser(recipients, task.serviceRequest.createdByUser);
   pushUser(recipients, task.serviceRequest.createdByClientUser?.user);
   for (const assignment of task.serviceRequest.assignments) {

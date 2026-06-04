@@ -30,6 +30,7 @@ function parseRoleInput(formData: FormData) {
     key: getFormString(formData, "key"),
     description: getFormString(formData, "description"),
     scope: getFormString(formData, "scope"),
+    level: getFormString(formData, "level"),
     servicePartnerId: getFormString(formData, "servicePartnerId"),
   });
 }
