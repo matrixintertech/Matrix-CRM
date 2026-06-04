@@ -86,15 +86,22 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
       {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
-      <form className="grid gap-2 rounded-md border border-[var(--border)] bg-white p-3 md:grid-cols-5" action="">
+      <form
+        className="grid gap-2 rounded-2xl border border-[#d8e3f4] bg-white p-3 shadow-[0_8px_24px_rgba(25,56,120,0.04)] md:grid-cols-5"
+        action=""
+      >
         <input
           type="search"
           name="q"
           defaultValue={q}
           placeholder="Search by number, title, client, branch, or type"
-          className="h-9 min-w-0 rounded-md border border-[var(--border)] px-3 text-sm md:col-span-2"
+          className="h-10 min-w-0 rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] placeholder:text-[#8aa0c7] focus:border-[#3f64ff] focus:outline-none md:col-span-2"
         />
-        <select name="status" defaultValue={status ?? ""} className="h-9 rounded-md border border-[var(--border)] px-3 text-sm">
+        <select
+          name="status"
+          defaultValue={status ?? ""}
+          className="h-10 rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] focus:border-[#3f64ff] focus:outline-none"
+        >
           <option value="">All statuses</option>
           {Object.values(ServiceRequestStatus).map((statusValue) => (
             <option key={statusValue} value={statusValue}>
@@ -102,7 +109,11 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
             </option>
           ))}
         </select>
-        <select name="clientId" defaultValue={clientId ?? ""} className="h-9 rounded-md border border-[var(--border)] px-3 text-sm">
+        <select
+          name="clientId"
+          defaultValue={clientId ?? ""}
+          className="h-10 rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] focus:border-[#3f64ff] focus:outline-none"
+        >
           <option value="">All clients</option>
           {clients.map((client) => (
             <option key={client.id} value={client.id}>
@@ -110,7 +121,11 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
             </option>
           ))}
         </select>
-        <select name="branchId" defaultValue={branchId ?? ""} className="h-9 rounded-md border border-[var(--border)] px-3 text-sm">
+        <select
+          name="branchId"
+          defaultValue={branchId ?? ""}
+          className="h-10 rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] focus:border-[#3f64ff] focus:outline-none"
+        >
           <option value="">All branches</option>
           {branches.map((branch) => (
             <option key={branch.id} value={branch.id}>
@@ -119,7 +134,10 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
           ))}
         </select>
         <div className="md:col-span-5">
-          <button type="submit" className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium">
+          <button
+            type="submit"
+            className="h-10 rounded-xl border border-[#2f5ef8] bg-[#f4f7ff] px-4 text-sm font-semibold text-[#2754ef] transition hover:bg-[#ebf0ff]"
+          >
             Apply
           </button>
         </div>

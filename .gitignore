@@ -12,3 +12,4 @@ yarn-error.log*
 .env.production.local
 .env.test.local
 *.tsbuildinfo
+zap/
