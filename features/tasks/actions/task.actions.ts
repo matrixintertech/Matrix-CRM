@@ -13,6 +13,7 @@ import {
 } from "@/features/tasks/services/task.service";
 import { logActivity } from "@/lib/activity/activity-log";
 import { requirePermission } from "@/lib/auth/rbac";
+import { notifyTaskAssigned, notifyTaskStatusChanged, notifyTaskUpdated } from "@/lib/notifications/notification.service";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
 function getFormString(formData: FormData, key: string) {
@@ -40,6 +41,7 @@ export async function createTaskAction(formData: FormData) {
     description: getFormString(formData, "description"),
     assigneeUserId: getFormString(formData, "assigneeUserId"),
     status: getFormString(formData, "status"),
+    requestedAt: getFormString(formData, "requestedAt"),
     startDate: getFormString(formData, "startDate"),
     dueDate: getFormString(formData, "dueDate"),
   });
@@ -62,6 +64,14 @@ export async function createTaskAction(formData: FormData) {
       },
       servicePartnerId: created.servicePartnerId,
     });
+    try {
+      await notifyTaskAssigned(created.id, session.user.id);
+    } catch (notificationError) {
+      console.error("Task assignment notification failed", {
+        taskId: created.id,
+        reason: notificationError instanceof Error ? notificationError.message.slice(0, 200) : "unknown",
+      });
+    }
     revalidateServiceRequestTaskPaths(created.serviceRequestId);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-created`);
   } catch (error) {
@@ -87,6 +97,7 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
     description: getFormString(formData, "description"),
     assigneeUserId: getFormString(formData, "assigneeUserId"),
     status: getFormString(formData, "status"),
+    requestedAt: getFormString(formData, "requestedAt"),
     startDate: getFormString(formData, "startDate"),
     dueDate: getFormString(formData, "dueDate"),
   });
@@ -109,6 +120,14 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
       },
       servicePartnerId: updated.servicePartnerId,
     });
+    try {
+      await notifyTaskUpdated(updated.id, session.user.id);
+    } catch (notificationError) {
+      console.error("Task update notification failed", {
+        taskId: updated.id,
+        reason: notificationError instanceof Error ? notificationError.message.slice(0, 200) : "unknown",
+      });
+    }
     revalidateServiceRequestTaskPaths(updated.serviceRequestId);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-updated`);
   } catch (error) {
@@ -150,6 +169,14 @@ export async function updateTaskStatusAction(taskId: string, formData: FormData)
       },
       servicePartnerId: updated.servicePartnerId,
     });
+    try {
+      await notifyTaskStatusChanged(updated.id, session.user.id);
+    } catch (notificationError) {
+      console.error("Task status notification failed", {
+        taskId: updated.id,
+        reason: notificationError instanceof Error ? notificationError.message.slice(0, 200) : "unknown",
+      });
+    }
     revalidateServiceRequestTaskPaths(updated.serviceRequestId);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-status-updated`);
   } catch (error) {

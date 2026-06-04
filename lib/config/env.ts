@@ -61,6 +61,7 @@ const rawEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: booleanFromEnv.optional(),
   HEALTH_SHOW_DETAILS: booleanFromEnv.optional(),
+  ACTIVITY_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).optional(),
 });
 
 const normalizedEnvSchema = z.object({
@@ -100,6 +101,7 @@ const normalizedEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: z.boolean(),
   HEALTH_SHOW_DETAILS: z.boolean(),
+  ACTIVITY_LOG_RETENTION_DAYS: z.number().int().min(1).max(3650),
 });
 
 export type Env = z.infer<typeof normalizedEnvSchema>;
@@ -217,6 +219,7 @@ export function env(): Env {
     UPSTASH_REDIS_REST_TOKEN: data.UPSTASH_REDIS_REST_TOKEN,
     ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: allowMemoryRateLimitInProduction,
     HEALTH_SHOW_DETAILS: healthShowDetails,
+    ACTIVITY_LOG_RETENTION_DAYS: data.ACTIVITY_LOG_RETENTION_DAYS ?? 90,
   });
 
   if (!normalized.success) {

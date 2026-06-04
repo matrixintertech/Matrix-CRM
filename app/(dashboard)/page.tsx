@@ -116,7 +116,7 @@ export default async function DashboardPage() {
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, vendorPayments, ledgerEntries, recentRequests, companyProfile, topCompanyRows] =
+  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, vendorPayments, ledgerEntries, recentRequests, companyProfile, companyDirectory] =
     await Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
@@ -163,25 +163,15 @@ export default async function DashboardPage() {
             select: { name: true, code: true, status: true, email: true, phone: true },
           })
         : Promise.resolve(null),
-      isSuperAdmin && can("service_requests.read")
-        ? prisma.serviceRequest.groupBy({
-            by: ["servicePartnerId"],
+      isSuperAdmin && can("service_partners.read")
+        ? prisma.servicePartner.findMany({
             where: { deletedAt: null },
-            _count: { id: true },
-            orderBy: { _count: { id: "desc" } },
-            take: 5,
+            orderBy: [{ name: "asc" }],
+            take: 18,
+            select: { id: true, name: true },
           })
         : Promise.resolve([]),
     ]);
-
-  const topCompanyMeta =
-    isSuperAdmin && topCompanyRows.length > 0
-      ? await prisma.servicePartner.findMany({
-          where: { id: { in: topCompanyRows.map((row) => row.servicePartnerId) } },
-          select: { id: true, name: true, code: true },
-        })
-      : [];
-  const topCompanyNameMap = new Map(topCompanyMeta.map((entry) => [entry.id, `${entry.name} (${entry.code})`]));
 
   const countsByKey = {
     companies,
@@ -376,16 +366,19 @@ export default async function DashboardPage() {
         </aside>
       </div>
 
-      {isSuperAdmin && topCompanyRows.length > 0 ? (
+      {isSuperAdmin && companyDirectory.length > 0 ? (
         <section className="rounded-2xl border border-[#e3eaf6] bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-semibold text-[#122447]">Top Companies by Service Requests</h2>
-          <p className="mt-1 text-sm text-[#6f84a9]">Tenant activity ranking based on service request volume.</p>
+          <h2 className="text-xl font-semibold text-[#122447]">Company Directory</h2>
+          <p className="mt-1 text-sm text-[#6f84a9]">Open a company to view admins, users, clients, branches, requests, and financial summaries.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {topCompanyRows.map((row) => (
-              <div key={row.servicePartnerId} className="rounded-xl border border-[#e5ebf6] bg-[#fbfcff] p-4 text-sm">
-                <p className="font-medium text-[#10254b]">{topCompanyNameMap.get(row.servicePartnerId) ?? row.servicePartnerId}</p>
-                <p className="mt-1 text-[#6f84a9]">Requests: {row._count.id}</p>
-              </div>
+            {companyDirectory.map((company) => (
+              <Link
+                key={company.id}
+                href={`/service-partners/${company.id}`}
+                className="rounded-xl border border-[#e5ebf6] bg-[#fbfcff] p-4 text-sm font-medium text-[#10254b] transition hover:border-[#bfd0f2] hover:bg-[#f8fbff]"
+              >
+                {company.name}
+              </Link>
             ))}
           </div>
         </section>

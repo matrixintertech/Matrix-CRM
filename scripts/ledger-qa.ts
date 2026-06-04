@@ -3,7 +3,6 @@ import {
   InvoiceStatus,
   LedgerSourceType,
   PaymentStatus,
-  PrismaClient,
   RoleScope,
   ServicePartnerStatus,
   ServiceRequestStatus,
@@ -15,9 +14,10 @@ import { listLedgerEntries } from "../features/ledger/services/ledger.service";
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
 import { createInvoicePayment, updateInvoicePaymentStatus } from "../features/payments/services/payment.service";
 import { hasPermission } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { configureQaUserRoleAccess } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

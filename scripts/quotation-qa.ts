@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   ApprovalStatus,
-  PrismaClient,
   RateCardStatus,
   ServicePartnerStatus,
   ServiceRequestStatus,
@@ -19,10 +18,11 @@ import {
   updateQuotationStatus,
 } from "../features/quotations/services/quotation.service";
 import { hasPermission } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 import { configureQaUserRoleAccess } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

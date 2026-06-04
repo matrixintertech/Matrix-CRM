@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
 import { getUserPermissions, hasPermission, isPlatformOnlyPermissionKey } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { scopeByTenant } from "../lib/auth/tenant";
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
 import {
@@ -11,7 +10,7 @@ import {
 } from "../features/users/services/user.service";
 import { ensureQaRoleWithPermissions, replaceUserRoles } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

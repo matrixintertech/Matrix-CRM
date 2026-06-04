@@ -31,6 +31,7 @@ export const createTaskSchema = z.object({
   description: optionalString(1000),
   assigneeUserId: optionalUuid,
   status: z.nativeEnum(TaskStatus).default(TaskStatus.YET_TO_START),
+  requestedAt: optionalDate,
   startDate: optionalDate,
   dueDate: optionalDate,
 });
@@ -40,6 +41,7 @@ export const updateTaskSchema = z.object({
   description: optionalString(1000),
   assigneeUserId: optionalUuid,
   status: z.nativeEnum(TaskStatus),
+  requestedAt: optionalDate,
   startDate: optionalDate,
   dueDate: optionalDate,
 });

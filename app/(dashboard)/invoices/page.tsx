@@ -2,6 +2,7 @@ import { InvoiceStatus } from "@prisma/client";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { InvoicesTable } from "@/features/invoices/components/invoices-table";
 import { listInvoices, listVendorsForInvoiceForm } from "@/features/invoices/services/invoice.service";
@@ -32,7 +33,11 @@ function getSuccessMessage(code?: string) {
 
 export default async function InvoicesPage({ searchParams }: InvoicesPageProps) {
   const session = await requirePermission("invoices.read");
-  const [params, canCreate] = await Promise.all([resolveSearchParams(searchParams), hasPermission(session, "invoices.create")]);
+  const [params, canCreate, canExport] = await Promise.all([
+    resolveSearchParams(searchParams),
+    hasPermission(session, "invoices.create"),
+    hasPermission(session, "invoices.export"),
+  ]);
 
   const q = getStringParam(params, "q");
   const statusParam = getStringParam(params, "status");
@@ -101,10 +106,11 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
             </option>
           ))}
         </select>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <button type="submit" className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium">
             Apply
           </button>
+          {canExport ? <ExportActions moduleKey="invoices" query={{ q, status, vendorId }} /> : null}
         </div>
       </form>
 

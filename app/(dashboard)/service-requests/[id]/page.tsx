@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { createQuotationAction } from "@/features/quotations/actions/quotation.actions";
 import { QuotationForm } from "@/features/quotations/components/quotation-form";
@@ -127,6 +128,7 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
   const [
     canUpdate,
     canDelete,
+    canStatusUpdate,
     canResponsibilityRead,
     canResponsibilityUpdate,
     canTaskRead,
@@ -134,15 +136,18 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
     canTaskUpdate,
     canTaskDelete,
     canTaskStatusUpdate,
+    canTaskExport,
     canQuotationRead,
     canQuotationCreate,
     canQuotationUpdate,
     canQuotationDelete,
     canQuotationStatusUpdate,
     canQuotationSubmit,
+    canQuotationExport,
   ] = await Promise.all([
     hasPermission(session, "service_requests.update"),
     hasPermission(session, "service_requests.delete"),
+    hasPermission(session, "service_requests.status.update"),
     hasPermission(session, "service_requests.responsibility.read"),
     hasPermission(session, "service_requests.responsibility.update"),
     hasPermission(session, "tasks.read"),
@@ -150,12 +155,14 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
     hasPermission(session, "tasks.update"),
     hasPermission(session, "tasks.delete"),
     hasPermission(session, "tasks.status.update"),
+    hasPermission(session, "tasks.export"),
     hasPermission(session, "quotations.read"),
     hasPermission(session, "quotations.create"),
     hasPermission(session, "quotations.update"),
     hasPermission(session, "quotations.delete"),
     hasPermission(session, "quotations.status.update"),
     hasPermission(session, "quotations.submit"),
+    hasPermission(session, "quotations.export"),
   ]);
 
   const [responsibility, taskBundle, taskUsers, quotationBundle, quotationItemOptions] = await Promise.all([
@@ -226,7 +233,10 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
           )}
 
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Work Items</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Work Items</h2>
+              {canTaskRead && canTaskExport ? <ExportActions moduleKey="tasks" query={{ serviceRequestId: serviceRequest.id }} /> : null}
+            </div>
             {canTaskRead && taskBundle ? (
               <TasksTable
                 serviceRequestId={serviceRequest.id}
@@ -256,7 +266,10 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
           </div>
 
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Quotations</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Quotations</h2>
+              {canQuotationRead && canQuotationExport ? <ExportActions moduleKey="quotations" query={{ q: serviceRequest.serviceNumber }} /> : null}
+            </div>
             {canQuotationRead && quotationBundle ? (
               <div className="space-y-4">
                 <QuotationSummaryCard quotations={mappedQuotations} />
@@ -300,12 +313,13 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
           </div>
         </div>
 
-        {canUpdate ? (
+        {canStatusUpdate || canDelete ? (
           <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
             <ServiceRequestStatusActions
               serviceRequestId={serviceRequest.id}
               currentStatus={serviceRequest.status}
+              canUpdateStatus={canStatusUpdate}
               canDelete={canDelete}
             />
           </div>

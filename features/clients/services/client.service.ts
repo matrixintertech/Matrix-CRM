@@ -9,6 +9,7 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListClientsInput = {
   q?: string;
   status?: ClientStatus;
+  servicePartnerId?: string;
   page?: number;
   pageSize?: number;
 };
@@ -34,6 +35,10 @@ export async function listClients(session: Session, input: ListClientsInput) {
 
   if (input.status) {
     where.status = input.status;
+  }
+
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
   }
 
   if (input.q?.trim()) {

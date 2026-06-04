@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   InvoiceStatus,
   PaymentStatus,
-  PrismaClient,
   RoleScope,
   ServicePartnerStatus,
   UserStatus,
@@ -12,10 +11,11 @@ import {
 import { getFinanceReportData } from "../features/finance-reports/services/finance-report.service";
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
 import { syncLedgerForInvoicePayment, syncLedgerForVendorPayment } from "../features/ledger/services/ledger.service";
+import { createPrismaClient } from "../lib/db/client";
 import { ensureBaselinePermissions } from "../lib/rbac/bootstrap";
 import { configureQaUserRoleAccess } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

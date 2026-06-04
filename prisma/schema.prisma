@@ -158,6 +158,7 @@ enum OtpPurpose {
   LOGIN
   ADMIN_LOGIN
   PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 enum OtpChannel {
@@ -177,6 +178,16 @@ enum NotificationStatus {
   SENT
   FAILED
   READ
+}
+
+enum EmailChangeRequestStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  OTP_SENT
+  VERIFIED
+  EXPIRED
+  CANCELLED
 }
 
 enum MessageType {
@@ -200,6 +211,7 @@ enum ActivityEntityType {
   EXPENSE
   VENDOR_PAYMENT
   CONVERSATION
+  EMAIL_CHANGE_REQUEST
   OTHER
 }
 
@@ -261,6 +273,7 @@ model ServicePartner {
   messages              Message[]
   notifications         Notification[]
   otpChallenges         OtpChallenge[]
+  emailChangeRequests   EmailChangeRequest[]
   legacyIdMaps          LegacyIdMap[]
 
   @@index([status])
@@ -320,6 +333,8 @@ model User {
   notificationsReceived        Notification[]                @relation("NotificationRecipient")
   notificationsCreated         Notification[]                @relation("NotificationCreatedBy")
   otpChallenges                OtpChallenge[]
+  emailChangeRequests          EmailChangeRequest[]          @relation("EmailChangeRequestUser")
+  reviewedEmailChangeRequests  EmailChangeRequest[]          @relation("EmailChangeRequestReviewer")
   accounts                     Account[]
   sessions                     Session[]
 
@@ -850,6 +865,7 @@ model Task {
   status           TaskStatus @default(YET_TO_START)
   assigneeUserId   String?
   createdByUserId  String?
+  requestedAt      DateTime?
   startDate        DateTime?
   dueDate          DateTime?
   completedAt      DateTime?
@@ -1539,6 +1555,33 @@ model Notification {
   @@index([recipientUserId])
   @@index([status])
   @@index([createdAt])
+}
+
+model EmailChangeRequest {
+  id               String                   @id @default(uuid())
+  userId           String
+  servicePartnerId String
+  oldEmail         String
+  newEmail         String
+  status           EmailChangeRequestStatus @default(PENDING_APPROVAL)
+  requestedAt      DateTime                 @default(now())
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  verifiedAt       DateTime?
+  expiresAt        DateTime?
+  rejectionReason  String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  user           User           @relation("EmailChangeRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  reviewedBy     User?          @relation("EmailChangeRequestReviewer", fields: [reviewedByUserId], references: [id])
+
+  @@index([userId, status])
+  @@index([servicePartnerId, status])
+  @@index([newEmail])
+  @@index([requestedAt])
+  @@index([expiresAt])
 }
 
 model LegacyIdMap {

@@ -1,9 +1,10 @@
-import { PrismaClient, ServicePartnerStatus, UserStatus } from "@prisma/client";
+import { ServicePartnerStatus, UserStatus } from "@prisma/client";
 
 import { env } from "../lib/config/env";
+import { createPrismaClient } from "../lib/db/client";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 const parsedHeartbeatMs = Number(process.env.SEED_HEARTBEAT_MS ?? 30_000);
 const SEED_HEARTBEAT_MS = Number.isFinite(parsedHeartbeatMs) && parsedHeartbeatMs >= 5_000 ? parsedHeartbeatMs : 30_000;
 const seedStart = Date.now();

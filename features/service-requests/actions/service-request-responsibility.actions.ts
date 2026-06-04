@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { updateServiceRequestResponsibilities } from "@/features/service-requests/services/service-request-responsibility.service";
 import { logActivity } from "@/lib/activity/activity-log";
 import { requirePermission } from "@/lib/auth/rbac";
+import { notifyServiceRequestResponsibilitiesUpdated } from "@/lib/notifications/notification.service";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
 function getFormString(formData: FormData, key: string) {
@@ -51,6 +52,14 @@ export async function updateServiceRequestResponsibilitiesAction(serviceRequestI
       },
       servicePartnerId: updated.servicePartnerId,
     });
+    try {
+      await notifyServiceRequestResponsibilitiesUpdated(serviceRequestId, session.user.id);
+    } catch (notificationError) {
+      console.error("Service request responsibility notification failed", {
+        serviceRequestId,
+        reason: notificationError instanceof Error ? notificationError.message.slice(0, 200) : "unknown",
+      });
+    }
 
     revalidateServiceRequestPaths(serviceRequestId);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=responsibility-updated`);

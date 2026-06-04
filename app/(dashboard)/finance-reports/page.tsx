@@ -1,5 +1,6 @@
 import { InvoiceStatus, LedgerSourceType, PaymentStatus } from "@prisma/client";
 
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { CashMovementReport } from "@/features/finance-reports/components/cash-movement-report";
 import { FinanceReportFilters } from "@/features/finance-reports/components/finance-report-filters";
@@ -8,6 +9,7 @@ import { LedgerSummaryReport } from "@/features/finance-reports/components/ledge
 import { PayablesReport } from "@/features/finance-reports/components/payables-report";
 import { ReceivablesReport } from "@/features/finance-reports/components/receivables-report";
 import { getFinanceReportData } from "@/features/finance-reports/services/finance-report.service";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 
@@ -18,6 +20,7 @@ type FinanceReportsPageProps = {
 export default async function FinanceReportsPage({ searchParams }: FinanceReportsPageProps) {
   const session = await requirePermission("reports.read");
   const params = await resolveSearchParams(searchParams);
+  const canExport = await hasPermission(session, "reports.export");
 
   const q = getStringParam(params, "q");
   const invoiceStatus = Object.values(InvoiceStatus).find((value) => value === getStringParam(params, "invoiceStatus"));
@@ -59,6 +62,19 @@ export default async function FinanceReportsPage({ searchParams }: FinanceReport
         dateFrom={dateFrom ?? undefined}
         dateTo={dateTo ?? undefined}
       />
+      {canExport ? (
+        <ExportActions
+          moduleKey="finance-reports"
+          query={{
+            q,
+            invoiceStatus,
+            paymentStatus,
+            sourceType,
+            dateFrom,
+            dateTo,
+          }}
+        />
+      ) : null}
 
       <div className="grid gap-5">
         <ReceivablesReport rows={report.receivables} />

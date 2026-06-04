@@ -151,7 +151,7 @@ export async function updateServiceRequestAction(id: string, formData: FormData)
 }
 
 export async function updateServiceRequestStatusAction(id: string, formData: FormData) {
-  const session = await requirePermission("service_requests.update");
+  const session = await requirePermission("service_requests.status.update");
   const parsed = serviceRequestStatusSchema.safeParse({
     status: getFormString(formData, "status"),
     remarks: getFormString(formData, "remarks"),
@@ -213,4 +213,3 @@ export async function deleteServiceRequestAction(id: string, formData: FormData)
   revalidateServiceRequestPaths(id);
   redirect(getSafeRedirectPath(formData.get("redirectTo"), "/service-requests?success=deleted"));
 }
-

@@ -2,6 +2,7 @@ import { ServiceRequestStatus } from "@prisma/client";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { ServiceRequestsTable } from "@/features/service-requests/components/service-requests-table";
 import {
@@ -33,9 +34,10 @@ function getSuccessMessage(code?: string) {
 
 export default async function ServiceRequestsPage({ searchParams }: ServiceRequestsPageProps) {
   const session = await requirePermission("service_requests.read");
-  const [params, canCreate] = await Promise.all([
+  const [params, canCreate, canExport] = await Promise.all([
     resolveSearchParams(searchParams),
     hasPermission(session, "service_requests.create"),
+    hasPermission(session, "service_requests.export"),
   ]);
 
   const q = getStringParam(params, "q");
@@ -134,12 +136,25 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
           ))}
         </select>
         <div className="md:col-span-5">
-          <button
-            type="submit"
-            className="h-10 rounded-xl border border-[#2f5ef8] bg-[#f4f7ff] px-4 text-sm font-semibold text-[#2754ef] transition hover:bg-[#ebf0ff]"
-          >
-            Apply
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="h-10 rounded-xl border border-[#2f5ef8] bg-[#f4f7ff] px-4 text-sm font-semibold text-[#2754ef] transition hover:bg-[#ebf0ff]"
+            >
+              Apply
+            </button>
+            {canExport ? (
+              <ExportActions
+                moduleKey="service-requests"
+                query={{
+                  q,
+                  status,
+                  clientId,
+                  branchId,
+                }}
+              />
+            ) : null}
+          </div>
         </div>
       </form>
 

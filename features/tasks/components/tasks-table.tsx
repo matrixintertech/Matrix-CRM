@@ -13,6 +13,7 @@ type TaskRow = {
   description: string | null;
   status: TaskStatus;
   assigneeUserId: string | null;
+  requestedAt: Date | null;
   startDate: Date | null;
   dueDate: Date | null;
   completedAt: Date | null;
@@ -84,6 +85,8 @@ export function TasksTable({
               <th className="px-3 py-2">Work Item</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2">Responsible</th>
+              <th className="px-3 py-2">Created At</th>
+              <th className="px-3 py-2">Requested At</th>
               <th className="px-3 py-2">Due Date</th>
               <th className="px-3 py-2">Completed At</th>
               <th className="px-3 py-2">Updated</th>
@@ -103,6 +106,8 @@ export function TasksTable({
                   <StatusBadge value={task.status} />
                 </td>
                 <td className="px-3 py-2">{userLabel(task.assignee)}</td>
+                <td className="px-3 py-2">{formatDateTime(task.createdAt)}</td>
+                <td className="px-3 py-2">{formatDateTime(task.requestedAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.dueDate)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.completedAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.updatedAt)}</td>
@@ -145,8 +150,10 @@ export function TasksTable({
                     description: task.description,
                     assigneeUserId: task.assigneeUserId,
                     status: task.status,
+                    requestedAt: task.requestedAt,
                     startDate: task.startDate,
                     dueDate: task.dueDate,
+                    createdAt: task.createdAt,
                   }}
                 />
               </div>

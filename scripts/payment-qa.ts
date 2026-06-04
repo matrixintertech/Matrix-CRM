@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   InvoiceStatus,
   PaymentStatus,
-  PrismaClient,
   RoleScope,
   ServicePartnerStatus,
   ServiceRequestStatus,
@@ -20,9 +19,10 @@ import {
   voidInvoicePayment,
 } from "../features/payments/services/payment.service";
 import { hasPermission } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { configureQaUserRoleAccess } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

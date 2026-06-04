@@ -2,6 +2,7 @@ import { PaymentStatus } from "@prisma/client";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { SearchFilter } from "@/components/admin/search-filter";
 import { VendorPaymentSummaryCard } from "@/features/vendor-payments/components/vendor-payment-summary-card";
@@ -60,11 +61,12 @@ export default async function VendorPaymentsPage({ searchParams }: VendorPayment
   const page = getNumberParam(params, "page");
   const pageSize = getNumberParam(params, "pageSize");
 
-  const [canCreate, canUpdate, canDelete, canStatusUpdate, result] = await Promise.all([
+  const [canCreate, canUpdate, canDelete, canStatusUpdate, canExport, result] = await Promise.all([
     hasPermission(session, "vendor_payments.create"),
     hasPermission(session, "vendor_payments.update"),
     hasPermission(session, "vendor_payments.delete"),
     hasPermission(session, "vendor_payments.status.update"),
+    hasPermission(session, "vendor_payments.export"),
     listVendorPayments(session, { q, status, page, pageSize }),
   ]);
 
@@ -95,6 +97,7 @@ export default async function VendorPaymentsPage({ searchParams }: VendorPayment
         statusOptions={statusOptions}
         placeholder="Search by payment number, vendor, PO, or notes"
       />
+      {canExport ? <ExportActions moduleKey="vendor-payments" query={{ q, status }} /> : null}
 
       {result.vendorPayments.length === 0 ? (
         <EmptyState title="No vendor payments found" description="Record a vendor payment or adjust the applied filters." />

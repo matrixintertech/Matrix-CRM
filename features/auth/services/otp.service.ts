@@ -71,6 +71,25 @@ export type VerifyOtpResult =
       retryAfterSeconds?: number;
     };
 
+export type VerifyTargetOtpResult =
+  | {
+      ok: true;
+      challenge: {
+        id: string;
+        servicePartnerId: string;
+        userId: string | null;
+        target: string;
+        purpose: OtpPurpose;
+      };
+    }
+  | {
+      ok: false;
+      code: OtpErrorCode;
+      status: number;
+      message: string;
+      retryAfterSeconds?: number;
+    };
+
 const OTP_GENERIC_SEND_MESSAGE = "If this account exists, an OTP has been sent.";
 const OTP_GENERIC_VERIFY_MESSAGE = "Invalid or expired OTP.";
 
@@ -80,6 +99,136 @@ function makeRateLimitKey(segment: string, purpose: OtpPurpose, target: string, 
 
 function userAllowedForOtp(status: UserStatus, deletedAt: Date | null, servicePartnerId?: string): boolean {
   return status === "ACTIVE" && !deletedAt && Boolean(servicePartnerId);
+}
+
+export async function sendOtpChallengeToKnownTarget(
+  input: { servicePartnerId: string; userId?: string | null; target: string; purpose: OtpPurpose } & ActorContext
+): Promise<SendOtpResult> {
+  const otpConfig = getOtpConfig();
+
+  let normalizedTarget: string;
+  let channel: "EMAIL" | "SMS";
+
+  try {
+    const parsedTarget = normalizeLoginTarget(input.target);
+    normalizedTarget = parsedTarget.normalizedTarget;
+    channel = resolveOtpChannel(parsedTarget.kind);
+  } catch {
+    return {
+      ok: false,
+      code: "OTP_INVALID",
+      status: 400,
+      message: "Invalid OTP target.",
+    };
+  }
+
+  const maskedTarget = maskOtpTarget(normalizedTarget);
+  const sendRateLimit = await consumeRateLimit(
+    makeRateLimitKey("send", input.purpose, normalizedTarget, input.ipAddress),
+    otpConfig.sendRateLimitWindowSeconds,
+    otpConfig.sendRateLimitMax
+  );
+
+  if (sendRateLimit.reason === "backend_unavailable") {
+    return {
+      ok: false,
+      code: "RATE_LIMIT_UNAVAILABLE",
+      status: 503,
+      message: "OTP is temporarily unavailable. Please try again shortly.",
+      retryAfterSeconds: sendRateLimit.retryAfterSeconds,
+      maskedTarget,
+    };
+  }
+
+  if (!sendRateLimit.allowed) {
+    return {
+      ok: false,
+      code: "RATE_LIMITED",
+      status: 429,
+      message: "Too many OTP requests. Please try again later.",
+      retryAfterSeconds: sendRateLimit.retryAfterSeconds,
+      maskedTarget,
+    };
+  }
+
+  const latestChallenge = await prisma.otpChallenge.findFirst({
+    where: {
+      servicePartnerId: input.servicePartnerId,
+      target: normalizedTarget,
+      purpose: input.purpose,
+      userId: input.userId ?? null,
+      consumedAt: null,
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      createdAt: true,
+    },
+  });
+
+  if (latestChallenge) {
+    const cooldownRemaining =
+      otpConfig.resendCooldownSeconds - Math.floor((Date.now() - latestChallenge.createdAt.getTime()) / 1000);
+
+    if (cooldownRemaining > 0) {
+      return {
+        ok: false,
+        code: "OTP_COOLDOWN",
+        status: 429,
+        message: "Please wait before requesting another OTP.",
+        retryAfterSeconds: cooldownRemaining,
+        maskedTarget,
+      };
+    }
+  }
+
+  const code = makeOtpCode();
+  const expiresAt = new Date(Date.now() + otpConfig.expirySeconds * 1000);
+
+  const challenge = await prisma.otpChallenge.create({
+    data: {
+      servicePartnerId: input.servicePartnerId,
+      userId: input.userId ?? null,
+      purpose: input.purpose,
+      channel,
+      target: normalizedTarget,
+      codeHash: hashOtpCode(normalizedTarget, input.purpose, code),
+      expiresAt,
+      maxAttempts: otpConfig.maxAttempts,
+      ipAddress: input.ipAddress?.slice(0, 128) ?? null,
+      userAgent: input.userAgent?.slice(0, 500) ?? null,
+    },
+    select: { id: true },
+  });
+
+  const delivery = await sendOtpMessage({
+    channel,
+    target: normalizedTarget,
+    code,
+    purpose: input.purpose,
+  });
+
+  if (!delivery.ok) {
+    await prisma.otpChallenge.delete({ where: { id: challenge.id } });
+
+    return {
+      ok: false,
+      code: delivery.code === "PROVIDER_NOT_CONFIGURED" ? "OTP_PROVIDER_NOT_CONFIGURED" : "OTP_DELIVERY_FAILED",
+      status: delivery.code === "PROVIDER_NOT_CONFIGURED" ? 503 : 502,
+      message:
+        delivery.code === "PROVIDER_NOT_CONFIGURED"
+          ? "OTP delivery is temporarily unavailable. Please contact support."
+          : "Unable to deliver OTP right now. Please try again.",
+      maskedTarget,
+    };
+  }
+
+  return {
+    ok: true,
+    maskedTarget,
+    expiresInSeconds: otpConfig.expirySeconds,
+    resendAfterSeconds: otpConfig.resendCooldownSeconds,
+    ...(env().OTP_DEV_MODE && !env().IS_PRODUCTION && delivery.mode === "dev" ? { devOtpPreview: code } : {}),
+  };
 }
 
 export async function sendOtpChallenge(
@@ -441,6 +590,137 @@ export async function verifyOtpForLogin(
       status: user.status,
       roleKeys,
       isSuperAdmin,
+    },
+  };
+}
+
+export async function verifyOtpForTarget(
+  input: { target: string; purpose: OtpPurpose; code: string; userId?: string | null } & ActorContext
+): Promise<VerifyTargetOtpResult> {
+  let normalizedTarget: string;
+
+  try {
+    normalizedTarget = normalizeLoginTarget(input.target).normalizedTarget;
+  } catch {
+    return {
+      ok: false,
+      code: "OTP_INVALID",
+      status: 401,
+      message: OTP_GENERIC_VERIFY_MESSAGE,
+    };
+  }
+
+  const otpConfig = getOtpConfig();
+  const verifyRateLimit = await consumeRateLimit(
+    makeRateLimitKey("verify", input.purpose, normalizedTarget, input.ipAddress),
+    otpConfig.verifyRateLimitWindowSeconds,
+    otpConfig.verifyRateLimitMax
+  );
+
+  if (verifyRateLimit.reason === "backend_unavailable") {
+    return {
+      ok: false,
+      code: "RATE_LIMIT_UNAVAILABLE",
+      status: 503,
+      message: "OTP verification is temporarily unavailable. Please try again shortly.",
+      retryAfterSeconds: verifyRateLimit.retryAfterSeconds,
+    };
+  }
+
+  if (!verifyRateLimit.allowed) {
+    return {
+      ok: false,
+      code: "RATE_LIMITED",
+      status: 429,
+      message: "Too many OTP verification attempts. Please try again later.",
+      retryAfterSeconds: verifyRateLimit.retryAfterSeconds,
+    };
+  }
+
+  const challenge = await prisma.otpChallenge.findFirst({
+    where: {
+      target: normalizedTarget,
+      purpose: input.purpose,
+      consumedAt: null,
+      ...(input.userId ? { userId: input.userId } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      servicePartnerId: true,
+      userId: true,
+      target: true,
+      purpose: true,
+      codeHash: true,
+      expiresAt: true,
+      consumedAt: true,
+      attemptCount: true,
+      maxAttempts: true,
+    },
+  });
+
+  if (!challenge) {
+    return {
+      ok: false,
+      code: "OTP_INVALID",
+      status: 401,
+      message: OTP_GENERIC_VERIFY_MESSAGE,
+    };
+  }
+
+  const now = new Date();
+  if (challenge.expiresAt.getTime() < now.getTime()) {
+    return {
+      ok: false,
+      code: "OTP_EXPIRED",
+      status: 401,
+      message: OTP_GENERIC_VERIFY_MESSAGE,
+    };
+  }
+
+  if (challenge.attemptCount >= challenge.maxAttempts) {
+    return {
+      ok: false,
+      code: "OTP_ATTEMPTS_EXCEEDED",
+      status: 401,
+      message: OTP_GENERIC_VERIFY_MESSAGE,
+    };
+  }
+
+  const isValid = verifyOtpCodeHash(normalizedTarget, input.purpose, input.code, challenge.codeHash);
+  if (!isValid) {
+    await prisma.otpChallenge.update({
+      where: { id: challenge.id },
+      data: {
+        attemptCount: { increment: 1 },
+        lastAttemptAt: now,
+      },
+    });
+
+    return {
+      ok: false,
+      code: "OTP_INVALID",
+      status: 401,
+      message: OTP_GENERIC_VERIFY_MESSAGE,
+    };
+  }
+
+  await prisma.otpChallenge.update({
+    where: { id: challenge.id },
+    data: {
+      consumedAt: now,
+      lastAttemptAt: now,
+    },
+  });
+
+  return {
+    ok: true,
+    challenge: {
+      id: challenge.id,
+      servicePartnerId: challenge.servicePartnerId,
+      userId: challenge.userId,
+      target: challenge.target,
+      purpose: challenge.purpose,
     },
   };
 }

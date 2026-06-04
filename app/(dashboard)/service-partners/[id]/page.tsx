@@ -48,12 +48,18 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
     notFound();
   }
 
-  const [canUpdate, canDelete, canCreateUsers, canReadUsers, canUpdateUsers] = await Promise.all([
+  const [canUpdate, canDelete, canCreateUsers, canReadUsers, canUpdateUsers, canReadClients, canReadBranches, canReadRequests, canReadReports, canReadInvoices, canReadVendorPayments] = await Promise.all([
     hasPermission(session, "service_partners.update"),
     hasPermission(session, "service_partners.delete"),
     hasPermission(session, "users.create"),
     hasPermission(session, "users.read"),
     hasPermission(session, "users.update"),
+    hasPermission(session, "clients.read"),
+    hasPermission(session, "branches.read"),
+    hasPermission(session, "service_requests.read"),
+    hasPermission(session, "reports.read"),
+    hasPermission(session, "invoices.read"),
+    hasPermission(session, "vendor_payments.read"),
   ]);
   const canManage = canManageServicePartners(session);
   const companyAdmins =
@@ -83,6 +89,98 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
           take: 20,
         })
       : [];
+  const [recentClients, recentBranches, recentUsers, requestSummary, financeSummary] = await Promise.all([
+    canReadClients
+      ? prisma.client.findMany({
+          where: {
+            servicePartnerId: servicePartner.id,
+            deletedAt: null,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            status: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadBranches
+      ? prisma.branch.findMany({
+          where: {
+            servicePartnerId: servicePartner.id,
+            deletedAt: null,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadUsers
+      ? prisma.user.findMany({
+          where: {
+            servicePartnerId: servicePartner.id,
+            deletedAt: null,
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 6,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            status: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadRequests
+      ? prisma.serviceRequest.groupBy({
+          by: ["status"],
+          where: {
+            servicePartnerId: servicePartner.id,
+            deletedAt: null,
+          },
+          _count: {
+            _all: true,
+          },
+        })
+      : Promise.resolve([]),
+    canReadReports || canReadInvoices || canReadVendorPayments
+      ? Promise.all([
+          canReadInvoices
+            ? prisma.invoice.aggregate({
+                where: {
+                  servicePartnerId: servicePartner.id,
+                  deletedAt: null,
+                },
+                _sum: {
+                  grandTotal: true,
+                },
+                _count: {
+                  _all: true,
+                },
+              })
+            : Promise.resolve(null),
+          canReadVendorPayments
+            ? prisma.vendorPayment.aggregate({
+                where: {
+                  servicePartnerId: servicePartner.id,
+                },
+                _sum: {
+                  amount: true,
+                },
+                _count: {
+                  _all: true,
+                },
+              })
+            : Promise.resolve(null),
+        ])
+      : Promise.resolve([null, null] as const),
+  ]);
 
   const successMessage = getSuccessMessage(getStringParam(paramsValue, "success"));
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
@@ -183,7 +281,7 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
             <p className="text-[var(--muted)]">Users: {servicePartner._count.users}</p>
             <p className="text-[var(--muted)]">Clients: {servicePartner._count.clients}</p>
             <p className="text-[var(--muted)]">Branches: {servicePartner._count.branches}</p>
-            <Link href={`/clients?q=${encodeURIComponent(servicePartner.name)}`} className="mt-3 inline-block text-sm underline">
+            <Link href={`/clients?servicePartnerId=${servicePartner.id}`} className="mt-3 inline-block text-sm underline">
               Open clients
             </Link>
           </div>
@@ -244,6 +342,100 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        {canReadClients ? (
+          <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm">
+            <h2 className="mb-3 text-base font-semibold">Clients</h2>
+            {recentClients.length === 0 ? (
+              <p className="text-[var(--muted)]">No clients found for this company.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentClients.map((client) => (
+                  <Link key={client.id} href={`/clients/${client.id}`} className="block rounded-md border border-[var(--border)] px-3 py-2">
+                    <p className="font-medium">{client.name}</p>
+                    <p className="text-xs text-[var(--muted)]">{client.code} / {client.status}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {canReadBranches ? (
+          <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm">
+            <h2 className="mb-3 text-base font-semibold">Branches</h2>
+            {recentBranches.length === 0 ? (
+              <p className="text-[var(--muted)]">No branches found for this company.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentBranches.map((branch) => (
+                  <Link key={branch.id} href={`/branches/${branch.id}`} className="block rounded-md border border-[var(--border)] px-3 py-2">
+                    <p className="font-medium">{branch.name}</p>
+                    <p className="text-xs text-[var(--muted)]">{branch.code}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {canReadUsers ? (
+          <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm">
+            <h2 className="mb-3 text-base font-semibold">Users</h2>
+            {recentUsers.length === 0 ? (
+              <p className="text-[var(--muted)]">No users found for this company.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentUsers.map((user) => (
+                  <Link key={user.id} href={`/users/${user.id}`} className="block rounded-md border border-[var(--border)] px-3 py-2">
+                    <p className="font-medium">{user.name?.trim() || user.email || user.id}</p>
+                    <p className="text-xs text-[var(--muted)]">{user.email ?? "-"} / {user.status}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {canReadRequests ? (
+          <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm">
+            <h2 className="mb-3 text-base font-semibold">Service Request Summary</h2>
+            {requestSummary.length === 0 ? (
+              <p className="text-[var(--muted)]">No service requests found for this company.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {requestSummary.map((entry) => (
+                  <div key={entry.status} className="rounded-md border border-[var(--border)] px-3 py-2">
+                    <p className="font-medium">{entry.status}</p>
+                    <p className="text-xs text-[var(--muted)]">Count: {entry._count._all}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {canReadReports || canReadInvoices || canReadVendorPayments ? (
+          <div className="rounded-md border border-[var(--border)] bg-white p-5 text-sm xl:col-span-2">
+            <h2 className="mb-3 text-base font-semibold">Financial Summary</h2>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-md border border-[var(--border)] px-3 py-3">
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Invoices</p>
+                <p className="mt-1 font-medium">{financeSummary[0]?._count._all ?? 0}</p>
+              </div>
+              <div className="rounded-md border border-[var(--border)] px-3 py-3">
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Invoice Total</p>
+                <p className="mt-1 font-medium">{Number(financeSummary[0]?._sum.grandTotal ?? 0).toFixed(2)}</p>
+              </div>
+              <div className="rounded-md border border-[var(--border)] px-3 py-3">
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Vendor Payments</p>
+                <p className="mt-1 font-medium">{Number(financeSummary[1]?._sum.amount ?? 0).toFixed(2)}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </section>
   );

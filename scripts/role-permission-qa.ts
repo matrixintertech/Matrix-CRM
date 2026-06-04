@@ -1,11 +1,10 @@
-import { PrismaClient } from "@prisma/client";
-
 import { getUserPermissions, hasPermission, isPlatformOnlyPermissionKey } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
 import { listAssignableRoles } from "../features/users/services/user.service";
 import { ensureQaRoleWithPermissions, replaceUserRoles } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type NavRow = {
   id: string;

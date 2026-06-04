@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { PrismaClient, RfqStatus, ServicePartnerStatus, ServiceRequestStatus, UserStatus, VendorStatus } from "@prisma/client";
+import { RfqStatus, ServicePartnerStatus, ServiceRequestStatus, UserStatus, VendorStatus } from "@prisma/client";
 
 import {
   createRfq,
@@ -21,11 +21,12 @@ import {
 import { rfqUpsertSchema } from "../features/rfqs/validations";
 import { vendorUpsertSchema } from "../features/vendors/validations";
 import { hasPermission } from "../lib/auth/permissions";
+import { createPrismaClient } from "../lib/db/client";
 import { getNavigationForSession } from "../features/navigation/services/navigation.service";
 import { ensureTenantRbac } from "../lib/rbac/bootstrap";
 import { configureQaUserRoleAccess } from "./qa-rbac";
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 type QAStatus = "PASS" | "FAIL";
 type QAResult = {

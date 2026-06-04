@@ -2,11 +2,13 @@ import { LedgerSourceType } from "@prisma/client";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { LedgerFilters } from "@/features/ledger/components/ledger-filters";
 import { LedgerSummaryCard } from "@/features/ledger/components/ledger-summary-card";
 import { LedgerTable } from "@/features/ledger/components/ledger-table";
 import { listLedgerEntries } from "@/features/ledger/services/ledger.service";
+import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getNumberParam, getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 
@@ -17,6 +19,7 @@ type LedgerPageProps = {
 export default async function LedgerPage({ searchParams }: LedgerPageProps) {
   const session = await requirePermission("ledger.read");
   const params = await resolveSearchParams(searchParams);
+  const canExport = await hasPermission(session, "ledger.export");
 
   const q = getStringParam(params, "q");
   const sourceTypeParam = getStringParam(params, "sourceType");
@@ -66,6 +69,8 @@ export default async function LedgerPage({ searchParams }: LedgerPageProps) {
         totalCredit={result.summary.totalCredit}
         netAmount={result.summary.netAmount}
       />
+
+      {canExport ? <ExportActions moduleKey="ledger" query={{ q, sourceType, dateFrom, dateTo }} /> : null}
 
       <LedgerFilters q={q} sourceType={sourceType} dateFrom={dateFrom} dateTo={dateTo} />
 

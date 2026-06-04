@@ -24,8 +24,10 @@ type TaskFormProps = {
     description: string | null;
     assigneeUserId: string | null;
     status: TaskStatus;
+    requestedAt: Date | null;
     startDate: Date | null;
     dueDate: Date | null;
+    createdAt?: Date | null;
   };
   compact?: boolean;
 };
@@ -43,6 +45,16 @@ function toDateInput(value: Date | null) {
     return "";
   }
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function toDateTimeLocalInput(value: Date | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 function userLabel(user: TaskUserOption) {
@@ -121,6 +133,26 @@ export function TaskForm({
               </option>
             ))}
           </select>
+        </label>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Created At</span>
+          <input
+            value={task?.createdAt ? toDateTimeLocalInput(task.createdAt) : "Auto-recorded on save"}
+            readOnly
+            className="h-9 w-full rounded-md border border-[var(--border)] bg-slate-50 px-3 text-slate-600"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Requested Date/Time</span>
+          <input
+            type="datetime-local"
+            name="requestedAt"
+            defaultValue={toDateTimeLocalInput(task?.requestedAt)}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+          />
         </label>
       </div>
 

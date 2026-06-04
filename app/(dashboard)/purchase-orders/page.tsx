@@ -2,6 +2,7 @@ import { PurchaseOrderStatus } from "@prisma/client";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
+import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
 import { PurchaseOrdersTable } from "@/features/purchase-orders/components/purchase-orders-table";
 import { listPurchaseOrders, listVendorsForPurchaseOrderForm } from "@/features/purchase-orders/services/purchase-order.service";
@@ -32,9 +33,10 @@ function getSuccessMessage(code?: string) {
 
 export default async function PurchaseOrdersPage({ searchParams }: PurchaseOrdersPageProps) {
   const session = await requirePermission("purchase_orders.read");
-  const [params, canCreate] = await Promise.all([
+  const [params, canCreate, canExport] = await Promise.all([
     resolveSearchParams(searchParams),
     hasPermission(session, "purchase_orders.create"),
+    hasPermission(session, "purchase_orders.export"),
   ]);
 
   const q = getStringParam(params, "q");
@@ -104,10 +106,11 @@ export default async function PurchaseOrdersPage({ searchParams }: PurchaseOrder
             </option>
           ))}
         </select>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <button type="submit" className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium">
             Apply
           </button>
+          {canExport ? <ExportActions moduleKey="purchase-orders" query={{ q, status, vendorId }} /> : null}
         </div>
       </form>
 
