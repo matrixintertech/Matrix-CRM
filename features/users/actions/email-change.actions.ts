@@ -64,7 +64,7 @@ export async function sendEmailChangeOtpAction(formData: FormData) {
   }
 
   try {
-    const request = await sendEmailChangeVerificationOtp(requestId);
+    const request = await sendEmailChangeVerificationOtp(session, requestId);
     await logActivity({
       action: "email_change.otp_sent",
       module: "email_change_requests",

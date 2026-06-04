@@ -89,6 +89,9 @@ export async function ensureQaRoleWithPermissions(prisma: PrismaClient, input: Q
         },
       });
     }
+  }, {
+    maxWait: 10_000,
+    timeout: 20_000,
   });
 
   return role;
@@ -126,6 +129,9 @@ export async function replaceUserRoles(prisma: PrismaClient, input: { userId: st
         },
       });
     }
+  }, {
+    maxWait: 10_000,
+    timeout: 20_000,
   });
 }
 

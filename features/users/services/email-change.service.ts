@@ -50,6 +50,56 @@ async function notifyEmailAddress(to: string, subject: string, lines: string[]) 
   });
 }
 
+async function loadEmailChangeRequestForOtpById(requestId: string) {
+  return prisma.emailChangeRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      user: {
+        select: {
+          id: true,
+          servicePartnerId: true,
+          name: true,
+        },
+      },
+    },
+  });
+}
+
+async function sendEmailChangeVerificationOtpForRequest(request: Awaited<ReturnType<typeof loadEmailChangeRequestForOtpById>>) {
+  if (!request) {
+    throw new Error("Email change request not found.");
+  }
+
+  if (
+    request.status !== EmailChangeRequestStatus.APPROVED &&
+    request.status !== EmailChangeRequestStatus.OTP_SENT
+  ) {
+    throw new Error("Email change request is not ready for verification.");
+  }
+
+  await assertEmailAvailable(request.newEmail, request.userId);
+
+  const delivery = await sendOtpChallengeToKnownTarget({
+    servicePartnerId: request.servicePartnerId,
+    userId: request.userId,
+    target: request.newEmail,
+    purpose: OtpPurpose.EMAIL_CHANGE,
+  });
+
+  if (!delivery.ok) {
+    throw new Error(delivery.message);
+  }
+
+  const expiresAt = new Date(Date.now() + env().OTP_EXPIRY_SECONDS * 1000);
+  return prisma.emailChangeRequest.update({
+    where: { id: request.id },
+    data: {
+      status: EmailChangeRequestStatus.OTP_SENT,
+      expiresAt,
+    },
+  });
+}
+
 export async function listEmailChangeRequests(session: Session, input: { status?: EmailChangeRequestStatus; q?: string }) {
   const where: Prisma.EmailChangeRequestWhereInput = {
     ...getEmailChangeRequestScope(session),
@@ -192,9 +242,13 @@ export async function getEmailChangeRequestById(session: Session, requestId: str
   });
 }
 
-export async function sendEmailChangeVerificationOtp(requestId: string) {
-  const request = await prisma.emailChangeRequest.findUnique({
-    where: { id: requestId },
+export async function sendEmailChangeVerificationOtp(session: Session, requestId: string) {
+  const request = await prisma.emailChangeRequest.findFirst({
+    where: {
+      id: requestId,
+      userId: session.user.id,
+      ...(isScopedToTenant(session) ? { servicePartnerId: session.user.servicePartnerId } : {}),
+    },
     include: {
       user: {
         select: {
@@ -206,38 +260,7 @@ export async function sendEmailChangeVerificationOtp(requestId: string) {
     },
   });
 
-  if (!request) {
-    throw new Error("Email change request not found.");
-  }
-
-  if (
-    request.status !== EmailChangeRequestStatus.APPROVED &&
-    request.status !== EmailChangeRequestStatus.OTP_SENT
-  ) {
-    throw new Error("Email change request is not ready for verification.");
-  }
-
-  await assertEmailAvailable(request.newEmail, request.userId);
-
-  const delivery = await sendOtpChallengeToKnownTarget({
-    servicePartnerId: request.servicePartnerId,
-    userId: request.userId,
-    target: request.newEmail,
-    purpose: OtpPurpose.EMAIL_CHANGE,
-  });
-
-  if (!delivery.ok) {
-    throw new Error(delivery.message);
-  }
-
-  const expiresAt = new Date(Date.now() + env().OTP_EXPIRY_SECONDS * 1000);
-  return prisma.emailChangeRequest.update({
-    where: { id: request.id },
-    data: {
-      status: EmailChangeRequestStatus.OTP_SENT,
-      expiresAt,
-    },
-  });
+  return sendEmailChangeVerificationOtpForRequest(request);
 }
 
 export async function approveEmailChangeRequest(session: Session, requestId: string) {
@@ -260,7 +283,7 @@ export async function approveEmailChangeRequest(session: Session, requestId: str
     },
   });
 
-  return sendEmailChangeVerificationOtp(request.id);
+  return sendEmailChangeVerificationOtpForRequest(await loadEmailChangeRequestForOtpById(request.id));
 }
 
 export async function rejectEmailChangeRequest(session: Session, requestId: string, rejectionReason?: string | null) {

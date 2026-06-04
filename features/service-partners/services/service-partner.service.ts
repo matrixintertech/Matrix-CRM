@@ -2,7 +2,6 @@ import { Prisma, ServicePartnerStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { ServicePartnerUpsertInput } from "@/features/service-partners/validations";
-import { scopeByTenant } from "@/lib/auth/tenant";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
@@ -24,7 +23,13 @@ function normalizeEmail(value?: string | null) {
 }
 
 export function getServicePartnerScopeWhere(session: Session): Prisma.ServicePartnerWhereInput {
-  return scopeByTenant(session, {});
+  if (session.user.isSuperAdmin) {
+    return {};
+  }
+
+  return {
+    id: session.user.servicePartnerId,
+  };
 }
 
 export function canManageServicePartners(session: Session) {
