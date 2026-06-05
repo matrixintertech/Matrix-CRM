@@ -22,14 +22,29 @@ async function readWorkspaceFile(...parts: string[]) {
 async function main() {
   const results: Check[] = [];
 
-  const [stateCount, cityCount, cities] = await Promise.all([
-    prisma.state.count({ where: { isActive: true } }),
-    prisma.city.count({ where: { isActive: true } }),
-    prisma.city.findMany({
-      where: { isActive: true },
-      select: { stateId: true, name: true },
-    }),
-  ]);
+  const states = await prisma.state.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      cities: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { name: true },
+      },
+    },
+  });
+
+  const stateCount = states.length;
+  const cityCount = states.reduce((sum, state) => sum + state.cities.length, 0);
+  const cities = states.flatMap((state) =>
+    state.cities.map((city) => ({
+      stateId: state.id,
+      name: city.name,
+    }))
+  );
+  const cityNamesByState = new Map(states.map((state) => [state.name, new Set(state.cities.map((city) => city.name.toLowerCase()))]));
   const duplicateCities = Array.from(
     cities.reduce((counts, city) => {
       const key = `${city.stateId}:${city.name.toLowerCase()}`;
@@ -37,37 +52,75 @@ async function main() {
       return counts;
     }, new Map<string, number>()).entries()
   ).filter(([, count]) => count > 1);
+  const largeStates = ["Andhra Pradesh", "Gujarat", "Karnataka", "Maharashtra", "Tamil Nadu", "Uttar Pradesh", "West Bengal"];
+  const largeStatesOverThreshold = largeStates.every((stateName) => (cityNamesByState.get(stateName)?.size ?? 0) > 3);
 
-  pushCheck(results, "db.states_seeded", stateCount > 0, `active_states=${stateCount}`);
-  pushCheck(results, "db.cities_seeded", cityCount > 0, `active_cities=${cityCount}`);
+  pushCheck(results, "db.states_seeded", stateCount >= 36, `active_states=${stateCount}`);
+  pushCheck(results, "db.cities_seeded", cityCount >= 300, `active_cities=${cityCount}`);
+  pushCheck(results, "db.large_states_have_more_than_three_cities", largeStatesOverThreshold);
   pushCheck(results, "db.city_unique_per_state", duplicateCities.length === 0, `duplicates=${duplicateCities.length}`);
-
-  const [servicePartnerFormSource, servicePartnerServiceSource, createPageSource, editPageSource] = await Promise.all([
-    readWorkspaceFile("features", "service-partners", "components", "service-partner-form.tsx"),
-    readWorkspaceFile("features", "service-partners", "services", "service-partner.service.ts"),
-    readWorkspaceFile("app", "(dashboard)", "service-partners", "new", "page.tsx"),
-    readWorkspaceFile("app", "(dashboard)", "service-partners", "[id]", "edit", "page.tsx"),
-  ]);
-
-  pushCheck(results, "form.state_select", servicePartnerFormSource.includes('name="state"') && servicePartnerFormSource.includes("Select state"));
   pushCheck(
     results,
-    "form.city_select_depends_on_state",
-    servicePartnerFormSource.includes('name="city"') &&
-      servicePartnerFormSource.includes("Select city") &&
-      servicePartnerFormSource.includes('disabled={!selectedState}')
+    "db.city_lists_are_state_specific",
+    Boolean(cityNamesByState.get("Karnataka")?.has("bengaluru")) &&
+      !Boolean(cityNamesByState.get("Delhi")?.has("bengaluru")) &&
+      Boolean(cityNamesByState.get("Delhi")?.has("new delhi")) &&
+      Boolean(cityNamesByState.get("Maharashtra")?.has("mumbai"))
   );
-  pushCheck(results, "form.city_resets_on_state_change", servicePartnerFormSource.includes('setSelectedCity("")'));
+
+  const [servicePartnerFormSource, servicePartnerServiceSource, locationServiceSource, createPageSource, editPageSource, searchableSelectSource] =
+    await Promise.all([
+      readWorkspaceFile("features", "service-partners", "components", "service-partner-form.tsx"),
+      readWorkspaceFile("features", "service-partners", "services", "service-partner.service.ts"),
+      readWorkspaceFile("features", "locations", "services", "location.service.ts"),
+      readWorkspaceFile("app", "(dashboard)", "service-partners", "new", "page.tsx"),
+      readWorkspaceFile("app", "(dashboard)", "service-partners", "[id]", "edit", "page.tsx"),
+      readWorkspaceFile("components", "admin", "searchable-select.tsx"),
+    ]);
+
+  pushCheck(
+    results,
+    "ui.searchable_select_source_exists",
+    searchableSelectSource.includes('"use client"') &&
+      searchableSelectSource.includes('type="hidden"') &&
+      searchableSelectSource.includes('role="combobox"') &&
+      searchableSelectSource.includes("Type to search...")
+  );
+  pushCheck(
+    results,
+    "form.state_searchable_select",
+    servicePartnerFormSource.includes("SearchableSelect") &&
+      servicePartnerFormSource.includes('label="State"') &&
+      servicePartnerFormSource.includes('name="state"') &&
+      servicePartnerFormSource.includes("Type state name...")
+  );
+  pushCheck(
+    results,
+    "form.city_searchable_select",
+    servicePartnerFormSource.includes('label="City"') &&
+      servicePartnerFormSource.includes('name="city"') &&
+      servicePartnerFormSource.includes("Type city name...") &&
+      servicePartnerFormSource.includes('placeholder={selectedState ? "Select city" : "Select state first"}')
+  );
+  pushCheck(
+    results,
+    "form.city_resets_on_state_change",
+    servicePartnerFormSource.includes("function handleStateChange") && servicePartnerFormSource.includes('setSelectedCity("")')
+  );
   pushCheck(
     results,
     "form.edit_preselect_source_exists",
-    createPageSource.includes("listActiveStatesWithCities") && editPageSource.includes("listActiveStatesWithCities")
+    servicePartnerFormSource.includes("initialStateValue") &&
+      servicePartnerFormSource.includes("initialCityValue") &&
+      createPageSource.includes("listActiveStatesWithCities") &&
+      editPageSource.includes("listActiveStatesWithCities")
   );
   pushCheck(
     results,
     "service.validation_rejects_cross_state_city",
     servicePartnerServiceSource.includes("resolveStateCitySelection") &&
-      servicePartnerServiceSource.includes("allowLegacyPair")
+      servicePartnerServiceSource.includes("allowLegacyPair") &&
+      locationServiceSource.includes("Select a valid city for the chosen state.")
   );
 
   const selectorFiles = [
@@ -92,7 +145,6 @@ async function main() {
   const selectorSources = await Promise.all(selectorFiles.map((parts) => readWorkspaceFile(...parts)));
   const selectorCoverage = selectorSources.every((source) => source.includes("getServicePartnerDisplayLabel("));
   pushCheck(results, "labels.service_partner_selectors_use_helper", selectorCoverage, `checked_files=${selectorFiles.length}`);
-
   pushCheck(
     results,
     "tenant_scope_intact",

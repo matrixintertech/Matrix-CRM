@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { ServicePartnerStatus } from "@prisma/client";
 
 import { FormActions } from "@/components/admin/form-actions";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/admin/searchable-select";
 
 type CityOption = {
   id: string;
@@ -60,6 +61,13 @@ function findCityByName(cities: CityOption[], value?: string | null) {
   return cities.find((city) => city.name.trim().toLowerCase() === normalizedValue);
 }
 
+function toSelectOption(value: string): SearchableSelectOption {
+  return {
+    value,
+    label: value,
+  };
+}
+
 export function ServicePartnerForm({ action, cancelHref, errorMessage, states, servicePartner }: ServicePartnerFormProps) {
   const initialStateValue = normalizeLocationValue(servicePartner?.state);
   const initialCityValue = normalizeLocationValue(servicePartner?.city);
@@ -88,7 +96,7 @@ export function ServicePartnerForm({ action, cancelHref, errorMessage, states, s
     ];
   }, [selectedState, selectedStateRecord, states]);
 
-  const cityOptions = useMemo(() => {
+  const availableCityOptions = useMemo(() => {
     const baseCities = selectedStateRecord?.cities ?? [];
     if (!selectedCity || findCityByName(baseCities, selectedCity)) {
       return baseCities;
@@ -103,27 +111,31 @@ export function ServicePartnerForm({ action, cancelHref, errorMessage, states, s
     ];
   }, [selectedCity, selectedStateRecord]);
 
-  useEffect(() => {
-    if (!selectedState) {
-      if (selectedCity) {
-        setSelectedCity("");
-      }
-      return;
-    }
-
-    if (!selectedStateRecord) {
-      return;
-    }
-
-    if (selectedCity && !findCityByName(selectedStateRecord.cities, selectedCity)) {
-      setSelectedCity("");
-    }
-  }, [selectedCity, selectedState, selectedStateRecord]);
+  const stateSelectOptions = useMemo(() => stateOptions.map((state) => toSelectOption(state.name)), [stateOptions]);
+  const citySelectOptions = useMemo(() => availableCityOptions.map((city) => toSelectOption(city.name)), [availableCityOptions]);
 
   const isLegacyState = Boolean(selectedState) && !selectedStateRecord;
   const isLegacyCity =
     Boolean(selectedCity) &&
     (!selectedStateRecord || !findCityByName(selectedStateRecord.cities, selectedCity));
+
+  function handleStateChange(nextState: string) {
+    setSelectedState(nextState);
+
+    const nextStateRecord = findStateByName(states, nextState);
+    if (!nextState) {
+      setSelectedCity("");
+      return;
+    }
+
+    if (!nextStateRecord) {
+      return;
+    }
+
+    if (selectedCity && !findCityByName(nextStateRecord.cities, selectedCity)) {
+      setSelectedCity("");
+    }
+  }
 
   return (
     <form action={action} className="space-y-5 rounded-md border border-[var(--border)] bg-white p-5">
@@ -199,41 +211,33 @@ export function ServicePartnerForm({ action, cancelHref, errorMessage, states, s
             maxLength={300}
           />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">State</span>
-          <select
+        <div className="space-y-1 text-sm">
+          <SearchableSelect
+            label="State"
             name="state"
             value={selectedState}
-            onChange={(event) => setSelectedState(event.target.value)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-          >
-            <option value="">Select state</option>
-            {stateOptions.map((state) => (
-              <option key={state.id} value={state.name}>
-                {state.name}
-              </option>
-            ))}
-          </select>
+            onChange={handleStateChange}
+            options={stateSelectOptions}
+            placeholder="Select state"
+            searchPlaceholder="Type state name..."
+            emptyMessage="No matching states found."
+          />
           {isLegacyState ? <p className="text-xs text-amber-700">Current state is a legacy value outside the reference list.</p> : null}
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">City</span>
-          <select
+        </div>
+        <div className="space-y-1 text-sm">
+          <SearchableSelect
+            label="City"
             name="city"
             value={selectedCity}
-            onChange={(event) => setSelectedCity(event.target.value)}
+            onChange={setSelectedCity}
+            options={citySelectOptions}
+            placeholder={selectedState ? "Select city" : "Select state first"}
+            searchPlaceholder="Type city name..."
+            emptyMessage={selectedState ? "No matching cities found." : "Select state first."}
             disabled={!selectedState}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3 disabled:bg-slate-50"
-          >
-            <option value="">{selectedState ? "Select city" : "Select state first"}</option>
-            {cityOptions.map((city) => (
-              <option key={city.id} value={city.name}>
-                {city.name}
-              </option>
-            ))}
-          </select>
+          />
           {isLegacyCity ? <p className="text-xs text-amber-700">Current city is a legacy value outside the selected state&apos;s reference list.</p> : null}
-        </label>
+        </div>
         <label className="space-y-1 text-sm">
           <span className="font-medium">Country</span>
           <input
