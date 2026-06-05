@@ -8,6 +8,7 @@ import { BranchForm } from "@/features/branches/components/branch-form";
 import { getBranchById, listBranchServicePartnersForForm, listClientsForBranchForm } from "@/features/branches/services/branch.service";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type EditBranchPageProps = {
   params: Promise<{ id: string }>;
@@ -66,7 +67,7 @@ export default async function EditBranchPage({ params, searchParams }: EditBranc
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

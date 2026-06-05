@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FormActions } from "@/components/admin/form-actions";
 import { PurchaseOrderLinesForm } from "@/features/purchase-orders/components/purchase-order-lines-form";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type ServicePartnerOption = {
   id: string;
   name: string;
+  legalName?: string | null;
   code: string;
 };
 
@@ -186,7 +188,7 @@ export function PurchaseOrderForm({
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

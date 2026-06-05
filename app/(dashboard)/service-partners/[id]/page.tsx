@@ -9,6 +9,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { prisma } from "@/lib/db/prisma";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
+import { getServicePartnerPrimaryName } from "@/lib/service-partners/display";
 import { formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type ServicePartnerDetailPageProps = {
@@ -188,7 +189,7 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
   return (
     <section className="space-y-5">
       <PageHeader
-        title={servicePartner.name}
+        title={getServicePartnerPrimaryName(servicePartner)}
         description="Review service partner details and tenant-level statistics."
         action={canUpdate && canManage ? { label: "Edit service partner", href: `/service-partners/${servicePartner.id}/edit` } : undefined}
       />
@@ -219,7 +220,7 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Name</dt>
-                <dd>{servicePartner.name}</dd>
+                <dd>{getServicePartnerPrimaryName(servicePartner)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Legal name</dt>

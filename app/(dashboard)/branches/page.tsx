@@ -7,6 +7,7 @@ import { listBranchServicePartnersForForm, listBranches, listClientsForBranchFor
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getNumberParam, getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type BranchesPageProps = {
   searchParams?: Promise<SearchParamsInput>;
@@ -85,7 +86,7 @@ export default async function BranchesPage({ searchParams }: BranchesPageProps) 
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

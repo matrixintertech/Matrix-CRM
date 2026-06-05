@@ -4,10 +4,12 @@ import { ServiceRequestStatus } from "@prisma/client";
 import { useEffect, useMemo, useState } from "react";
 
 import { FormActions } from "@/components/admin/form-actions";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type ServicePartnerOption = {
   id: string;
   name: string;
+  legalName?: string | null;
   code: string;
 };
 
@@ -142,7 +144,7 @@ export function ServiceRequestForm({
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

@@ -519,6 +519,34 @@ model Setting {
   @@index([servicePartnerId])
 }
 
+model State {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?  @unique
+  country   String   @default("India")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cities City[]
+
+  @@index([country, isActive])
+}
+
+model City {
+  id        String   @id @default(uuid())
+  stateId   String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  state State @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([stateId, name])
+  @@index([stateId, isActive])
+}
+
 model Client {
   id               String       @id @default(uuid())
   servicePartnerId String

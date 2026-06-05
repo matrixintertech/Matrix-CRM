@@ -33,6 +33,7 @@
     "qa:rbac": "tsx scripts/role-permission-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
+    "qa:service-partner-location": "tsx scripts/service-partner-location-qa.ts",
     "qa:operational-hardening": "tsx scripts/operational-hardening-qa.ts",
     "qa:production-readiness": "tsx scripts/production-readiness-qa.ts",
     "prisma:validate": "prisma validate",

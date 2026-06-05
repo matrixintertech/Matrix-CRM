@@ -3,10 +3,12 @@
 import { VendorStatus } from "@prisma/client";
 
 import { FormActions } from "@/components/admin/form-actions";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type ServicePartnerOption = {
   id: string;
   name: string;
+  legalName?: string | null;
   code: string;
 };
 
@@ -61,7 +63,7 @@ export function VendorForm({
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

@@ -131,7 +131,7 @@ export async function listClientServicePartnersForForm(session: Session) {
         id: session.user.servicePartnerId,
       },
       orderBy: [{ name: "asc" }],
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, legalName: true, name: true },
     });
   }
 
@@ -140,7 +140,7 @@ export async function listClientServicePartnersForForm(session: Session) {
       deletedAt: null,
     },
     orderBy: [{ name: "asc" }],
-    select: { id: true, code: true, name: true },
+    select: { id: true, code: true, legalName: true, name: true },
   });
 }
 

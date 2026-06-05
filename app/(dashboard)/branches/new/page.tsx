@@ -7,6 +7,7 @@ import { BranchForm } from "@/features/branches/components/branch-form";
 import { listBranchServicePartnersForForm, listClientsForBranchForm } from "@/features/branches/services/branch.service";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type NewBranchPageProps = {
   searchParams?: Promise<SearchParamsInput>;
@@ -63,7 +64,7 @@ export default async function NewBranchPage({ searchParams }: NewBranchPageProps
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

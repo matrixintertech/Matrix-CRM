@@ -2,10 +2,11 @@ import { Prisma, ServicePartnerStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { ServicePartnerUpsertInput } from "@/features/service-partners/validations";
+import { resolveStateCitySelection } from "@/features/locations/services/location.service";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
-import { ensureTenantRbac } from "@/lib/rbac/bootstrap";
+import { ensureBaselinePermissions, ensureTenantRbac } from "@/lib/rbac/bootstrap";
 
 type ListServicePartnersInput = {
   q?: string;
@@ -114,6 +115,7 @@ export async function listServicePartnersForForm(session: Session) {
     select: {
       id: true,
       code: true,
+      legalName: true,
       name: true,
       status: true,
     },
@@ -125,6 +127,9 @@ export function isPlatformServicePartnerCode(code: string) {
 }
 
 export async function createServicePartner(input: ServicePartnerUpsertInput) {
+  const permissionIdsByKey = await ensureBaselinePermissions(prisma);
+  const location = await resolveStateCitySelection(input);
+
   return prisma.$transaction(async (tx) => {
     const servicePartner = await tx.servicePartner.create({
       data: {
@@ -134,8 +139,8 @@ export async function createServicePartner(input: ServicePartnerUpsertInput) {
         email: normalizeEmail(input.email),
         phone: normalizeOptionalString(input.phone),
         address: normalizeOptionalString(input.address),
-        city: normalizeOptionalString(input.city),
-        state: normalizeOptionalString(input.state),
+        city: location.city,
+        state: location.state,
         country: normalizeOptionalString(input.country),
         postalCode: normalizeOptionalString(input.postalCode),
         status: input.status,
@@ -145,13 +150,33 @@ export async function createServicePartner(input: ServicePartnerUpsertInput) {
     await ensureTenantRbac(tx, {
       servicePartnerId: servicePartner.id,
       includePlatformRole: false,
+      permissionIdsByKey,
     });
 
     return servicePartner;
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
   });
 }
 
 export async function updateServicePartner(id: string, input: ServicePartnerUpsertInput) {
+  const existing = await prisma.servicePartner.findUnique({
+    where: { id },
+    select: {
+      state: true,
+      city: true,
+    },
+  });
+  const allowLegacyPair = Boolean(
+    existing &&
+      normalizeOptionalString(existing.state) === normalizeOptionalString(input.state) &&
+      normalizeOptionalString(existing.city) === normalizeOptionalString(input.city)
+  );
+  const location = await resolveStateCitySelection(input, {
+    allowLegacyPair,
+  });
+
   return prisma.servicePartner.update({
     where: { id },
     data: {
@@ -161,8 +186,8 @@ export async function updateServicePartner(id: string, input: ServicePartnerUpse
       email: normalizeEmail(input.email),
       phone: normalizeOptionalString(input.phone),
       address: normalizeOptionalString(input.address),
-      city: normalizeOptionalString(input.city),
-      state: normalizeOptionalString(input.state),
+      city: location.city,
+      state: location.state,
       country: normalizeOptionalString(input.country),
       postalCode: normalizeOptionalString(input.postalCode),
       status: input.status,

@@ -1,11 +1,13 @@
 import { DataTable } from "@/components/admin/data-table";
 import { StatusBadge } from "@/components/admin/status-badge";
+import { getServicePartnerPrimaryName } from "@/lib/service-partners/display";
 import { formatDateTime, formatOptional } from "@/lib/utils/format";
 
 type ServicePartnerRow = {
   id: string;
   code: string;
   name: string;
+  legalName?: string | null;
   email: string | null;
   phone: string | null;
   status: string;
@@ -28,7 +30,7 @@ export function ServicePartnersTable({ servicePartners }: { servicePartners: Ser
           header: "Service Partner",
           cell: (servicePartner) => (
             <div>
-              <p className="font-medium text-slate-900">{servicePartner.name}</p>
+              <p className="font-medium text-slate-900">{getServicePartnerPrimaryName(servicePartner)}</p>
               <p className="text-xs text-[var(--muted)]">{servicePartner.code}</p>
             </div>
           ),

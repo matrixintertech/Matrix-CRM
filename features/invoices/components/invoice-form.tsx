@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { FormActions } from "@/components/admin/form-actions";
 import { InvoiceLinesForm } from "@/features/invoices/components/invoice-lines-form";
+import { getServicePartnerDisplayLabel } from "@/lib/service-partners/display";
 
 type ServicePartnerOption = {
   id: string;
   name: string;
+  legalName?: string | null;
   code: string;
 };
 
@@ -225,7 +227,7 @@ export function InvoiceForm({
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
-                {partner.name} ({partner.code})
+                {getServicePartnerDisplayLabel(partner)}
               </option>
             ))}
           </select>

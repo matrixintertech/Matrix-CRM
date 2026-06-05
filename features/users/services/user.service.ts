@@ -125,14 +125,14 @@ export async function listServicePartnersForUserForm(session: Session) {
     return prisma.servicePartner.findMany({
       where: { id: session.user.servicePartnerId },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, code: true },
+      select: { id: true, name: true, legalName: true, code: true },
     });
   }
 
   return prisma.servicePartner.findMany({
     where: { deletedAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, code: true },
+    select: { id: true, name: true, legalName: true, code: true },
   });
 }
 

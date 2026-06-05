@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { LocationSelectionError } from "@/features/locations/services/location.service";
 import { logActivity } from "@/lib/activity/activity-log";
 import { redirectForbidden } from "@/lib/auth/access-control";
 import { requirePermission } from "@/lib/auth/rbac";
@@ -80,6 +81,9 @@ export async function createServicePartnerAction(formData: FormData) {
     if (isUniqueConstraintError(error)) {
       redirect("/service-partners/new?error=duplicate");
     }
+    if (error instanceof LocationSelectionError) {
+      redirect("/service-partners/new?error=location");
+    }
     throw error;
   }
 }
@@ -117,6 +121,9 @@ export async function updateServicePartnerAction(id: string, formData: FormData)
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       redirect(`/service-partners/${id}/edit?error=duplicate`);
+    }
+    if (error instanceof LocationSelectionError) {
+      redirect(`/service-partners/${id}/edit?error=location`);
     }
     throw error;
   }

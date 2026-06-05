@@ -2,6 +2,7 @@ import { ServicePartnerStatus, UserStatus } from "@prisma/client";
 
 import { env } from "../lib/config/env";
 import { createPrismaClient } from "../lib/db/client";
+import { indiaStateReferences } from "../lib/locations/india-reference";
 import { ensureBaselinePermissions, ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = createPrismaClient();
@@ -32,6 +33,51 @@ async function runStep<T>(name: string, fn: () => Promise<T>) {
   const result = await fn();
   logSeed(`DONE ${name} (${Date.now() - startedAt}ms)`);
   return result;
+}
+
+async function seedLocationReferenceData() {
+  for (const stateReference of indiaStateReferences) {
+    const state = await prisma.state.upsert({
+      where: {
+        name: stateReference.name,
+      },
+      update: {
+        code: stateReference.code,
+        country: "India",
+        isActive: true,
+      },
+      create: {
+        name: stateReference.name,
+        code: stateReference.code,
+        country: "India",
+        isActive: true,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.city.createMany({
+      data: stateReference.cities.map((cityName) => ({
+        stateId: state.id,
+        name: cityName,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    await prisma.city.updateMany({
+      where: {
+        stateId: state.id,
+        name: {
+          in: stateReference.cities,
+        },
+      },
+      data: {
+        isActive: true,
+      },
+    });
+  }
 }
 
 async function upsertPlatformServicePartner() {
@@ -168,6 +214,7 @@ async function main(): Promise<SeedResult> {
   heartbeat.unref();
 
   await runStep("connect prisma client", async () => prisma.$connect());
+  await runStep("seed location reference data", seedLocationReferenceData);
   const permissionIdsByKey = await runStep("ensure baseline permissions", async () => ensureBaselinePermissions(prisma));
 
   const platform = await runStep("upsert platform service partner", upsertPlatformServicePartner);

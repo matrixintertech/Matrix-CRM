@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PageHeader } from "@/components/admin/page-header";
+import { listActiveStatesWithCities } from "@/features/locations/services/location.service";
 import { createServicePartnerAction } from "@/features/service-partners/actions/service-partner.actions";
 import { ServicePartnerForm } from "@/features/service-partners/components/service-partner-form";
 import { canManageServicePartners } from "@/features/service-partners/services/service-partner.service";
@@ -19,6 +20,9 @@ function getErrorMessage(code?: string) {
   if (code === "duplicate") {
     return "Service partner code must be unique.";
   }
+  if (code === "location") {
+    return "Select a valid state and city combination.";
+  }
   return undefined;
 }
 
@@ -28,7 +32,7 @@ export default async function NewServicePartnerPage({ searchParams }: NewService
     redirectForbidden("/service-partners");
   }
 
-  const params = await resolveSearchParams(searchParams);
+  const [params, states] = await Promise.all([resolveSearchParams(searchParams), listActiveStatesWithCities()]);
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
 
   return (
@@ -39,7 +43,7 @@ export default async function NewServicePartnerPage({ searchParams }: NewService
           Back to service partners
         </Link>
       </div>
-      <ServicePartnerForm action={createServicePartnerAction} cancelHref="/service-partners" errorMessage={errorMessage} />
+      <ServicePartnerForm action={createServicePartnerAction} cancelHref="/service-partners" errorMessage={errorMessage} states={states} />
     </section>
   );
 }
