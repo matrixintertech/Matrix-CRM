@@ -36,6 +36,21 @@ function parseDate(value?: string | null) {
 }
 
 function getErrorMessage(code?: string) {
+  if (code === "task-validation") {
+    return "Task validation failed. Check the task details and try again.";
+  }
+  if (code === "task-status-validation") {
+    return "Task status update failed due to an invalid status.";
+  }
+  if (code === "task-assignee-mismatch") {
+    return "The selected assignee is not valid for this tenant or assignment scope.";
+  }
+  if (code === "task-delegation-blocked") {
+    return "Task delegation was blocked by hierarchy or parent-task access rules.";
+  }
+  if (code === "task-delete-blocked") {
+    return "Delete blocked: remove or re-home child tasks before deleting the parent task.";
+  }
   if (code === "task-not-found") {
     return "Task could not be found.";
   }
@@ -43,6 +58,18 @@ function getErrorMessage(code?: string) {
 }
 
 function getSuccessMessage(code?: string) {
+  if (code === "task-created") {
+    return "Task created successfully.";
+  }
+  if (code === "task-updated") {
+    return "Task updated successfully.";
+  }
+  if (code === "task-status-updated") {
+    return "Task status updated successfully.";
+  }
+  if (code === "task-deleted") {
+    return "Task deleted successfully.";
+  }
   if (code === "task-remark-created") {
     return "Task remark added successfully.";
   }

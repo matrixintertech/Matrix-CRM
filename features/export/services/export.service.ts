@@ -313,6 +313,7 @@ async function getTaskRows(session: Session, searchParams: SearchParamsLike) {
     parentTask: row.parentTaskSummary?.taskNumber || "",
     hierarchyLevel: row.hierarchyDepth,
     status: row.status,
+    assignedTo: row.assignee?.name || row.assignee?.email || "",
     assignee: row.assignee?.name || row.assignee?.email || "",
     assignedBy: row.assignedBy?.name || row.assignedBy?.email || "",
     createdBy: row.createdBy?.name || row.createdBy?.email || "",

@@ -157,7 +157,16 @@ export function TasksTable({
                 <td className="px-3 py-2">{formatDateTime(task.dueDate)}</td>
                 <td className="px-3 py-2">
                   <div className="space-y-1 text-xs text-[var(--muted)]">
+                    <p>Level {task.hierarchyDepth}{task.parentTaskSummary ? "" : " (top-level)"}</p>
                     <p>{task.childTaskCount} child task(s)</p>
+                    {task.parentTaskSummary ? (
+                      <p>
+                        Parent:{" "}
+                        <Link href={`/tasks/${task.parentTaskSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                          {task.parentTaskSummary.taskNumber}
+                        </Link>
+                      </p>
+                    ) : null}
                     {task.assignmentChain.length > 0 ? <p>{task.assignmentChain.join(" | ")}</p> : null}
                   </div>
                 </td>

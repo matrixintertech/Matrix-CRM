@@ -1075,6 +1075,9 @@ export async function createTask(session: Session, input: CreateTaskInput) {
   let parentTask = null;
   if (input.parentTaskId) {
     parentTask = await assertParentTaskAccess(session, context, input.parentTaskId);
+    if (parentTask.servicePartnerId !== serviceRequest.servicePartnerId) {
+      throw new Error("Parent task must belong to the same tenant as the selected service request.");
+    }
     if (parentTask.serviceRequestId !== serviceRequest.id) {
       serviceRequest = await getServiceRequestForTaskScope(session, parentTask.serviceRequestId);
       if (!serviceRequest) {
@@ -1285,6 +1288,17 @@ export async function updateTaskStatus(session: Session, taskId: string, input: 
 
 export async function softDeleteTask(session: Session, taskId: string) {
   const { task } = await assertTaskMutationAccess(session, taskId, "delete");
+  const childTaskCount = await prisma.task.count({
+    where: {
+      servicePartnerId: task.servicePartnerId,
+      parentTaskId: task.id,
+      deletedAt: null,
+    },
+  });
+
+  if (childTaskCount > 0) {
+    throw new Error("Cannot delete a task that still has child tasks.");
+  }
 
   return prisma.task.update({
     where: { id: taskId },

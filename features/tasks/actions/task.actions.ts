@@ -93,11 +93,11 @@ export async function createTaskAction(formData: FormData) {
   } catch (error) {
     if (error instanceof Error) {
       const lower = error.message.toLowerCase();
-      if (lower.includes("assignee") || lower.includes("tenant")) {
-        redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
-      }
       if (lower.includes("delegate") || lower.includes("lower-level") || lower.includes("parent task")) {
         redirect(withErrorCode(redirectTo, "task-delegation-blocked"));
+      }
+      if (lower.includes("assignee") || lower.includes("tenant")) {
+        redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
       }
       if (lower.includes("service request not found")) {
         redirect(withErrorCode(redirectTo, "task-service-request-not-found"));
@@ -128,12 +128,13 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
   try {
     const before = await getTaskById(session, taskId);
     const updated = await updateTask(session, taskId, parsed.data);
+    const assigneeChanged = before?.assigneeUserId !== updated.assigneeUserId;
     await logActivity({
-      action: before?.assigneeUserId !== updated.assigneeUserId ? "task.assign" : "task.update",
+      action: assigneeChanged ? "task.assign" : "task.update",
       module: "tasks",
       entityType: "TASK",
       entityId: updated.id,
-      message: before?.assigneeUserId !== updated.assigneeUserId ? "Task assignment updated" : "Task updated",
+      message: assigneeChanged ? "Task assignment updated" : "Task updated",
       metadata: {
         previousAssigneeUserId: before?.assigneeUserId ?? null,
         status: updated.status,
@@ -144,7 +145,11 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
       servicePartnerId: updated.servicePartnerId,
     });
     try {
-      await notifyTaskUpdated(updated.id, session.user.id);
+      if (assigneeChanged) {
+        await notifyTaskAssigned(updated.id, session.user.id);
+      } else {
+        await notifyTaskUpdated(updated.id, session.user.id);
+      }
     } catch (notificationError) {
       console.error("Task update notification failed", {
         taskId: updated.id,
@@ -157,11 +162,11 @@ export async function updateTaskAction(taskId: string, formData: FormData) {
   } catch (error) {
     if (error instanceof Error) {
       const lower = error.message.toLowerCase();
-      if (lower.includes("assignee") || lower.includes("tenant")) {
-        redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
-      }
       if (lower.includes("delegate") || lower.includes("lower-level")) {
         redirect(withErrorCode(redirectTo, "task-delegation-blocked"));
+      }
+      if (lower.includes("assignee") || lower.includes("tenant")) {
+        redirect(withErrorCode(redirectTo, "task-assignee-mismatch"));
       }
       if (lower.includes("not found")) {
         redirect(withErrorCode(redirectTo, "task-not-found"));
@@ -210,8 +215,14 @@ export async function updateTaskStatusAction(taskId: string, formData: FormData)
     revalidateTaskDetailPath(updated.id);
     redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-status-updated`);
   } catch (error) {
-    if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
-      redirect(withErrorCode(redirectTo, "task-not-found"));
+    if (error instanceof Error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("child task")) {
+        redirect(withErrorCode(redirectTo, "task-delete-blocked"));
+      }
+      if (lower.includes("not found")) {
+        redirect(withErrorCode(redirectTo, "task-not-found"));
+      }
     }
     throw error;
   }

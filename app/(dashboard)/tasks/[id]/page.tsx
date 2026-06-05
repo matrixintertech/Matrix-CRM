@@ -56,6 +56,9 @@ function getErrorMessage(code?: string) {
   if (code === "task-delegation-blocked") {
     return "Delegation blocked by hierarchy or parent-task access rules.";
   }
+  if (code === "task-delete-blocked") {
+    return "Delete blocked: child tasks must be cleared before removing the parent task.";
+  }
   if (code === "task-remark-validation") {
     return "Task remark validation failed.";
   }

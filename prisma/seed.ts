@@ -2,7 +2,7 @@ import { ServicePartnerStatus, UserStatus } from "@prisma/client";
 
 import { env } from "../lib/config/env";
 import { createPrismaClient } from "../lib/db/client";
-import { ensureTenantRbac } from "../lib/rbac/bootstrap";
+import { ensureBaselinePermissions, ensureTenantRbac } from "../lib/rbac/bootstrap";
 
 const prisma = createPrismaClient();
 const parsedHeartbeatMs = Number(process.env.SEED_HEARTBEAT_MS ?? 30_000);
@@ -168,6 +168,7 @@ async function main(): Promise<SeedResult> {
   heartbeat.unref();
 
   await runStep("connect prisma client", async () => prisma.$connect());
+  const permissionIdsByKey = await runStep("ensure baseline permissions", async () => ensureBaselinePermissions(prisma));
 
   const platform = await runStep("upsert platform service partner", upsertPlatformServicePartner);
 
@@ -175,6 +176,7 @@ async function main(): Promise<SeedResult> {
     ensureTenantRbac(prisma, {
       servicePartnerId: platform.id,
       includePlatformRole: true,
+      permissionIdsByKey,
     })
   );
 
@@ -194,6 +196,7 @@ async function main(): Promise<SeedResult> {
       ensureTenantRbac(prisma, {
         servicePartnerId: tenant.id,
         includePlatformRole: false,
+        permissionIdsByKey,
       })
     );
   }

@@ -95,6 +95,9 @@ function getErrorMessage(code?: string) {
   if (code === "task-delegation-blocked") {
     return "Task delegation was blocked by hierarchy or parent-task access rules.";
   }
+  if (code === "task-delete-blocked") {
+    return "Work item deletion was blocked because child tasks still exist.";
+  }
   if (code === "task-service-request-not-found") {
     return "Work item creation failed: service request was not found.";
   }

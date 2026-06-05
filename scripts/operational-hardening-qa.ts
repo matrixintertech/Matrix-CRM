@@ -21,7 +21,7 @@ import {
   sendEmailChangeVerificationOtp,
   verifyEmailChangeRequest,
 } from "../features/users/services/email-change.service";
-import { getTaskNotificationContext, sendEmailNotifications } from "../lib/notifications/notification.service";
+import { getTaskAssignmentNotificationRecipients, sendEmailNotifications } from "../lib/notifications/notification.service";
 import { createTask, listTasksForServiceRequest } from "../features/tasks/services/task.service";
 import { createTaskSchema } from "../features/tasks/validations";
 import { listActivityLogs } from "../features/activity-log/services/activity-log.service";
@@ -1045,9 +1045,8 @@ async function main() {
       !emailChangeActionsSource.includes("console.log")
   );
 
-  const taskContext = await getTaskNotificationContext(createdTask.id);
-  const notificationRecipientIds = new Set(taskContext?.recipients.map((recipient) => recipient.id));
-  const expectedInvolvedUserIds = new Set([assignee.id, tenantUser.id, requester.id, related.id, qaInactive.id, qaNoEmail.id]);
+  const assignmentRecipients = await getTaskAssignmentNotificationRecipients(createdTask.id, tenantUser.id);
+  const notificationRecipientIds = new Set(assignmentRecipients.map((recipient) => recipient.id));
   const unrelatedPresent = notificationRecipientIds.has(unrelated.id) || notificationRecipientIds.has(foreignUser.id);
   const skippedNotificationResult = await sendEmailNotifications({
     actorUserId: requester.id,
@@ -1093,11 +1092,9 @@ async function main() {
 
   assert(
     results,
-    "notifications.task_assigned_and_updated_recipients_are_only_involved_users",
-    Boolean(taskContext) &&
-      !unrelatedPresent &&
-      Array.from(notificationRecipientIds).every((id) => expectedInvolvedUserIds.has(id)),
-    taskContext ? `Recipients: ${Array.from(notificationRecipientIds).length}` : "Missing task notification context."
+    "notifications.task_assignment_recipients_are_assignment_scoped",
+    !unrelatedPresent && notificationRecipientIds.has(assignee.id) && notificationRecipientIds.size === 1,
+    `Recipients: ${Array.from(notificationRecipientIds).join(", ")}`
   );
   assert(
     results,

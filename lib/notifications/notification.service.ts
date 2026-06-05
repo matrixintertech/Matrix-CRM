@@ -73,23 +73,27 @@ export async function sendEmailNotifications(input: NotificationInput) {
       select: { id: true },
     });
 
-    const delivery = await sendTransactionalEmail({
-      to: recipient.email!,
-      subject: input.subject,
-      text: input.body,
-      html: `<div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6; white-space: pre-line;">${input.body}</div>`,
-    });
-
-    if (delivery.ok) {
-      sent += 1;
-      await prisma.notification.update({
-        where: { id: created.id },
-        data: {
-          status: "SENT",
-          sentAt: new Date(),
-        },
+    try {
+      const delivery = await sendTransactionalEmail({
+        to: recipient.email!,
+        subject: input.subject,
+        text: input.body,
+        html: `<div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.6; white-space: pre-line;">${input.body}</div>`,
       });
-      continue;
+
+      if (delivery.ok) {
+        sent += 1;
+        await prisma.notification.update({
+          where: { id: created.id },
+          data: {
+            status: "SENT",
+            sentAt: new Date(),
+          },
+        });
+        continue;
+      }
+    } catch {
+      // Keep mutation flows resilient and record the notification as failed.
     }
 
     failed += 1;
@@ -120,6 +124,46 @@ type ServiceRequestUserRecord = {
 function pushUser(list: ServiceRequestUserRecord[], user: ServiceRequestUserRecord | null | undefined) {
   if (user) {
     list.push(user);
+  }
+}
+
+function pushTaskParentUsers(
+  list: ServiceRequestUserRecord[],
+  parentTask:
+    | {
+        assignee: ServiceRequestUserRecord | null;
+        assignedBy: ServiceRequestUserRecord | null;
+        createdBy?: ServiceRequestUserRecord | null;
+      }
+    | null
+    | undefined
+) {
+  if (!parentTask) {
+    return;
+  }
+
+  pushUser(list, parentTask.assignee);
+  pushUser(list, parentTask.assignedBy);
+  pushUser(list, parentTask.createdBy);
+}
+
+function pushServiceRequestResponsibleUsers(
+  list: ServiceRequestUserRecord[],
+  serviceRequest:
+    | {
+        assignments: {
+          user: ServiceRequestUserRecord | null;
+        }[];
+      }
+    | null
+    | undefined
+) {
+  if (!serviceRequest) {
+    return;
+  }
+
+  for (const assignment of serviceRequest.assignments) {
+    pushUser(list, assignment.user);
   }
 }
 
@@ -175,6 +219,16 @@ export async function getTaskNotificationContext(taskId: string) {
             },
           },
           assignedBy: {
+            select: {
+              id: true,
+              servicePartnerId: true,
+              email: true,
+              name: true,
+              status: true,
+              deletedAt: true,
+            },
+          },
+          createdBy: {
             select: {
               id: true,
               servicePartnerId: true,
@@ -242,21 +296,8 @@ export async function getTaskNotificationContext(taskId: string) {
     return null;
   }
 
-  const recipients: ServiceRequestUserRecord[] = [];
-  pushUser(recipients, task.assignee);
-  pushUser(recipients, task.createdBy);
-  pushUser(recipients, task.assignedBy);
-  pushUser(recipients, task.parentTask?.assignee);
-  pushUser(recipients, task.parentTask?.assignedBy);
-  pushUser(recipients, task.serviceRequest.createdByUser);
-  pushUser(recipients, task.serviceRequest.createdByClientUser?.user);
-  for (const assignment of task.serviceRequest.assignments) {
-    pushUser(recipients, assignment.user);
-  }
-
   return {
     task,
-    recipients,
   };
 }
 
@@ -333,29 +374,80 @@ export async function getServiceRequestNotificationContext(serviceRequestId: str
   };
 }
 
+export async function getTaskAssignmentNotificationRecipients(taskId: string, actorUserId?: string | null) {
+  const context = await getTaskNotificationContext(taskId);
+  if (!context) {
+    return [];
+  }
+
+  const recipients: ServiceRequestUserRecord[] = [];
+  pushUser(recipients, context.task.assignee);
+  pushTaskParentUsers(recipients, context.task.parentTask);
+  return dedupeRecipients(recipients, context.task.servicePartnerId, actorUserId);
+}
+
+export async function getTaskUpdateNotificationRecipients(taskId: string, actorUserId?: string | null) {
+  const context = await getTaskNotificationContext(taskId);
+  if (!context) {
+    return [];
+  }
+
+  const recipients: ServiceRequestUserRecord[] = [];
+  pushUser(recipients, context.task.assignee);
+  pushUser(recipients, context.task.assignedBy);
+  pushUser(recipients, context.task.createdBy);
+  pushTaskParentUsers(recipients, context.task.parentTask);
+  pushServiceRequestResponsibleUsers(recipients, context.task.serviceRequest);
+  return dedupeRecipients(recipients, context.task.servicePartnerId, actorUserId);
+}
+
+export async function getTaskStatusNotificationRecipients(taskId: string, actorUserId?: string | null) {
+  const context = await getTaskNotificationContext(taskId);
+  if (!context) {
+    return [];
+  }
+
+  const recipients: ServiceRequestUserRecord[] = [];
+  pushUser(recipients, context.task.assignee);
+  pushUser(recipients, context.task.assignedBy);
+  pushTaskParentUsers(recipients, context.task.parentTask);
+  pushServiceRequestResponsibleUsers(recipients, context.task.serviceRequest);
+  return dedupeRecipients(recipients, context.task.servicePartnerId, actorUserId);
+}
+
 export async function notifyTaskAssigned(taskId: string, actorUserId?: string | null) {
   const context = await getTaskNotificationContext(taskId);
   if (!context) {
     return null;
   }
 
+  const recipients = await getTaskAssignmentNotificationRecipients(taskId, actorUserId);
+
+  const actionLabel = context.task.parentTask ? "delegated" : "assigned";
+
   return sendEmailNotifications({
     actorUserId,
     servicePartnerId: context.task.servicePartnerId,
-    subject: `Task assigned: ${context.task.taskNumber}`,
+    subject: `Task ${actionLabel}: ${context.task.taskNumber}`,
     body: [
       `Task: ${context.task.title}`,
       `Task Number: ${context.task.taskNumber}`,
       `Service Request: ${context.task.serviceRequest.serviceNumber}`,
+      context.task.parentTask ? `Parent Task: ${context.task.parentTask.taskNumber}` : "",
       "",
-      "This task has been assigned or reassigned to an involved user.",
-    ].join("\n"),
+      context.task.parentTask
+        ? "A sub-task has been delegated within a task chain you are involved in."
+        : "A task has been assigned to you.",
+    ]
+      .filter(Boolean)
+      .join("\n"),
     templateKey: "task.assigned",
-    recipients: context.recipients,
+    recipients,
     metadata: {
       taskId: context.task.id,
       taskNumber: context.task.taskNumber,
       serviceRequestId: context.task.serviceRequestId,
+      parentTaskId: context.task.parentTaskId,
     },
   });
 }
@@ -365,6 +457,8 @@ export async function notifyTaskUpdated(taskId: string, actorUserId?: string | n
   if (!context) {
     return null;
   }
+
+  const recipients = await getTaskUpdateNotificationRecipients(taskId, actorUserId);
 
   return sendEmailNotifications({
     actorUserId,
@@ -376,10 +470,10 @@ export async function notifyTaskUpdated(taskId: string, actorUserId?: string | n
       `Service Request: ${context.task.serviceRequest.serviceNumber}`,
       `Status: ${context.task.status}`,
       "",
-      "A task you are involved with has been updated.",
+      "A task you are directly responsible for or supervising has been updated.",
     ].join("\n"),
     templateKey: "task.updated",
-    recipients: context.recipients,
+    recipients,
     metadata: {
       taskId: context.task.id,
       taskNumber: context.task.taskNumber,
@@ -395,6 +489,8 @@ export async function notifyTaskStatusChanged(taskId: string, actorUserId?: stri
     return null;
   }
 
+  const recipients = await getTaskStatusNotificationRecipients(taskId, actorUserId);
+
   return sendEmailNotifications({
     actorUserId,
     servicePartnerId: context.task.servicePartnerId,
@@ -404,9 +500,10 @@ export async function notifyTaskStatusChanged(taskId: string, actorUserId?: stri
       `Task Number: ${context.task.taskNumber}`,
       `New Status: ${context.task.status}`,
       `Service Request: ${context.task.serviceRequest.serviceNumber}`,
+      context.task.parentTask ? `Parent Task: ${context.task.parentTask.taskNumber}` : "",
     ].join("\n"),
     templateKey: "task.status_changed",
-    recipients: context.recipients,
+    recipients,
     metadata: {
       taskId: context.task.id,
       taskNumber: context.task.taskNumber,
