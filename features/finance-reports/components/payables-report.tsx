@@ -9,6 +9,7 @@ type PayableRow = {
   amount: number;
   status: string;
   paidAt: Date | null;
+  sourceLabel: string;
   vendor: {
     id: string;
     code: string;
@@ -18,25 +19,29 @@ type PayableRow = {
     id: string;
     poNumber: string;
   } | null;
+  vendorInvoiceNumber: string | null;
+  invoiceNumber: string | null;
 };
 
 export function PayablesReport({ rows }: { rows: PayableRow[] }) {
   return (
     <section className="rounded-xl border border-[var(--border)] bg-white shadow-sm">
       <div className="border-b border-[var(--border)] px-5 py-4">
-        <h2 className="text-lg font-semibold">Payables</h2>
-        <p className="text-sm text-[var(--muted)]">Vendor payment activity with linked purchase orders.</p>
+        <h2 className="text-lg font-semibold">Outgoing Payments</h2>
+        <p className="text-sm text-[var(--muted)]">Payments made against vendor invoices and other vendor obligations.</p>
       </div>
 
       {rows.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-[var(--muted)]">No vendor payments found.</p>
+        <p className="px-5 py-4 text-sm text-[var(--muted)]">No outgoing payments found.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Vendor</th>
+                <th className="px-4 py-3">Vendor Invoice</th>
                 <th className="px-4 py-3">Purchase Order</th>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Amount</th>
@@ -47,12 +52,23 @@ export function PayablesReport({ rows }: { rows: PayableRow[] }) {
               {rows.map((row) => (
                 <tr key={row.id} className="border-t border-[var(--border)]">
                   <td className="px-4 py-3">
-                    <Link href={`/vendor-payments/${row.id}`} className="font-medium text-[var(--primary)] underline">
+                    <span className="font-medium text-slate-900">
                       {row.paymentNumber}
-                    </Link>
+                    </span>
                   </td>
+                  <td className="px-4 py-3">{row.sourceLabel}</td>
                   <td className="px-4 py-3">
                     {row.vendor.name} ({row.vendor.code})
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.vendorInvoiceNumber ? (
+                      <div>
+                        <p>{row.vendorInvoiceNumber}</p>
+                        {row.invoiceNumber ? <p className="text-xs text-[var(--muted)]">Internal: {row.invoiceNumber}</p> : null}
+                      </div>
+                    ) : (
+                      "-"
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {row.purchaseOrder ? (

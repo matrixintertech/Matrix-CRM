@@ -126,7 +126,7 @@ export const baselineNavigation: NavigationSeedItem[] = [
   { key: "vendor-quotations", label: "Vendors Quotation List", href: "#", sortOrder: 27, permissionKey: "vendor_quotations.read", isActive: false },
   { key: "rfq-list", label: "RFQ List", href: "/rfqs", sortOrder: 28, permissionKey: "rfq.read", isActive: true },
   { key: "po-list", label: "PO List", href: "/purchase-orders", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: true },
-  { key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true },
+  { key: "invoice-list", label: "Vendor Invoices", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true },
   { key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true },
   { key: "finance-reports", label: "Finance Reports", href: "/finance-reports", sortOrder: 32, permissionKey: "reports.read", isActive: true },
 ];

@@ -80,6 +80,8 @@ type InvoiceFormProps = {
   defaultServicePartnerId?: string;
   defaultPurchaseOrderId?: string;
   invoice?: {
+    invoiceNumber: string;
+    vendorInvoiceNumber: string;
     servicePartnerId: string;
     vendorId: string;
     purchaseOrderId: string | null;
@@ -87,6 +89,7 @@ type InvoiceFormProps = {
     serviceRequestId: string | null;
     status: InvoiceStatus;
     invoiceDate: string;
+    receivedDate: string;
     dueDate: string | null;
     notes: string | null;
     items: Array<{
@@ -128,10 +131,14 @@ export function InvoiceForm({
     () => vendors.filter((vendor) => vendor.servicePartnerId === selectedServicePartnerId),
     [vendors, selectedServicePartnerId]
   );
-  const filteredPurchaseOrders = useMemo(
-    () => purchaseOrders.filter((purchaseOrder) => purchaseOrder.servicePartnerId === selectedServicePartnerId),
-    [purchaseOrders, selectedServicePartnerId]
-  );
+  const filteredPurchaseOrders = useMemo(() => {
+    const scopedPurchaseOrders = purchaseOrders.filter((purchaseOrder) => purchaseOrder.servicePartnerId === selectedServicePartnerId);
+    if (!selectedVendorId) {
+      return scopedPurchaseOrders;
+    }
+
+    return scopedPurchaseOrders.filter((purchaseOrder) => purchaseOrder.vendorId === selectedVendorId);
+  }, [purchaseOrders, selectedServicePartnerId, selectedVendorId]);
   const filteredRfqs = useMemo(
     () => rfqs.filter((rfq) => rfq.servicePartnerId === selectedServicePartnerId),
     [rfqs, selectedServicePartnerId]
@@ -268,11 +275,42 @@ export function InvoiceForm({
         </label>
 
         <label className="space-y-1 text-sm">
+          <span className="font-medium">Vendor Invoice No.</span>
+          <input
+            name="vendorInvoiceNumber"
+            defaultValue={invoice?.vendorInvoiceNumber ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            maxLength={120}
+            required
+          />
+        </label>
+
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Internal Record No.</span>
+          <input
+            value={invoice?.invoiceNumber ?? "Auto-generated on save"}
+            className="h-9 w-full rounded-md border border-[var(--border)] bg-slate-50 px-3 text-slate-600"
+            readOnly
+          />
+        </label>
+
+        <label className="space-y-1 text-sm">
           <span className="font-medium">Invoice Date</span>
           <input
             type="date"
             name="invoiceDate"
             defaultValue={invoice?.invoiceDate ?? todayDateInput()}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            required
+          />
+        </label>
+
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Received Date</span>
+          <input
+            type="date"
+            name="receivedDate"
+            defaultValue={invoice?.receivedDate ?? todayDateInput()}
             className="h-9 w-full rounded-md border border-[var(--border)] px-3"
             required
           />
@@ -305,22 +343,7 @@ export function InvoiceForm({
           </select>
         </label>
 
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">RFQ (optional)</span>
-          <select
-            name="rfqId"
-            value={selectedRfqId}
-            onChange={(event) => setSelectedRfqId(event.target.value)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-          >
-            <option value="">No RFQ selected</option>
-            {filteredRfqs.map((rfq) => (
-              <option key={rfq.id} value={rfq.id}>
-                {rfq.rfqNumber} - {rfq.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        <input type="hidden" name="rfqId" value={selectedRfqId} />
 
         <label className="space-y-1 text-sm">
           <span className="font-medium">Service Request (optional)</span>
@@ -351,7 +374,7 @@ export function InvoiceForm({
       </div>
 
       <InvoiceLinesForm key={`${selectedServicePartnerId}-invoice-lines`} itemOptions={filteredItems} initialLines={filteredInitialLines} />
-      <FormActions cancelHref={cancelHref} submitLabel={invoice ? "Update Invoice" : "Create Invoice"} />
+      <FormActions cancelHref={cancelHref} submitLabel={invoice ? "Update Received Invoice" : "Record Vendor Invoice"} />
     </form>
   );
 }

@@ -50,7 +50,7 @@ function userLabel(user: { name: string | null; email: string | null; phone: str
 
 export function PaymentsTable({ invoiceId, redirectTo, payments, canUpdate, canDelete, canStatusUpdate }: PaymentsTableProps) {
   if (payments.length === 0) {
-    return <p className="text-sm text-[var(--muted)]">No payments recorded yet.</p>;
+    return <p className="text-sm text-[var(--muted)]">No payments made recorded yet.</p>;
   }
 
   return (
@@ -59,7 +59,7 @@ export function PaymentsTable({ invoiceId, redirectTo, payments, canUpdate, canD
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
-              <th className="px-3 py-2">Payment</th>
+              <th className="px-3 py-2">Payment Made</th>
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">Amount</th>
               <th className="px-3 py-2">Mode</th>
@@ -115,7 +115,7 @@ export function PaymentsTable({ invoiceId, redirectTo, payments, canUpdate, canD
                   action={updatePaymentAction.bind(null, payment.id)}
                   invoiceId={invoiceId}
                   redirectTo={redirectTo}
-                  submitLabel="Update Payment"
+                  submitLabel="Update Payment Made"
                   compact
                   payment={{
                     amount: Number(payment.amount).toFixed(2),

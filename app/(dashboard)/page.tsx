@@ -68,7 +68,7 @@ const superAdminKpis: KpiCardDefinition[] = [
   { title: "Rate Cards", note: "All rate cards", href: "/rate-cards", permission: "rate_cards.read", key: "rateCards" },
   { title: "Service Requests", note: "All requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "RFQs", note: "All RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
-  { title: "Invoices", note: "All invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Vendor Invoices", note: "All received vendor invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
   { title: "Vendor Payments", note: "All vendor payments", href: "/vendor-payments", permission: "vendor_payments.read", key: "vendorPayments" },
   { title: "Ledger Entries", note: "All payment postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
@@ -85,7 +85,7 @@ const companyKpis: KpiCardDefinition[] = [
   { title: "Service Requests", note: "Company requests", href: "/service-requests", permission: "service_requests.read", key: "serviceRequests" },
   { title: "Open Service Requests", note: "Open queue", href: "/service-requests", permission: "service_requests.read", key: "openServiceRequests" },
   { title: "RFQs", note: "Company RFQs", href: "/rfqs", permission: "rfq.read", key: "rfqs" },
-  { title: "Invoices", note: "Company invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
+  { title: "Vendor Invoices", note: "Company received vendor invoices", href: "/invoices", permission: "invoices.read", key: "invoices" },
   { title: "Vendor Payments", note: "Company vendor payments", href: "/vendor-payments", permission: "vendor_payments.read", key: "vendorPayments" },
   { title: "Ledger Entries", note: "Company postings", href: "/ledger", permission: "ledger.read", key: "ledgerEntries" },
 ];
@@ -103,7 +103,7 @@ const quickActionDefinitions: QuickAction[] = [
   { group: "Service Requests", title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
   { group: "Procurement", title: "Add Vendor", subtitle: "Create vendor", href: "/vendors/new", permission: "vendors.create" },
   { group: "Procurement", title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
-  { group: "Finance", title: "New Invoice", subtitle: "Create invoice", href: "/invoices/new", permission: "invoices.create" },
+  { group: "Finance", title: "Record Vendor Invoice", subtitle: "Add received invoice", href: "/invoices/new", permission: "invoices.create" },
   { group: "Finance", title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
   { group: "Reports", title: "Finance Reports", subtitle: "View finance reports", href: "/finance-reports", permission: "reports.read" },
 ];

@@ -7,6 +7,7 @@ type LedgerSourceLinkProps = {
     invoice?: {
       id: string;
       invoiceNumber: string;
+      vendorInvoiceNumber?: string;
     } | null;
   } | null;
   vendorPayment?: {
@@ -34,7 +35,7 @@ export function LedgerSourceLink({ sourceType, payment, vendorPayment, serviceRe
       <div>
         <p className="font-medium text-slate-900">{payment.paymentNumber}</p>
         <Link href={`/invoices/${payment.invoice.id}`} className="text-xs text-[var(--primary)] underline">
-          {payment.invoice.invoiceNumber}
+          {payment.invoice.vendorInvoiceNumber ?? payment.invoice.invoiceNumber}
         </Link>
       </div>
     );

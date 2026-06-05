@@ -10,6 +10,13 @@ type PermissionRow = {
   createdAt: Date;
 };
 
+function formatModuleLabel(module: string) {
+  if (module === "invoices") {
+    return "Vendor Invoices";
+  }
+  return module.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 export function PermissionsTable({ permissions }: { permissions: PermissionRow[] }) {
   return (
     <DataTable
@@ -17,7 +24,7 @@ export function PermissionsTable({ permissions }: { permissions: PermissionRow[]
       getRowKey={(permission) => permission.id}
       columns={[
         { header: "Permission", cell: (permission) => permission.key },
-        { header: "Module", cell: (permission) => permission.module },
+        { header: "Module", cell: (permission) => formatModuleLabel(permission.module) },
         { header: "Action", cell: (permission) => permission.action },
         { header: "Description", cell: (permission) => formatOptional(permission.description) },
         { header: "Created", cell: (permission) => formatDateTime(permission.createdAt) },

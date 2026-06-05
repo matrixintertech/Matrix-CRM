@@ -173,7 +173,7 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
                     href={`/invoices/new?purchaseOrderId=${purchaseOrder.id}&servicePartnerId=${purchaseOrder.servicePartnerId}`}
                     className="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-[var(--primary)]"
                   >
-                    Create Invoice
+                    Record Vendor Invoice
                   </Link>
                   {canCreateVendorPaymentFromPo ? (
                     <Link
@@ -226,15 +226,15 @@ export default async function PurchaseOrderDetailPage({ params, searchParams }: 
 
           {canReadInvoices ? (
             <div className="crm-panel">
-              <h2 className="mb-3 text-base font-semibold">Related Invoices</h2>
+              <h2 className="mb-3 text-base font-semibold">Related Vendor Invoices</h2>
               {relatedInvoices.length === 0 ? (
-                <p className="text-sm text-[var(--muted)]">No invoices created for this purchase order yet.</p>
+                <p className="text-sm text-[var(--muted)]">No vendor invoices recorded for this purchase order yet.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
                     <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                       <tr>
-                        <th className="px-3 py-2">Invoice</th>
+                        <th className="px-3 py-2">Vendor Invoice</th>
                         <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Lines</th>

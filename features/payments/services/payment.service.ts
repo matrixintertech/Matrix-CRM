@@ -176,7 +176,7 @@ async function syncInvoicePaymentStatus(tx: DbLike, invoiceId: string, servicePa
 
 function assertInvoiceAcceptsPayments(status: InvoiceStatus) {
   if (!invoiceStatusesAllowedForPaymentCapture.has(status)) {
-    throw new Error("Invoice status does not allow payment capture.");
+    throw new Error("Vendor invoice status does not allow payment capture.");
   }
 }
 
@@ -243,7 +243,7 @@ export async function createInvoicePayment(session: Session, input: CreatePaymen
   const amount = roundMoney(input.amount);
 
   if (invoice.status === InvoiceStatus.PAID) {
-    throw new Error("Invoice is already marked as paid.");
+    throw new Error("Vendor invoice is already marked as paid.");
   }
 
   return prisma.$transaction(async (tx) => {

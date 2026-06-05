@@ -423,11 +423,11 @@ export default async function ServicePartnerDetailPage({ params, searchParams }:
             <h2 className="mb-3 text-base font-semibold">Financial Summary</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-md border border-[var(--border)] px-3 py-3">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Invoices</p>
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Vendor Invoices</p>
                 <p className="mt-1 font-medium">{financeSummary[0]?._count._all ?? 0}</p>
               </div>
               <div className="rounded-md border border-[var(--border)] px-3 py-3">
-                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Invoice Total</p>
+                <p className="text-xs uppercase tracking-wide text-[var(--muted)]">Vendor Invoice Total</p>
                 <p className="mt-1 font-medium">{Number(financeSummary[0]?._sum.grandTotal ?? 0).toFixed(2)}</p>
               </div>
               <div className="rounded-md border border-[var(--border)] px-3 py-3">

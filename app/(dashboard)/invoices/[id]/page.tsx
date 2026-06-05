@@ -23,53 +23,53 @@ type InvoiceDetailPageProps = {
 
 function getSuccessMessage(code?: string) {
   if (code === "created") {
-    return "Invoice created successfully.";
+    return "Vendor invoice recorded successfully.";
   }
   if (code === "updated") {
-    return "Invoice updated successfully.";
+    return "Vendor invoice updated successfully.";
   }
   if (code === "payment-recorded") {
-    return "Payment recorded successfully.";
+    return "Payment made recorded successfully.";
   }
   if (code === "payment-updated") {
-    return "Payment updated successfully.";
+    return "Payment made updated successfully.";
   }
   if (code === "payment-status-updated") {
-    return "Payment status updated successfully.";
+    return "Payment made status updated successfully.";
   }
   if (code === "payment-deleted") {
-    return "Payment voided successfully.";
+    return "Payment made voided successfully.";
   }
   return undefined;
 }
 
 function getErrorMessage(code?: string) {
   if (code === "validation") {
-    return "Invoice validation failed.";
+    return "Vendor invoice validation failed.";
   }
   if (code === "status-validation") {
-    return "Invoice status validation failed.";
+    return "Vendor invoice status validation failed.";
   }
   if (code === "mismatch") {
-    return "Invoice update blocked by tenant scope mismatch.";
+    return "Vendor invoice update blocked by tenant scope mismatch.";
   }
   if (code === "invalid-transition") {
     return "Invoice status transition is not allowed.";
   }
   if (code === "edit-blocked") {
-    return "Invoice cannot be edited in the current status.";
+    return "Vendor invoice cannot be edited in the current status.";
   }
   if (code === "not-found") {
-    return "Invoice record could not be found.";
+    return "Vendor invoice record could not be found.";
   }
   if (code === "payment-validation") {
-    return "Payment validation failed.";
+    return "Payment made validation failed.";
   }
   if (code === "payment-status-validation") {
-    return "Payment status validation failed.";
+    return "Payment made status validation failed.";
   }
   if (code === "payment-overpayment") {
-    return "Payment amount cannot exceed invoice balance due.";
+    return "Payment amount cannot exceed the vendor invoice balance due.";
   }
   if (code === "payment-mismatch") {
     return "Payment action blocked by tenant scope mismatch.";
@@ -109,13 +109,13 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
   return (
     <section className="crm-page">
       <PageHeader
-        title={invoice.invoiceNumber}
-        description="Review invoice details, linked records, line items, and status."
-        action={canUpdate ? { label: "Edit Invoice", href: `/invoices/${invoice.id}/edit` } : undefined}
+        title={invoice.vendorInvoiceNumber}
+        description="Review received vendor invoice details, linked records, line items, and payment status."
+        action={canUpdate ? { label: "Edit Received Invoice", href: `/invoices/${invoice.id}/edit` } : undefined}
       />
       <div>
         <Link href="/invoices" className="crm-back-link">
-          Back to invoice list
+          Back to vendor invoices
         </Link>
       </div>
 
@@ -128,7 +128,11 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
-                <dt className="text-[var(--muted)]">Invoice Number</dt>
+                <dt className="text-[var(--muted)]">Vendor Invoice No.</dt>
+                <dd>{invoice.vendorInvoiceNumber}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--muted)]">Internal Record No.</dt>
                 <dd>{invoice.invoiceNumber}</dd>
               </div>
               <div>
@@ -164,6 +168,10 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
               <div>
                 <dt className="text-[var(--muted)]">Invoice Date</dt>
                 <dd>{formatDateTime(invoice.invoiceDate)}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--muted)]">Received Date</dt>
+                <dd>{formatDateTime(invoice.receivedDate)}</dd>
               </div>
               <div>
                 <dt className="text-[var(--muted)]">Due Date</dt>
@@ -210,7 +218,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
                       <th className="px-3 py-2">Unit</th>
                       <th className="px-3 py-2">Unit Rate</th>
                       <th className="px-3 py-2">Tax %</th>
-                      <th className="px-3 py-2">Amount</th>
+                      <th className="px-3 py-2">Line Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -233,13 +241,13 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
           </div>
           <div className="crm-panel">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">Payment History</h2>
+              <h2 className="text-base font-semibold">Payments Made</h2>
               {canCreatePayments ? (
-                <span className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600">Record Payment</span>
+                <span className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600">Record Payment Made</span>
               ) : null}
             </div>
             {!canReadPayments ? (
-              <p className="text-sm text-[var(--muted)]">You do not have permission to view payment history.</p>
+              <p className="text-sm text-[var(--muted)]">You do not have permission to view payments made.</p>
             ) : (
               <div className="space-y-4">
                 <PaymentsTable
@@ -252,12 +260,12 @@ export default async function InvoiceDetailPage({ params, searchParams }: Invoic
                 />
                 {canCreatePayments ? (
                   <div className="rounded-xl border border-[var(--border)] bg-[#fbfcff] p-4">
-                    <h3 className="mb-2 text-sm font-semibold">Record Payment</h3>
+                    <h3 className="mb-2 text-sm font-semibold">Record Payment Made</h3>
                     <PaymentForm
                       action={createPaymentAction}
                       invoiceId={invoice.id}
                       redirectTo={`/invoices/${invoice.id}`}
-                      submitLabel="Save Payment"
+                      submitLabel="Save Payment Made"
                     />
                   </div>
                 ) : null}

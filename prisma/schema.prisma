@@ -1281,9 +1281,11 @@ model Invoice {
   purchaseOrderId  String?
   rfqId            String?
   serviceRequestId String?
+  vendorInvoiceNumber String
   invoiceNumber    String
   status           InvoiceStatus @default(DRAFT)
   invoiceDate      DateTime
+  receivedDate     DateTime      @default(now())
   dueDate          DateTime?
   subtotal         Decimal       @db.Decimal(14, 2) @default(0)
   taxTotal         Decimal       @db.Decimal(14, 2) @default(0)
@@ -1309,6 +1311,7 @@ model Invoice {
   attachments Attachment[]
 
   @@unique([servicePartnerId, invoiceNumber])
+  @@unique([servicePartnerId, vendorId, vendorInvoiceNumber])
   @@index([servicePartnerId])
   @@index([serviceRequestId])
   @@index([vendorId])

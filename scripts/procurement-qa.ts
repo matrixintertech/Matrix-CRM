@@ -1173,7 +1173,7 @@ async function main() {
         '{ key: "po-list", label: "PO List", href: "/purchase-orders", sortOrder: 29, permissionKey: "purchase_orders.read", isActive: true }'
       ) &&
         baselineSource.includes(
-          '{ key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true }'
+          '{ key: "invoice-list", label: "Vendor Invoices", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true }'
         ) &&
         baselineSource.includes('{ key: "vendor-payments-list", label: "Vendors Payment List", href: "/vendor-payments", sortOrder: 31, permissionKey: "vendor_payments.read", isActive: true }')
     );

@@ -28,7 +28,7 @@ export function FinanceReportFilters({
             type="text"
             name="q"
             defaultValue={q ?? ""}
-            placeholder="Invoice, payment, vendor, or PO"
+            placeholder="Vendor invoice, payment, vendor, or PO"
             className="h-10 w-full rounded-xl border border-[var(--border)] px-3"
           />
         </label>

@@ -1,4 +1,4 @@
-import { InvoiceStatus, LedgerSourceType, PaymentStatus, Prisma } from "@prisma/client";
+import { PaymentStatus, Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { FinanceReportFilterInput } from "@/features/finance-reports/validations";
@@ -86,6 +86,7 @@ function buildInvoiceWhere(session: Session, input: FinanceReportFilterInput): P
   if (input.q?.trim()) {
     const q = input.q.trim();
     where.OR = [
+      { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
       { invoiceNumber: { contains: q, mode: "insensitive" } },
       { notes: { contains: q, mode: "insensitive" } },
       { vendor: { name: { contains: q, mode: "insensitive" } } },
@@ -119,6 +120,7 @@ function buildInvoicePaymentWhere(session: Session, input: FinanceReportFilterIn
       { paymentNumber: { contains: q, mode: "insensitive" } },
       { referenceNumber: { contains: q, mode: "insensitive" } },
       { remarks: { contains: q, mode: "insensitive" } },
+      { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } },
       { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } },
     ];
   }
@@ -173,6 +175,7 @@ function buildLedgerWhere(session: Session, input: FinanceReportFilterInput): Pr
     where.OR = [
       { description: { contains: q, mode: "insensitive" } },
       { payment: { paymentNumber: { contains: q, mode: "insensitive" } } },
+      { payment: { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } } },
       { payment: { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } } },
       { vendorPayment: { paymentNumber: { contains: q, mode: "insensitive" } } },
       { vendorPayment: { vendor: { name: { contains: q, mode: "insensitive" } } } },
@@ -204,7 +207,6 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
   const [
     invoices,
     invoicePaymentsForCash,
-    vendorPayments,
     vendorPaymentsForCash,
     ledgerAggregate,
     ledgerSourceCounts,
@@ -216,9 +218,11 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       select: {
         id: true,
         servicePartnerId: true,
+        vendorInvoiceNumber: true,
         invoiceNumber: true,
         status: true,
         invoiceDate: true,
+        receivedDate: true,
         dueDate: true,
         grandTotal: true,
         vendor: {
@@ -249,11 +253,34 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
         amount: true,
         status: true,
         paidAt: true,
+        invoice: {
+          select: {
+            id: true,
+            vendorInvoiceNumber: true,
+            invoiceNumber: true,
+            vendor: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+            purchaseOrder: {
+              select: {
+                id: true,
+                poNumber: true,
+              },
+            },
+          },
+        },
       },
     }),
     prisma.vendorPayment.findMany({
-      where: vendorPaymentWhere,
-      orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+      where: {
+        ...vendorPaymentWhere,
+        ...(countedVendorStatuses.length > 0 ? { status: { in: countedVendorStatuses } } : { id: "__no-match__" }),
+      },
+      orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
       select: {
         id: true,
         paymentNumber: true,
@@ -273,20 +300,6 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
             poNumber: true,
           },
         },
-      },
-    }),
-    prisma.vendorPayment.findMany({
-      where: {
-        ...vendorPaymentWhere,
-        ...(countedVendorStatuses.length > 0 ? { status: { in: countedVendorStatuses } } : { id: "__no-match__" }),
-      },
-      orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        paymentNumber: true,
-        amount: true,
-        status: true,
-        paidAt: true,
       },
     }),
     prisma.ledgerEntry.aggregate({
@@ -333,18 +346,20 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       .map((group) => [group.invoiceId, roundMoney(Number(group._sum.amount ?? 0))])
   );
 
-  const receivables = invoices.map((invoice) => {
+  const payables = invoices.map((invoice) => {
     const grandTotal = roundMoney(Number(invoice.grandTotal));
     const paidAmount = paidAmountByInvoiceId.get(invoice.id) ?? 0;
     const balanceDue = roundMoney(Math.max(grandTotal - paidAmount, 0));
 
     return {
       id: invoice.id,
+      vendorInvoiceNumber: invoice.vendorInvoiceNumber,
       invoiceNumber: invoice.invoiceNumber,
       vendor: invoice.vendor,
       purchaseOrder: invoice.purchaseOrder,
       status: invoice.status,
       invoiceDate: invoice.invoiceDate,
+      receivedDate: invoice.receivedDate,
       dueDate: invoice.dueDate,
       grandTotal,
       paidAmount,
@@ -352,22 +367,44 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
     };
   });
 
-  const totalInvoiceAmount = roundMoney(receivables.reduce((sum, row) => sum + row.grandTotal, 0));
-  const outstandingReceivables = roundMoney(receivables.reduce((sum, row) => sum + row.balanceDue, 0));
-  const totalReceivedAmount = roundMoney(invoicePaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
-  const totalVendorPayments = roundMoney(
-    vendorPaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0)
-  );
+  const totalVendorInvoiceAmount = roundMoney(payables.reduce((sum, row) => sum + row.grandTotal, 0));
+  const outstandingPayables = roundMoney(payables.reduce((sum, row) => sum + row.balanceDue, 0));
+  const totalInvoicePaymentsMade = roundMoney(invoicePaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
+  const totalStandaloneVendorPayments = roundMoney(vendorPaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
+  const totalOutgoingPayments = roundMoney(totalInvoicePaymentsMade + totalStandaloneVendorPayments);
 
-  const payables = vendorPayments.map((vendorPayment) => ({
-    id: vendorPayment.id,
-    paymentNumber: vendorPayment.paymentNumber,
-    amount: roundMoney(Number(vendorPayment.amount)),
-    status: vendorPayment.status,
-    paidAt: vendorPayment.paidAt,
-    vendor: vendorPayment.vendor,
-    purchaseOrder: vendorPayment.purchaseOrder,
-  }));
+  const paymentsMade = [
+    ...invoicePaymentsForCash
+      .filter((payment) => payment.invoice)
+      .map((payment) => ({
+        id: payment.id,
+        paymentNumber: payment.paymentNumber,
+        amount: roundMoney(Number(payment.amount)),
+        status: payment.status,
+        paidAt: payment.paidAt,
+        sourceLabel: "Vendor Invoice Payment",
+        vendor: payment.invoice!.vendor,
+        purchaseOrder: payment.invoice!.purchaseOrder,
+        vendorInvoiceNumber: payment.invoice!.vendorInvoiceNumber,
+        invoiceNumber: payment.invoice!.invoiceNumber,
+      })),
+    ...vendorPaymentsForCash.map((vendorPayment) => ({
+      id: vendorPayment.id,
+      paymentNumber: vendorPayment.paymentNumber,
+      amount: roundMoney(Number(vendorPayment.amount)),
+      status: vendorPayment.status,
+      paidAt: vendorPayment.paidAt,
+      sourceLabel: "Vendor Payment",
+      vendor: vendorPayment.vendor,
+      purchaseOrder: vendorPayment.purchaseOrder,
+      vendorInvoiceNumber: null,
+      invoiceNumber: null,
+    })),
+  ].sort((left, right) => {
+    const leftTime = left.paidAt?.getTime() ?? 0;
+    const rightTime = right.paidAt?.getTime() ?? 0;
+    return rightTime - leftTime;
+  });
 
   const cashMovementMap = new Map<string, { incoming: number; outgoing: number }>();
   for (const payment of invoicePaymentsForCash) {
@@ -376,7 +413,7 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
     }
     const periodKey = formatPeriodKey(payment.paidAt);
     const current = cashMovementMap.get(periodKey) ?? { incoming: 0, outgoing: 0 };
-    current.incoming = roundMoney(current.incoming + Number(payment.amount));
+    current.outgoing = roundMoney(current.outgoing + Number(payment.amount));
     cashMovementMap.set(periodKey, current);
   }
   for (const vendorPayment of vendorPaymentsForCash) {
@@ -417,15 +454,15 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
 
   return {
     summary: {
-      totalInvoiceAmount,
-      totalReceivedAmount,
-      outstandingReceivables,
-      totalVendorPayments,
-      netCashMovement: roundMoney(totalReceivedAmount - totalVendorPayments),
+      totalVendorInvoiceAmount,
+      totalInvoicePaymentsMade,
+      outstandingPayables,
+      totalStandaloneVendorPayments,
+      totalOutgoingPayments,
       ledgerEntriesCount,
     },
-    receivables,
     payables,
+    paymentsMade,
     cashMovement,
     ledgerSummary,
   };

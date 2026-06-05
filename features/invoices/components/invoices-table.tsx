@@ -6,9 +6,11 @@ import { formatDateTime } from "@/lib/utils/format";
 
 type InvoiceRow = {
   id: string;
+  vendorInvoiceNumber: string;
   invoiceNumber: string;
   status: InvoiceStatus;
   invoiceDate: Date;
+  receivedDate: Date;
   dueDate: Date | null;
   grandTotal: unknown;
   createdAt: Date;
@@ -53,11 +55,13 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
       getRowHref={(invoice) => `/invoices/${invoice.id}`}
       columns={[
         {
-          header: "Invoice",
+          header: "Vendor Invoice",
           cell: (invoice) => (
             <div>
-              <p className="font-medium text-slate-900">{invoice.invoiceNumber}</p>
-              <p className="text-xs text-[var(--muted)]">{invoice.vendor.name}</p>
+              <p className="font-medium text-slate-900">{invoice.vendorInvoiceNumber}</p>
+              <p className="text-xs text-[var(--muted)]">
+                Internal: {invoice.invoiceNumber} | {invoice.vendor.name}
+              </p>
             </div>
           ),
         },
@@ -66,6 +70,7 @@ export function InvoicesTable({ invoices }: { invoices: InvoiceRow[] }) {
         { header: "Service Request", cell: (invoice) => invoice.serviceRequest?.serviceNumber ?? "-" },
         { header: "Lines", cell: (invoice) => invoice._count.items },
         { header: "Invoice Date", cell: (invoice) => formatDateTime(invoice.invoiceDate) },
+        { header: "Received Date", cell: (invoice) => formatDateTime(invoice.receivedDate) },
         { header: "Due Date", cell: (invoice) => formatDateTime(invoice.dueDate) },
         { header: "Grand Total", cell: (invoice) => toMoney(invoice.grandTotal) },
         { header: "Tenant", cell: (invoice) => `${invoice.servicePartner.name} (${invoice.servicePartner.code})` },

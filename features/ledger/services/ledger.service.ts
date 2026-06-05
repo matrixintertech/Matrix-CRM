@@ -47,6 +47,7 @@ export async function syncLedgerForInvoicePayment(
       invoice: {
         select: {
           id: true,
+          vendorInvoiceNumber: true,
           invoiceNumber: true,
         },
       },
@@ -91,8 +92,8 @@ export async function syncLedgerForInvoicePayment(
       creditAmount: delta < 0 ? Math.abs(delta) : 0,
       description:
         delta > 0
-          ? `Invoice payment posted for ${payment.invoice.invoiceNumber} via ${payment.paymentNumber}`
-          : `Invoice payment ledger reversal for ${payment.invoice.invoiceNumber} via ${payment.paymentNumber}`,
+          ? `Vendor invoice payment made for ${payment.invoice.vendorInvoiceNumber || payment.invoice.invoiceNumber} via ${payment.paymentNumber}`
+          : `Vendor invoice payment reversal for ${payment.invoice.vendorInvoiceNumber || payment.invoice.invoiceNumber} via ${payment.paymentNumber}`,
       createdByUserId: input.actorUserId ?? null,
     },
     select: {
@@ -240,6 +241,7 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
     where.OR = [
       { description: { contains: q, mode: "insensitive" } },
       { payment: { paymentNumber: { contains: q, mode: "insensitive" } } },
+      { payment: { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } } },
       { payment: { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } } },
       { vendorPayment: { paymentNumber: { contains: q, mode: "insensitive" } } },
       { vendorPayment: { vendor: { name: { contains: q, mode: "insensitive" } } } },
@@ -264,6 +266,7 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
               select: {
                 id: true,
                 invoiceNumber: true,
+                vendorInvoiceNumber: true,
               },
             },
           },
@@ -348,12 +351,13 @@ export async function listLedgerEntriesForInvoice(session: Session, invoiceId: s
           id: true,
           paymentNumber: true,
           invoiceId: true,
-          invoice: {
-            select: {
-              id: true,
-              invoiceNumber: true,
+            invoice: {
+              select: {
+                id: true,
+                invoiceNumber: true,
+                vendorInvoiceNumber: true,
+              },
             },
-          },
         },
       },
     },

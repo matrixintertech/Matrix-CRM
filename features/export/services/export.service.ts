@@ -29,6 +29,12 @@ export type ExportModuleKey =
 
 type SearchParamsLike = URLSearchParams;
 
+const countedPaymentStatuses: PaymentStatus[] = [
+  PaymentStatus.APPROVED,
+  PaymentStatus.PAID,
+  PaymentStatus.PARTIALLY_PAID,
+];
+
 function getStringParam(searchParams: SearchParamsLike, key: string) {
   const value = searchParams.get(key);
   return value?.trim() || undefined;
@@ -422,9 +428,11 @@ async function getInvoiceRows(session: Session, searchParams: SearchParamsLike) 
   }
   if (q) {
     where.OR = [
+      { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
       { invoiceNumber: { contains: q, mode: "insensitive" } },
       { notes: { contains: q, mode: "insensitive" } },
       { vendor: { name: { contains: q, mode: "insensitive" } } },
+      { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
       { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
     ];
   }
@@ -434,20 +442,41 @@ async function getInvoiceRows(session: Session, searchParams: SearchParamsLike) 
     orderBy: [{ createdAt: "desc" }],
     include: {
       vendor: { select: { name: true, code: true } },
+      purchaseOrder: { select: { poNumber: true } },
       serviceRequest: { select: { serviceNumber: true } },
+      payments: {
+        where: {
+          status: {
+            in: countedPaymentStatuses,
+          },
+        },
+        select: {
+          amount: true,
+        },
+      },
     },
   });
 
-  return rows.map((row) => ({
-    invoiceNumber: row.invoiceNumber,
-    status: row.status,
-    vendor: `${row.vendor.name} (${row.vendor.code})`,
-    serviceRequest: row.serviceRequest?.serviceNumber || "",
-    invoiceDate: toRowDate(row.invoiceDate),
-    dueDate: toRowDate(row.dueDate),
-    grandTotal: Number(row.grandTotal),
-    createdAt: toRowDate(row.createdAt),
-  }));
+  return rows.map((row) => {
+    const paidAmount = row.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const grandTotal = Number(row.grandTotal);
+
+    return {
+      vendorInvoiceNumber: row.vendorInvoiceNumber,
+      internalRecordNumber: row.invoiceNumber,
+      status: row.status,
+      vendor: `${row.vendor.name} (${row.vendor.code})`,
+      purchaseOrder: row.purchaseOrder?.poNumber || "",
+      serviceRequest: row.serviceRequest?.serviceNumber || "",
+      invoiceDate: toRowDate(row.invoiceDate),
+      receivedDate: toRowDate(row.receivedDate),
+      dueDate: toRowDate(row.dueDate),
+      paidAmount,
+      balanceDue: Math.max(grandTotal - paidAmount, 0),
+      grandTotal,
+      createdAt: toRowDate(row.createdAt),
+    };
+  });
 }
 
 async function getPaymentRows(session: Session, searchParams: SearchParamsLike) {
@@ -467,6 +496,7 @@ async function getPaymentRows(session: Session, searchParams: SearchParamsLike) 
       { paymentNumber: { contains: q, mode: "insensitive" } },
       { referenceNumber: { contains: q, mode: "insensitive" } },
       { remarks: { contains: q, mode: "insensitive" } },
+      { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } },
       { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } },
     ];
   }
@@ -475,13 +505,19 @@ async function getPaymentRows(session: Session, searchParams: SearchParamsLike) 
     where,
     orderBy: [{ createdAt: "desc" }],
     include: {
-      invoice: { select: { invoiceNumber: true } },
+      invoice: {
+        select: {
+          vendorInvoiceNumber: true,
+          invoiceNumber: true,
+        },
+      },
     },
   });
 
   return rows.map((row) => ({
     paymentNumber: row.paymentNumber,
-    invoiceNumber: row.invoice?.invoiceNumber || "",
+    vendorInvoiceNumber: row.invoice?.vendorInvoiceNumber || "",
+    internalRecordNumber: row.invoice?.invoiceNumber || "",
     status: row.status,
     amount: Number(row.amount),
     mode: row.mode,
@@ -598,24 +634,24 @@ async function getFinanceReportRows(session: Session, searchParams: SearchParams
 
   return [
     {
-      metric: "Total Invoice Amount",
-      value: report.summary.totalInvoiceAmount,
+      metric: "Total Vendor Invoice Amount",
+      value: report.summary.totalVendorInvoiceAmount,
     },
     {
-      metric: "Total Received Amount",
-      value: report.summary.totalReceivedAmount,
+      metric: "Invoice Payments Made",
+      value: report.summary.totalInvoicePaymentsMade,
     },
     {
-      metric: "Outstanding Receivables",
-      value: report.summary.outstandingReceivables,
+      metric: "Outstanding Payables",
+      value: report.summary.outstandingPayables,
     },
     {
-      metric: "Total Vendor Payments",
-      value: report.summary.totalVendorPayments,
+      metric: "Other Vendor Payments",
+      value: report.summary.totalStandaloneVendorPayments,
     },
     {
-      metric: "Net Cash Movement",
-      value: report.summary.netCashMovement,
+      metric: "Total Outgoing Cash",
+      value: report.summary.totalOutgoingPayments,
     },
     {
       metric: "Ledger Entries Count",

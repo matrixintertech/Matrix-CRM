@@ -57,6 +57,10 @@ function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
 }
 
+function normalizeRequiredString(value: string) {
+  return value.trim();
+}
+
 function toYyyyMmDd(date: Date) {
   const yyyy = date.getUTCFullYear();
   const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -151,6 +155,33 @@ async function generateInvoiceNumber(servicePartnerId: string) {
   throw new Error("Unable to generate a unique invoice number.");
 }
 
+async function assertVendorInvoiceNumberAvailable(input: {
+  servicePartnerId: string;
+  vendorId: string;
+  vendorInvoiceNumber: string;
+  excludeInvoiceId?: string;
+}) {
+  const existing = await prisma.invoice.findFirst({
+    where: {
+      servicePartnerId: input.servicePartnerId,
+      vendorId: input.vendorId,
+      deletedAt: null,
+      ...(input.excludeInvoiceId ? { id: { not: input.excludeInvoiceId } } : {}),
+      vendorInvoiceNumber: {
+        equals: input.vendorInvoiceNumber,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existing) {
+    throw new Error("Vendor invoice number already exists for this vendor.");
+  }
+}
+
 export function getInvoiceScopeWhere(session: Session): Prisma.InvoiceWhereInput {
   return scopeByTenant(session, {});
 }
@@ -177,6 +208,7 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
   if (input.q?.trim()) {
     const q = input.q.trim();
     where.OR = [
+      { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
       { invoiceNumber: { contains: q, mode: "insensitive" } },
       { notes: { contains: q, mode: "insensitive" } },
       { vendor: { name: { contains: q, mode: "insensitive" } } },
@@ -192,11 +224,11 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
       take: pagination.take,
       orderBy: [{ createdAt: "desc" }],
       include: {
-        servicePartner: { select: { id: true, code: true, name: true } },
-        vendor: { select: { id: true, code: true, name: true } },
-        purchaseOrder: { select: { id: true, poNumber: true, status: true } },
-        serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
-        _count: { select: { items: true } },
+      servicePartner: { select: { id: true, code: true, name: true } },
+      vendor: { select: { id: true, code: true, name: true } },
+      purchaseOrder: { select: { id: true, poNumber: true, status: true } },
+      serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
+      _count: { select: { items: true } },
       },
     }),
     prisma.invoice.count({ where }),
@@ -256,9 +288,11 @@ export async function listInvoicesForPurchaseOrder(session: Session, purchaseOrd
     orderBy: [{ createdAt: "desc" }],
     select: {
       id: true,
+      vendorInvoiceNumber: true,
       invoiceNumber: true,
       status: true,
       invoiceDate: true,
+      receivedDate: true,
       grandTotal: true,
       _count: {
         select: {
@@ -608,6 +642,12 @@ export async function createInvoice(session: Session, input: InvoiceUpsertInput)
   await assertServiceRequestTenantConsistency(resolvedServiceRequestId, servicePartnerId);
   await assertRfqTenantConsistency(resolvedRfqId, servicePartnerId, resolvedVendorId, resolvedServiceRequestId);
   await assertInvoiceItemsTenantConsistency(normalizedInput.items, servicePartnerId);
+  const vendorInvoiceNumber = normalizeRequiredString(normalizedInput.vendorInvoiceNumber);
+  await assertVendorInvoiceNumberAvailable({
+    servicePartnerId,
+    vendorId: resolvedVendorId,
+    vendorInvoiceNumber,
+  });
 
   const invoiceNumber = await generateInvoiceNumber(servicePartnerId);
   const { computedLines, subtotal, taxTotal, grandTotal } = computeLines(normalizedInput.items);
@@ -621,9 +661,11 @@ export async function createInvoice(session: Session, input: InvoiceUpsertInput)
         purchaseOrderId: purchaseOrder?.id ?? normalizedInput.purchaseOrderId ?? null,
         rfqId: resolvedRfqId ?? null,
         serviceRequestId: resolvedServiceRequestId ?? null,
+        vendorInvoiceNumber,
         invoiceNumber,
         status: normalizedInput.status,
         invoiceDate: normalizedInput.invoiceDate,
+        receivedDate: normalizedInput.receivedDate,
         dueDate: normalizedInput.dueDate ?? null,
         subtotal,
         taxTotal,
@@ -676,6 +718,13 @@ export async function updateInvoice(session: Session, id: string, input: Invoice
   await assertServiceRequestTenantConsistency(resolvedServiceRequestId, servicePartnerId);
   await assertRfqTenantConsistency(resolvedRfqId, servicePartnerId, resolvedVendorId, resolvedServiceRequestId);
   await assertInvoiceItemsTenantConsistency(normalizedInput.items, servicePartnerId);
+  const vendorInvoiceNumber = normalizeRequiredString(normalizedInput.vendorInvoiceNumber);
+  await assertVendorInvoiceNumberAvailable({
+    servicePartnerId,
+    vendorId: resolvedVendorId,
+    vendorInvoiceNumber,
+    excludeInvoiceId: existing.id,
+  });
 
   const { computedLines, subtotal, taxTotal, grandTotal } = computeLines(normalizedInput.items);
   const approvalFields = getApprovalFields(normalizedInput.status, session, {
@@ -692,8 +741,10 @@ export async function updateInvoice(session: Session, id: string, input: Invoice
         purchaseOrderId: purchaseOrder?.id ?? normalizedInput.purchaseOrderId ?? null,
         rfqId: resolvedRfqId ?? null,
         serviceRequestId: resolvedServiceRequestId ?? null,
+        vendorInvoiceNumber,
         status: normalizedInput.status,
         invoiceDate: normalizedInput.invoiceDate,
+        receivedDate: normalizedInput.receivedDate,
         dueDate: normalizedInput.dueDate ?? null,
         subtotal,
         taxTotal,

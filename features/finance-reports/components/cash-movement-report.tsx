@@ -13,7 +13,7 @@ export function CashMovementReport({ rows }: { rows: CashMovementRow[] }) {
     <section className="rounded-xl border border-[var(--border)] bg-white shadow-sm">
       <div className="border-b border-[var(--border)] px-5 py-4">
         <h2 className="text-lg font-semibold">Cash Movement</h2>
-        <p className="text-sm text-[var(--muted)]">Incoming invoice payments and outgoing vendor payments grouped by month.</p>
+        <p className="text-sm text-[var(--muted)]">Outgoing cash from vendor invoice payments and vendor payments grouped by month.</p>
       </div>
 
       {rows.length === 0 ? (

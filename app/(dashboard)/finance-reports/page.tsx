@@ -42,15 +42,15 @@ export default async function FinanceReportsPage({ searchParams }: FinanceReport
     <section className="crm-page">
       <PageHeader
         title="Finance Reports"
-        description="Read-only tenant-scoped finance reporting built from invoices, payments, vendor payments, and ledger postings."
+        description="Read-only tenant-scoped finance reporting for received vendor invoices, outgoing payments, and ledger postings."
       />
 
       <FinanceSummaryCards
-        totalInvoiceAmount={report.summary.totalInvoiceAmount}
-        totalReceivedAmount={report.summary.totalReceivedAmount}
-        outstandingReceivables={report.summary.outstandingReceivables}
-        totalVendorPayments={report.summary.totalVendorPayments}
-        netCashMovement={report.summary.netCashMovement}
+        totalVendorInvoiceAmount={report.summary.totalVendorInvoiceAmount}
+        totalInvoicePaymentsMade={report.summary.totalInvoicePaymentsMade}
+        outstandingPayables={report.summary.outstandingPayables}
+        totalStandaloneVendorPayments={report.summary.totalStandaloneVendorPayments}
+        totalOutgoingPayments={report.summary.totalOutgoingPayments}
         ledgerEntriesCount={report.summary.ledgerEntriesCount}
       />
 
@@ -77,8 +77,8 @@ export default async function FinanceReportsPage({ searchParams }: FinanceReport
       ) : null}
 
       <div className="grid gap-5">
-        <ReceivablesReport rows={report.receivables} />
-        <PayablesReport rows={report.payables} />
+        <ReceivablesReport rows={report.payables} />
+        <PayablesReport rows={report.paymentsMade} />
         <div className="grid gap-5 xl:grid-cols-2">
           <CashMovementReport rows={report.cashMovement} />
           <LedgerSummaryReport

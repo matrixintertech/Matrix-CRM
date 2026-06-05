@@ -355,12 +355,14 @@ async function ensureTenantData(input: {
     input.prefix === "QAFINCO"
       ? [
           {
+            vendorInvoiceNumber: `${QA_PREFIX}-VINV-1`,
             invoiceNumber: `${QA_PREFIX}-INV-1`,
             invoiceDate: new Date("2026-06-10T00:00:00.000Z"),
             dueDate: new Date("2026-06-25T00:00:00.000Z"),
             grandTotal: 1000,
           },
           {
+            vendorInvoiceNumber: `${QA_PREFIX}-VINV-2`,
             invoiceNumber: `${QA_PREFIX}-INV-2`,
             invoiceDate: new Date("2026-07-05T00:00:00.000Z"),
             dueDate: new Date("2026-07-20T00:00:00.000Z"),
@@ -369,6 +371,7 @@ async function ensureTenantData(input: {
         ]
       : [
           {
+            vendorInvoiceNumber: `${QA_PREFIX}-FVINV-1`,
             invoiceNumber: `${QA_PREFIX}-FINV-1`,
             invoiceDate: new Date("2026-06-14T00:00:00.000Z"),
             dueDate: new Date("2026-06-28T00:00:00.000Z"),
@@ -382,9 +385,11 @@ async function ensureTenantData(input: {
       data: {
         servicePartnerId: input.servicePartnerId,
         vendorId: vendor.id,
+        vendorInvoiceNumber: definition.vendorInvoiceNumber,
         invoiceNumber: definition.invoiceNumber,
         status: InvoiceStatus.APPROVED,
         invoiceDate: definition.invoiceDate,
+        receivedDate: definition.invoiceDate,
         dueDate: definition.dueDate,
         subtotal: definition.grandTotal,
         taxTotal: 0,
@@ -668,24 +673,50 @@ async function main() {
     const foreignReport = await getFinanceReportData(foreignSession as never, { q: QA_PREFIX });
     const superReport = await getFinanceReportData(superSession as never, { q: QA_PREFIX });
 
-    pushResult(results, "tenant.user_sees_only_own_tenant_invoice_total", companyReport.summary.totalInvoiceAmount === 1500);
-    pushResult(results, "tenant.user_sees_only_own_tenant_received_total", companyReport.summary.totalReceivedAmount === 900);
-    pushResult(results, "tenant.user_sees_only_own_tenant_vendor_payment_total", companyReport.summary.totalVendorPayments === 200);
+    pushResult(results, "tenant.user_sees_only_own_tenant_invoice_total", companyReport.summary.totalVendorInvoiceAmount === 1500);
+    pushResult(results, "tenant.user_sees_only_own_tenant_invoice_payments_total", companyReport.summary.totalInvoicePaymentsMade === 900);
+    pushResult(results, "tenant.user_sees_only_own_tenant_vendor_payment_total", companyReport.summary.totalStandaloneVendorPayments === 200);
     pushResult(results, "tenant.user_sees_only_own_tenant_ledger_count", companyReport.summary.ledgerEntriesCount === 3);
+    pushResult(results, "tenant.user_sees_only_own_tenant_total_outgoing", companyReport.summary.totalOutgoingPayments === 1100);
 
-    pushResult(results, "tenant.foreign_user_sees_only_foreign_totals", foreignReport.summary.totalInvoiceAmount === 700 && foreignReport.summary.totalVendorPayments === 300);
-    pushResult(results, "super_admin_sees_platform_totals", superReport.summary.totalInvoiceAmount === 2200 && superReport.summary.totalVendorPayments === 500);
+    pushResult(
+      results,
+      "tenant.foreign_user_sees_only_foreign_totals",
+      foreignReport.summary.totalVendorInvoiceAmount === 700 &&
+        foreignReport.summary.totalInvoicePaymentsMade === 300 &&
+        foreignReport.summary.totalStandaloneVendorPayments === 300
+    );
+    pushResult(
+      results,
+      "super_admin_sees_platform_totals",
+      superReport.summary.totalVendorInvoiceAmount === 2200 &&
+        superReport.summary.totalInvoicePaymentsMade === 1200 &&
+        superReport.summary.totalStandaloneVendorPayments === 500
+    );
 
-    pushResult(results, "receivables.total_invoice_amount_matches_seeded_invoices", companyReport.summary.totalInvoiceAmount === 1500);
-    pushResult(results, "receivables.total_received_amount_matches_counted_payments", companyReport.summary.totalReceivedAmount === 900);
-    pushResult(results, "receivables.outstanding_matches_invoice_total_minus_counted_payments", companyReport.summary.outstandingReceivables === 600);
+    pushResult(results, "payables.total_invoice_amount_matches_seeded_invoices", companyReport.summary.totalVendorInvoiceAmount === 1500);
+    pushResult(results, "payables.total_invoice_payments_match_counted_payments", companyReport.summary.totalInvoicePaymentsMade === 900);
+    pushResult(results, "payables.outstanding_matches_invoice_total_minus_counted_payments", companyReport.summary.outstandingPayables === 600);
 
-    const invoice1 = companyReport.receivables.find((row) => row.invoiceNumber === `${QA_PREFIX}-INV-1`);
-    const invoice2 = companyReport.receivables.find((row) => row.invoiceNumber === `${QA_PREFIX}-INV-2`);
-    pushResult(results, "receivables.invoice_balance_rows_correct", Boolean(invoice1 && invoice2 && invoice1.paidAmount === 400 && invoice1.balanceDue === 600 && invoice2.paidAmount === 500 && invoice2.balanceDue === 0));
+    const invoice1 = companyReport.payables.find((row) => row.invoiceNumber === `${QA_PREFIX}-INV-1`);
+    const invoice2 = companyReport.payables.find((row) => row.invoiceNumber === `${QA_PREFIX}-INV-2`);
+    pushResult(
+      results,
+      "payables.invoice_balance_rows_correct",
+      Boolean(
+        invoice1 &&
+          invoice2 &&
+          invoice1.vendorInvoiceNumber === `${QA_PREFIX}-VINV-1` &&
+          invoice1.paidAmount === 400 &&
+          invoice1.balanceDue === 600 &&
+          invoice2.vendorInvoiceNumber === `${QA_PREFIX}-VINV-2` &&
+          invoice2.paidAmount === 500 &&
+          invoice2.balanceDue === 0
+      )
+    );
 
-    pushResult(results, "payables.total_equals_counted_vendor_payments", companyReport.summary.totalVendorPayments === 200);
-    pushResult(results, "cash_movement.net_equals_incoming_minus_outgoing", companyReport.summary.netCashMovement === 700);
+    pushResult(results, "outgoing.total_other_vendor_payments_match_seeded_data", companyReport.summary.totalStandaloneVendorPayments === 200);
+    pushResult(results, "cash_movement.outgoing_equals_invoice_and_vendor_payments", companyReport.summary.totalOutgoingPayments === 1100);
 
     pushResult(
       results,
@@ -712,13 +743,21 @@ async function main() {
     pushResult(
       results,
       "filters.date_range_limits_totals",
-      juneReport.summary.totalInvoiceAmount === 1000 &&
-        juneReport.summary.totalReceivedAmount === 400 &&
-        juneReport.summary.totalVendorPayments === 200 &&
+      juneReport.summary.totalVendorInvoiceAmount === 1000 &&
+        juneReport.summary.totalInvoicePaymentsMade === 400 &&
+        juneReport.summary.totalStandaloneVendorPayments === 200 &&
+        juneReport.summary.totalOutgoingPayments === 600 &&
         juneReport.summary.ledgerEntriesCount === 2
     );
 
-    pushResult(results, "filters.date_range_limits_cash_movement_rows", juneReport.cashMovement.length === 1 && juneReport.cashMovement[0]?.incoming === 400 && juneReport.cashMovement[0]?.outgoing === 200);
+    pushResult(
+      results,
+      "filters.date_range_limits_cash_movement_rows",
+      juneReport.cashMovement.length === 1 &&
+        juneReport.cashMovement[0]?.incoming === 0 &&
+        juneReport.cashMovement[0]?.outgoing === 600 &&
+        juneReport.cashMovement[0]?.net === -600
+    );
 
     const adminNavKeys = new Set(flattenNavKeys(await getNavigationForSession(companySession as never)));
     const noReadNavKeys = new Set(flattenNavKeys(await getNavigationForSession(noReadSession as never)));
@@ -727,6 +766,10 @@ async function main() {
 
     const dashboardSource = readFileSync("app/(dashboard)/page.tsx", "utf8");
     const pageSource = readFileSync("app/(dashboard)/finance-reports/page.tsx", "utf8");
+    const summaryCardsSource = readFileSync("features/finance-reports/components/finance-summary-cards.tsx", "utf8");
+    const receivablesReportSource = readFileSync("features/finance-reports/components/receivables-report.tsx", "utf8");
+    const payablesReportSource = readFileSync("features/finance-reports/components/payables-report.tsx", "utf8");
+    const cashMovementSource = readFileSync("features/finance-reports/components/cash-movement-report.tsx", "utf8");
     const serviceSource = readFileSync("features/finance-reports/services/finance-report.service.ts", "utf8");
     const filtersSource = readFileSync("features/finance-reports/components/finance-report-filters.tsx", "utf8");
     const navServiceSource = readFileSync("features/navigation/services/navigation.service.ts", "utf8");
@@ -746,6 +789,10 @@ async function main() {
         !pageSource.includes("update")
     );
     pushResult(results, "reports.filters_are_read_only_get_based", filtersSource.includes('method="get"'));
+    pushResult(results, "reports.summary_cards_use_payables_wording", summaryCardsSource.includes("Outstanding Payables") && summaryCardsSource.includes("Total Outgoing Cash"));
+    pushResult(results, "reports.vendor_invoice_table_uses_vendor_wording", receivablesReportSource.includes("Received Vendor Invoices") && receivablesReportSource.includes("Payments Made"));
+    pushResult(results, "reports.outgoing_payments_table_uses_outgoing_wording", payablesReportSource.includes("Outgoing Payments") && payablesReportSource.includes("Vendor Invoice"));
+    pushResult(results, "reports.cash_movement_describes_outgoing_cash", cashMovementSource.includes("Outgoing cash from vendor invoice payments and vendor payments"));
     pushResult(results, "navigation.fallback_has_finance_reports_route", navServiceSource.includes('"finance-reports": "/finance-reports"'));
     pushResult(results, "sidebar_finance_section_includes_finance_reports", sidebarSource.includes('"finance-reports"'));
     pushResult(results, "baseline_navigation_has_finance_reports_entry", baselineSource.includes('{ key: "finance-reports", label: "Finance Reports", href: "/finance-reports", sortOrder: 32, permissionKey: "reports.read", isActive: true }'));

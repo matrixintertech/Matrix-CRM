@@ -26,7 +26,7 @@ function getErrorMessage(code?: string) {
     return "Please review the submitted values.";
   }
   if (code === "duplicate") {
-    return "Invoice number already exists for this service partner.";
+    return "Vendor invoice number already exists for this vendor.";
   }
   if (code === "service-partner") {
     return "Service partner is required.";
@@ -71,7 +71,7 @@ export default async function EditInvoicePage({ params, searchParams }: EditInvo
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Edit Invoice" description="Update invoice details and line items." />
+      <PageHeader title="Edit Received Invoice" description="Update received vendor invoice details and line items." />
       <div>
         <Link href={`/invoices/${id}`} className="text-sm text-[var(--muted)] underline">
           Back to details
@@ -89,6 +89,8 @@ export default async function EditInvoicePage({ params, searchParams }: EditInvo
         canChooseServicePartner={session.user.isSuperAdmin}
         errorMessage={errorMessage}
         invoice={{
+          invoiceNumber: invoice.invoiceNumber,
+          vendorInvoiceNumber: invoice.vendorInvoiceNumber,
           servicePartnerId: invoice.servicePartnerId,
           vendorId: invoice.vendorId,
           purchaseOrderId: invoice.purchaseOrderId,
@@ -96,6 +98,7 @@ export default async function EditInvoicePage({ params, searchParams }: EditInvo
           serviceRequestId: invoice.serviceRequestId,
           status: invoice.status,
           invoiceDate: toDateInputValue(invoice.invoiceDate) ?? "",
+          receivedDate: toDateInputValue(invoice.receivedDate) ?? "",
           dueDate: toDateInputValue(invoice.dueDate),
           notes: invoice.notes,
           items: invoice.items.map((line) => ({

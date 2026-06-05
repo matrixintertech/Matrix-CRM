@@ -71,8 +71,10 @@ export const invoiceUpsertSchema = z
     purchaseOrderId: optionalUuid,
     rfqId: optionalUuid,
     serviceRequestId: optionalUuid,
+    vendorInvoiceNumber: z.string().trim().min(1).max(120),
     status: z.nativeEnum(InvoiceStatus),
     invoiceDate: requiredDate,
+    receivedDate: requiredDate,
     dueDate: optionalDate,
     notes: optionalString(1200),
     items: z.array(invoiceLineSchema).min(1, "At least one invoice line is required."),
@@ -92,6 +94,14 @@ export const invoiceUpsertSchema = z
         code: z.ZodIssueCode.custom,
         path: ["dueDate"],
         message: "Due date must be on or after invoice date.",
+      });
+    }
+
+    if (value.receivedDate < value.invoiceDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["receivedDate"],
+        message: "Received date must be on or after invoice date.",
       });
     }
   });

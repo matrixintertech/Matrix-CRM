@@ -42,7 +42,7 @@ export function PaymentForm({ action, invoiceId, redirectTo, submitLabel, paymen
 
       <div className="grid gap-2 md:grid-cols-2">
         <label className="space-y-1 text-sm">
-          <span className="font-medium">Amount</span>
+          <span className="font-medium">Amount Paid</span>
           <input
             name="amount"
             type="number"
@@ -54,7 +54,7 @@ export function PaymentForm({ action, invoiceId, redirectTo, submitLabel, paymen
           />
         </label>
         <label className="space-y-1 text-sm">
-          <span className="font-medium">Payment Date</span>
+          <span className="font-medium">Paid Date</span>
           <input
             name="paymentDate"
             type="date"

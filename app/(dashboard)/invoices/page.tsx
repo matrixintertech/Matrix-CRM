@@ -19,14 +19,14 @@ function getErrorMessage(code?: string) {
     return "Request validation failed.";
   }
   if (code === "not-found") {
-    return "Invoice record could not be found.";
+    return "Vendor invoice record could not be found.";
   }
   return undefined;
 }
 
 function getSuccessMessage(code?: string) {
   if (code === "deleted") {
-    return "Invoice deleted successfully.";
+    return "Vendor invoice deleted successfully.";
   }
   return undefined;
 }
@@ -74,9 +74,9 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
   return (
     <section className="space-y-5">
       <PageHeader
-        title="Invoice List"
-        description="Manage invoices linked to vendors, purchase orders, and service requests."
-        action={canCreate ? { label: "New Invoice", href: "/invoices/new" } : undefined}
+        title="Vendor Invoices"
+        description="Manage received vendor invoices linked to vendors, purchase orders, and service requests."
+        action={canCreate ? { label: "Record Vendor Invoice", href: "/invoices/new" } : undefined}
       />
 
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
@@ -87,7 +87,7 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
           type="search"
           name="q"
           defaultValue={q}
-          placeholder="Search by invoice, vendor, PO, service request"
+          placeholder="Search by vendor invoice no., internal record no., vendor, PO, or service request"
           className="h-9 min-w-0 rounded-md border border-[var(--border)] px-3 text-sm"
         />
         <select name="status" defaultValue={status ?? ""} className="h-9 rounded-md border border-[var(--border)] px-3 text-sm">
@@ -115,13 +115,13 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
       </form>
 
       {result.invoices.length === 0 ? (
-        <EmptyState title="No invoices found" description="Try adjusting filters or create a new invoice." />
+        <EmptyState title="No vendor invoices found" description="No vendor invoices recorded yet." />
       ) : (
         <>
           <InvoicesTable invoices={result.invoices} />
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
             <p className="text-[var(--muted)]">
-              Page {result.page} of {result.totalPages} ({result.total} invoices)
+              Page {result.page} of {result.totalPages} ({result.total} vendor invoices)
             </p>
             <div className="flex items-center gap-2">
               {result.page > 1 ? (

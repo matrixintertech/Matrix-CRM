@@ -371,9 +371,11 @@ async function createQaInvoice(input: {
       servicePartnerId: input.servicePartnerId,
       vendorId: input.vendorId,
       serviceRequestId: input.serviceRequestId,
+      vendorInvoiceNumber: `${input.invoiceNumber}-VENDOR`,
       invoiceNumber: input.invoiceNumber,
       status: InvoiceStatus.APPROVED,
       invoiceDate: new Date("2026-06-05"),
+      receivedDate: new Date("2026-06-05"),
       dueDate: new Date("2026-06-15"),
       subtotal: input.grandTotal,
       taxTotal: 0,
@@ -836,11 +838,11 @@ async function main() {
       "integration.invoice_detail_payment_summary",
       invoiceDetailSource.includes("PaymentSummaryCard") || invoiceDetailSource.includes("Payment Summary")
     );
-    pushResult(results, "integration.invoice_detail_payment_history", invoiceDetailSource.includes("Payment History"));
+    pushResult(results, "integration.invoice_detail_payment_history", invoiceDetailSource.includes("Payments Made"));
     pushResult(
       results,
       "integration.invoice_summary_shows_paid_and_balance",
-      invoiceSummarySource.includes("Paid Amount") && invoiceSummarySource.includes("Balance Due")
+      invoiceSummarySource.includes("Payments Made") && invoiceSummarySource.includes("Balance Due")
     );
     pushResult(results, "integration.record_payment_form_permission_gated", invoiceDetailSource.includes("canCreatePayments"));
     pushResult(

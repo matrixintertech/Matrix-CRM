@@ -29,6 +29,9 @@ type MatrixRow = {
 };
 
 function formatModuleLabel(module: string) {
+  if (module === "invoices") {
+    return "Vendor Invoices";
+  }
   return module.replaceAll("_", " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 

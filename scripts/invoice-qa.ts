@@ -786,8 +786,10 @@ async function main() {
       purchaseOrderId: createdPo.id,
       rfqId: rfqCompany.id,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-001",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: new Date("2026-06-20"),
       notes: "QA create invoice",
       items: [
@@ -814,8 +816,10 @@ async function main() {
       purchaseOrderId: createdPo.id,
       rfqId: rfqCompany.id,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-001",
       status: InvoiceStatus.SUBMITTED,
       invoiceDate: new Date("2026-06-03"),
+      receivedDate: new Date("2026-06-03"),
       dueDate: new Date("2026-06-25"),
       notes: "QA update invoice",
       items: [
@@ -859,8 +863,10 @@ async function main() {
         purchaseOrderId: createdPo.id,
         rfqId: rfqCompany.id,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-001",
         status: InvoiceStatus.PAID,
         invoiceDate: new Date("2026-06-03"),
+        receivedDate: new Date("2026-06-03"),
         dueDate: new Date("2026-06-25"),
         notes: "should fail edit paid",
         items: [
@@ -879,6 +885,59 @@ async function main() {
     const listAfterDelete = await listInvoices(companyAdminSession as never, { q: createdInvoice.invoiceNumber, page: 1, pageSize: 20 });
     pushResult(results, "invoice.soft_delete_excluded_from_list", listAfterDelete.invoices.length === 0);
 
+    const duplicateVendorInvoiceBlocked = await expectThrowMessage(() =>
+      createInvoice(companyAdminSession as never, {
+        servicePartnerId: companyData.servicePartnerId,
+        vendorId: vendorPrimary.id,
+        purchaseOrderId: undefined,
+        rfqId: undefined,
+        serviceRequestId: companyData.serviceRequestAltId,
+        vendorInvoiceNumber: "QA-VINV-001",
+        status: InvoiceStatus.DRAFT,
+        invoiceDate: new Date("2026-06-04"),
+        receivedDate: new Date("2026-06-04"),
+        dueDate: undefined,
+        notes: "duplicate vendor invoice",
+        items: [
+          {
+            itemId: companyData.itemId,
+            quantity: 1,
+            unitRate: 10,
+            taxPercent: 0,
+          },
+        ],
+      })
+    );
+    pushResult(results, "invoice.duplicate_vendor_invoice_number_same_vendor_blocked", duplicateVendorInvoiceBlocked.threw);
+
+    const sameVendorInvoiceDifferentVendorAllowed = await createInvoice(companyAdminSession as never, {
+      servicePartnerId: companyData.servicePartnerId,
+      vendorId: vendorSecondary.id,
+      purchaseOrderId: undefined,
+      rfqId: undefined,
+      serviceRequestId: companyData.serviceRequestAltId,
+      vendorInvoiceNumber: "QA-VINV-001",
+      status: InvoiceStatus.DRAFT,
+      invoiceDate: new Date("2026-06-04"),
+      receivedDate: new Date("2026-06-04"),
+      dueDate: undefined,
+      notes: "same vendor invoice no on different vendor",
+      items: [
+        {
+          itemId: companyData.itemId,
+          quantity: 1,
+          unitRate: 10,
+          taxPercent: 0,
+        },
+      ],
+    });
+    createdInvoiceIds.push(sameVendorInvoiceDifferentVendorAllowed.id);
+    pushResult(
+      results,
+      "invoice.same_vendor_invoice_number_different_vendor_allowed",
+      sameVendorInvoiceDifferentVendorAllowed.vendorId === vendorSecondary.id
+    );
+
     const crossTenantVendorBlocked = await expectThrowMessage(() =>
       createInvoice(companyAdminSession as never, {
         servicePartnerId: companyData.servicePartnerId,
@@ -886,8 +945,10 @@ async function main() {
         purchaseOrderId: undefined,
         rfqId: undefined,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-XTEN-VENDOR",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "cross vendor",
         items: [
@@ -909,8 +970,10 @@ async function main() {
         purchaseOrderId: undefined,
         rfqId: undefined,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-INACTIVE",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "inactive vendor",
         items: [
@@ -932,8 +995,10 @@ async function main() {
         purchaseOrderId: undefined,
         rfqId: undefined,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-XTEN-ITEM",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "cross item",
         items: [
@@ -955,8 +1020,10 @@ async function main() {
         purchaseOrderId: undefined,
         rfqId: undefined,
         serviceRequestId: foreignData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-XTEN-SR",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "cross service request",
         items: [
@@ -978,8 +1045,10 @@ async function main() {
         purchaseOrderId: foreignPo.id,
         rfqId: undefined,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-XTEN-PO",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "cross po",
         items: [
@@ -1001,8 +1070,10 @@ async function main() {
         purchaseOrderId: undefined,
         rfqId: undefined,
         serviceRequestId: companyData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-SUPER-BLOCK",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "super mismatch",
         items: [
@@ -1023,8 +1094,10 @@ async function main() {
       purchaseOrderId: foreignPo.id,
       rfqId: undefined,
       serviceRequestId: foreignData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-FOREIGN-001",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "foreign invoice",
       items: [
@@ -1046,8 +1119,10 @@ async function main() {
         purchaseOrderId: foreignPo.id,
         rfqId: undefined,
         serviceRequestId: foreignData.serviceRequestId,
+        vendorInvoiceNumber: "QA-VINV-FOREIGN-001",
         status: InvoiceStatus.DRAFT,
         invoiceDate: new Date("2026-06-02"),
+        receivedDate: new Date("2026-06-02"),
         dueDate: undefined,
         notes: "should fail",
         items: [
@@ -1068,8 +1143,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-NEG-QTY",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1089,8 +1166,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-ZERO-QTY",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1110,8 +1189,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-NEG-RATE",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1131,8 +1212,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-TAX-LOW",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1152,8 +1235,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-TAX-HIGH",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1173,8 +1258,10 @@ async function main() {
       purchaseOrderId: undefined,
       rfqId: undefined,
       serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-DEC-QTY",
       status: InvoiceStatus.DRAFT,
       invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
       dueDate: undefined,
       notes: "validation",
       items: [
@@ -1187,6 +1274,52 @@ async function main() {
       ],
     });
     pushResult(results, "validation.decimal_quantity_allowed", validationDecimalQuantity.success);
+
+    const validationMissingVendorInvoiceNumber = invoiceUpsertSchema.safeParse({
+      servicePartnerId: companyData.servicePartnerId,
+      vendorId: vendorPrimary.id,
+      purchaseOrderId: undefined,
+      rfqId: undefined,
+      serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "",
+      status: InvoiceStatus.DRAFT,
+      invoiceDate: new Date("2026-06-02"),
+      receivedDate: new Date("2026-06-02"),
+      dueDate: undefined,
+      notes: "validation",
+      items: [
+        {
+          itemId: companyData.itemId,
+          quantity: 1,
+          unitRate: 100,
+          taxPercent: 0,
+        },
+      ],
+    });
+    pushResult(results, "validation.vendor_invoice_number_required", !validationMissingVendorInvoiceNumber.success);
+
+    const validationReceivedBeforeInvoice = invoiceUpsertSchema.safeParse({
+      servicePartnerId: companyData.servicePartnerId,
+      vendorId: vendorPrimary.id,
+      purchaseOrderId: undefined,
+      rfqId: undefined,
+      serviceRequestId: companyData.serviceRequestId,
+      vendorInvoiceNumber: "QA-VINV-VAL-RECEIVED",
+      status: InvoiceStatus.DRAFT,
+      invoiceDate: new Date("2026-06-03"),
+      receivedDate: new Date("2026-06-02"),
+      dueDate: undefined,
+      notes: "validation",
+      items: [
+        {
+          itemId: companyData.itemId,
+          quantity: 1,
+          unitRate: 100,
+          taxPercent: 0,
+        },
+      ],
+    });
+    pushResult(results, "validation.received_date_before_invoice_rejected", !validationReceivedBeforeInvoice.success);
 
     const noCreateCanCreate = await hasPermission(readOnlySession as never, "invoices.create");
     const noUpdateCanUpdate = await hasPermission(readOnlySession as never, "invoices.update");
@@ -1228,7 +1361,7 @@ async function main() {
     pushResult(
       results,
       "navigation.invoice_nav_link_active",
-      baselineSource.includes('{ key: "invoice-list", label: "Invoice List", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true }')
+      baselineSource.includes('{ key: "invoice-list", label: "Vendor Invoices", href: "/invoices", sortOrder: 30, permissionKey: "invoices.read", isActive: true }')
     );
     pushResult(
       results,
@@ -1243,8 +1376,12 @@ async function main() {
     pushResult(
       results,
       "dashboard.new_invoice_quick_action_permission_gated",
-      dashboardSource.includes('title: "New Invoice"') && dashboardSource.includes('permission: "invoices.create"')
+      dashboardSource.includes('title: "Record Vendor Invoice"') && dashboardSource.includes('permission: "invoices.create"')
     );
+    pushResult(results, "ui.invoice_index_uses_vendor_invoice_title", invoicePageSource.includes('title="Vendor Invoices"'));
+    pushResult(results, "ui.invoice_create_page_uses_vendor_invoice_title", readFileSync("app/(dashboard)/invoices/new/page.tsx", "utf8").includes('title="Record Vendor Invoice"'));
+    pushResult(results, "ui.invoice_edit_page_uses_received_invoice_title", readFileSync("app/(dashboard)/invoices/[id]/edit/page.tsx", "utf8").includes('title="Edit Received Invoice"'));
+    pushResult(results, "ui.purchase_order_action_uses_record_vendor_invoice", poDetailSource.includes("Record Vendor Invoice"));
     pushResult(
       results,
       "dashboard.invoice_count_tenant_scoped_non_super_admin",

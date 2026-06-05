@@ -1,26 +1,26 @@
 import { formatCurrencyInr } from "@/lib/utils/format";
 
 export function FinanceSummaryCards({
-  totalInvoiceAmount,
-  totalReceivedAmount,
-  outstandingReceivables,
-  totalVendorPayments,
-  netCashMovement,
+  totalVendorInvoiceAmount,
+  totalInvoicePaymentsMade,
+  outstandingPayables,
+  totalStandaloneVendorPayments,
+  totalOutgoingPayments,
   ledgerEntriesCount,
 }: {
-  totalInvoiceAmount: number;
-  totalReceivedAmount: number;
-  outstandingReceivables: number;
-  totalVendorPayments: number;
-  netCashMovement: number;
+  totalVendorInvoiceAmount: number;
+  totalInvoicePaymentsMade: number;
+  outstandingPayables: number;
+  totalStandaloneVendorPayments: number;
+  totalOutgoingPayments: number;
   ledgerEntriesCount: number;
 }) {
   const cards = [
-    { label: "Total Invoice Amount", value: formatCurrencyInr(totalInvoiceAmount) },
-    { label: "Total Received Amount", value: formatCurrencyInr(totalReceivedAmount) },
-    { label: "Outstanding Receivables", value: formatCurrencyInr(outstandingReceivables) },
-    { label: "Total Vendor Payments", value: formatCurrencyInr(totalVendorPayments) },
-    { label: "Net Cash Movement", value: formatCurrencyInr(netCashMovement) },
+    { label: "Total Vendor Invoice Amount", value: formatCurrencyInr(totalVendorInvoiceAmount) },
+    { label: "Invoice Payments Made", value: formatCurrencyInr(totalInvoicePaymentsMade) },
+    { label: "Outstanding Payables", value: formatCurrencyInr(outstandingPayables) },
+    { label: "Other Vendor Payments", value: formatCurrencyInr(totalStandaloneVendorPayments) },
+    { label: "Total Outgoing Cash", value: formatCurrencyInr(totalOutgoingPayments) },
     { label: "Ledger Entries", value: String(ledgerEntriesCount) },
   ];
 

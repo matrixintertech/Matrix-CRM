@@ -24,7 +24,7 @@ function getErrorMessage(code?: string) {
     return "Please review the submitted values.";
   }
   if (code === "duplicate") {
-    return "Invoice number already exists for this service partner.";
+    return "Vendor invoice number already exists for this vendor.";
   }
   if (code === "service-partner") {
     return "Service partner is required.";
@@ -56,19 +56,19 @@ export default async function NewInvoicePage({ searchParams }: NewInvoicePagePro
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Create Invoice" description="Create invoice with line items and optional PO linkage." />
+      <PageHeader title="Record Vendor Invoice" description="Add a received vendor invoice with line items and optional PO linkage." />
       <div>
         <Link href="/invoices" className="text-sm text-[var(--muted)] underline">
-          Back to invoice list
+          Back to vendor invoices
         </Link>
       </div>
 
       {servicePartners.length === 0 ? (
-        <EmptyState title="No service partner found" description="Create or activate a service partner before adding invoices." />
+        <EmptyState title="No service partner found" description="Create or activate a service partner before recording vendor invoices." />
       ) : vendors.length === 0 ? (
-        <EmptyState title="No vendors found" description="Create at least one active vendor before adding invoices." />
+        <EmptyState title="No vendors found" description="Create at least one active vendor before recording vendor invoices." />
       ) : items.length === 0 ? (
-        <EmptyState title="No items found" description="Create at least one active item before adding invoice lines." />
+        <EmptyState title="No items found" description="Create at least one active item before adding vendor invoice lines." />
       ) : (
         <InvoiceForm
           action={createInvoiceAction}

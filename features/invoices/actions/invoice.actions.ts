@@ -44,8 +44,10 @@ function parseInvoiceInput(formData: FormData) {
     purchaseOrderId: getFormString(formData, "purchaseOrderId"),
     rfqId: getFormString(formData, "rfqId"),
     serviceRequestId: getFormString(formData, "serviceRequestId"),
+    vendorInvoiceNumber: getFormString(formData, "vendorInvoiceNumber"),
     status: getFormString(formData, "status"),
     invoiceDate: getFormString(formData, "invoiceDate"),
+    receivedDate: getFormString(formData, "receivedDate"),
     dueDate: getFormString(formData, "dueDate"),
     notes: getFormString(formData, "notes"),
     items: parseJsonArray(formData, "itemsJson"),
@@ -54,6 +56,10 @@ function parseInvoiceInput(formData: FormData) {
 
 function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function isDuplicateVendorInvoiceNumberError(error: unknown) {
+  return error instanceof Error && error.message.toLowerCase().includes("vendor invoice number already exists");
 }
 
 function isTenantMismatchError(error: unknown) {
@@ -112,8 +118,9 @@ export async function createInvoiceAction(formData: FormData) {
       module: "invoices",
       entityType: "INVOICE",
       entityId: invoice.id,
-      message: "Invoice created",
+      message: "Vendor invoice recorded",
       metadata: {
+        vendorInvoiceNumber: invoice.vendorInvoiceNumber,
         invoiceNumber: invoice.invoiceNumber,
         status: invoice.status,
         vendorId: invoice.vendorId,
@@ -124,14 +131,14 @@ export async function createInvoiceAction(formData: FormData) {
 
     for (const line of parsed.data.items) {
       await logActivity({
-        action: "invoice.line_add",
-        module: "invoices",
-        entityType: "INVOICE",
-        entityId: invoice.id,
-        message: "Invoice line added",
-        metadata: {
-          itemId: line.itemId,
-          quantity: line.quantity,
+          action: "invoice.line_add",
+          module: "invoices",
+          entityType: "INVOICE",
+          entityId: invoice.id,
+          message: "Vendor invoice line added",
+          metadata: {
+            itemId: line.itemId,
+            quantity: line.quantity,
           unitRate: line.unitRate,
           taxPercent: line.taxPercent ?? null,
         },
@@ -142,7 +149,7 @@ export async function createInvoiceAction(formData: FormData) {
     revalidateInvoicePaths(invoice.id, invoice.purchaseOrderId);
     redirect(`/invoices/${invoice.id}?success=created`);
   } catch (error) {
-    if (isUniqueConstraintError(error)) {
+    if (isUniqueConstraintError(error) || isDuplicateVendorInvoiceNumberError(error)) {
       redirect("/invoices/new?error=duplicate");
     }
     if (isStatusTransitionError(error)) {
@@ -182,8 +189,9 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
       module: "invoices",
       entityType: "INVOICE",
       entityId: invoice.id,
-      message: "Invoice updated",
+      message: "Vendor invoice updated",
       metadata: {
+        vendorInvoiceNumber: invoice.vendorInvoiceNumber,
         status: invoice.status,
         vendorId: invoice.vendorId,
         lineCount: parsed.data.items.length,
@@ -232,7 +240,7 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
           module: "invoices",
           entityType: "INVOICE",
           entityId: invoice.id,
-          message: "Invoice line added",
+          message: "Vendor invoice line added",
           metadata: line,
           servicePartnerId: invoice.servicePartnerId,
         });
@@ -245,7 +253,7 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
           module: "invoices",
           entityType: "INVOICE",
           entityId: invoice.id,
-          message: "Invoice line updated",
+          message: "Vendor invoice line updated",
           metadata: {
             itemId,
             previous: before,
@@ -265,7 +273,7 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
         module: "invoices",
         entityType: "INVOICE",
         entityId: invoice.id,
-        message: "Invoice line deleted",
+        message: "Vendor invoice line deleted",
         metadata: {
           itemId,
           line,
@@ -277,7 +285,7 @@ export async function updateInvoiceAction(id: string, formData: FormData) {
     revalidateInvoicePaths(invoice.id, invoice.purchaseOrderId);
     redirect(`/invoices/${invoice.id}?success=updated`);
   } catch (error) {
-    if (isUniqueConstraintError(error)) {
+    if (isUniqueConstraintError(error) || isDuplicateVendorInvoiceNumberError(error)) {
       redirect(`/invoices/${id}/edit?error=duplicate`);
     }
     if (isStatusTransitionError(error)) {
@@ -324,7 +332,7 @@ export async function updateInvoiceStatusAction(id: string, formData: FormData) 
       module: "invoices",
       entityType: "INVOICE",
       entityId: invoice.id,
-      message: `Invoice status changed to ${parsed.data.status}`,
+      message: `Vendor invoice status changed to ${parsed.data.status}`,
       metadata: {
         status: parsed.data.status,
       },
@@ -357,7 +365,7 @@ export async function deleteInvoiceAction(id: string, formData: FormData) {
     module: "invoices",
     entityType: "INVOICE",
     entityId: id,
-    message: "Invoice soft deleted",
+    message: "Vendor invoice soft deleted",
     servicePartnerId: existing.servicePartnerId,
   });
 

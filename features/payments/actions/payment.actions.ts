@@ -92,7 +92,7 @@ export async function createPaymentAction(formData: FormData) {
       module: "payments",
       entityType: "PAYMENT",
       entityId: result.payment.id,
-      message: "Invoice payment recorded",
+      message: "Vendor invoice payment made recorded",
       metadata: {
         paymentNumber: result.payment.paymentNumber,
         invoiceId: result.payment.invoiceId,
@@ -130,7 +130,7 @@ export async function createPaymentAction(formData: FormData) {
         module: "invoices",
         entityType: "INVOICE",
         entityId: result.payment.invoiceId,
-        message: "Invoice payment recorded",
+        message: "Vendor invoice payment made recorded",
         metadata: {
           paymentId: result.payment.id,
           paymentNumber: result.payment.paymentNumber,
@@ -181,7 +181,7 @@ export async function updatePaymentAction(paymentId: string, formData: FormData)
       module: "payments",
       entityType: "PAYMENT",
       entityId: result.payment.id,
-      message: "Invoice payment updated",
+      message: "Vendor invoice payment made updated",
       metadata: {
         invoiceId: result.payment.invoiceId,
         amount: result.payment.amount,
@@ -219,7 +219,7 @@ export async function updatePaymentAction(paymentId: string, formData: FormData)
         module: "invoices",
         entityType: "INVOICE",
         entityId: result.payment.invoiceId,
-        message: "Invoice payment updated",
+        message: "Vendor invoice payment made updated",
         metadata: {
           paymentId: result.payment.id,
           amount: result.payment.amount,
@@ -260,7 +260,7 @@ export async function updatePaymentStatusAction(paymentId: string, formData: For
       module: "payments",
       entityType: "PAYMENT",
       entityId: result.payment.id,
-      message: `Invoice payment status changed to ${result.payment.status}`,
+      message: `Vendor invoice payment made status changed to ${result.payment.status}`,
       metadata: {
         invoiceId: result.payment.invoiceId,
         status: result.payment.status,
@@ -316,7 +316,7 @@ export async function deletePaymentAction(paymentId: string, formData: FormData)
       module: "payments",
       entityType: "PAYMENT",
       entityId: result.payment.id,
-      message: "Invoice payment voided",
+      message: "Vendor invoice payment made voided",
       metadata: {
         invoiceId: result.payment.invoiceId,
         status: result.payment.status,
