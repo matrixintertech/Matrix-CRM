@@ -2,7 +2,7 @@ import { Prisma, RoleScope } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { RoleUpsertInput } from "@/features/rbac/validations";
-import { getUserPermissions, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
+import { getUserPermissions, invalidateAuthorizationCaches, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
@@ -262,6 +262,8 @@ export async function assignPermissionToRole(session: Session, roleId: string, p
     },
   });
 
+  invalidateAuthorizationCaches();
+
   return { role, permission };
 }
 
@@ -294,6 +296,8 @@ export async function removePermissionFromRole(session: Session, roleId: string,
       permissionId: permission.id,
     },
   });
+
+  invalidateAuthorizationCaches();
 
   return { role, permission };
 }
@@ -370,6 +374,8 @@ export async function replaceRolePermissions(session: Session, roleId: string, p
       });
     }
   });
+
+  invalidateAuthorizationCaches();
 
   return role;
 }

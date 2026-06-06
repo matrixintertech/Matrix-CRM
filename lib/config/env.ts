@@ -67,6 +67,7 @@ const rawEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: booleanFromEnv.optional(),
   HEALTH_SHOW_DETAILS: booleanFromEnv.optional(),
+  PERF_LOGGING: booleanFromEnv.optional(),
   ACTIVITY_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).optional(),
 });
 
@@ -107,6 +108,7 @@ const normalizedEnvSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: z.boolean(),
   HEALTH_SHOW_DETAILS: z.boolean(),
+  PERF_LOGGING: z.boolean(),
   ACTIVITY_LOG_RETENTION_DAYS: z.number().int().min(1).max(3650),
 });
 
@@ -168,6 +170,7 @@ export function env(): Env {
   const rateLimitDriver = data.RATE_LIMIT_DRIVER ?? "memory";
   const healthShowDetails = data.HEALTH_SHOW_DETAILS ?? false;
   const allowMemoryRateLimitInProduction = data.ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION ?? false;
+  const perfLogging = data.PERF_LOGGING ?? false;
   const legacyEmailRequested = Boolean(
     data.EMAIL_USER || data.EMAIL_PASS || data.EMAIL_HOST || data.EMAIL_PORT || data.EMAIL_SECURE !== undefined || data.EMAIL_FROM
   );
@@ -245,6 +248,7 @@ export function env(): Env {
     UPSTASH_REDIS_REST_TOKEN: data.UPSTASH_REDIS_REST_TOKEN,
     ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: allowMemoryRateLimitInProduction,
     HEALTH_SHOW_DETAILS: healthShowDetails,
+    PERF_LOGGING: perfLogging,
     ACTIVITY_LOG_RETENTION_DAYS: data.ACTIVITY_LOG_RETENTION_DAYS ?? 90,
   });
 

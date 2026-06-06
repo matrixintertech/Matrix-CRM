@@ -7,8 +7,8 @@ export async function getCurrentSession() {
   return auth();
 }
 
-export async function getCurrentUser() {
-  const session = await getCurrentSession();
+export async function getCurrentUser(sessionInput?: Awaited<ReturnType<typeof getCurrentSession>>) {
+  const session = sessionInput ?? (await getCurrentSession());
   const userId = session?.user?.id;
 
   if (!userId) {
@@ -40,7 +40,7 @@ export async function requireAuth() {
     redirect("/login");
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUser(session);
   if (!user) {
     redirect("/login");
   }

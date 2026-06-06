@@ -5,6 +5,7 @@ import type { ServiceRequestStatusInput, ServiceRequestUpsertInput } from "@/fea
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
+import { measurePerf } from "@/lib/observability/perf";
 
 type ListServiceRequestsInput = {
   q?: string;
@@ -24,82 +25,84 @@ export function getServiceRequestScopeWhere(session: Session): Prisma.ServiceReq
 }
 
 export async function listServiceRequests(session: Session, input: ListServiceRequestsInput) {
-  const pagination = getPagination(input);
-  const where: Prisma.ServiceRequestWhereInput = {
-    ...getServiceRequestScopeWhere(session),
-    deletedAt: null,
-  };
+  return measurePerf("service_requests.list", async () => {
+    const pagination = getPagination(input);
+    const where: Prisma.ServiceRequestWhereInput = {
+      ...getServiceRequestScopeWhere(session),
+      deletedAt: null,
+    };
 
-  if (input.status) {
-    where.status = input.status;
-  }
+    if (input.status) {
+      where.status = input.status;
+    }
 
-  if (input.clientId?.trim()) {
-    where.clientId = input.clientId;
-  }
+    if (input.clientId?.trim()) {
+      where.clientId = input.clientId;
+    }
 
-  if (input.branchId?.trim()) {
-    where.branchId = input.branchId;
-  }
+    if (input.branchId?.trim()) {
+      where.branchId = input.branchId;
+    }
 
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.OR = [
-      { serviceNumber: { contains: q, mode: "insensitive" } },
-      { title: { contains: q, mode: "insensitive" } },
-      { serviceType: { contains: q, mode: "insensitive" } },
-      { client: { name: { contains: q, mode: "insensitive" } } },
-      { client: { code: { contains: q, mode: "insensitive" } } },
-      { branch: { name: { contains: q, mode: "insensitive" } } },
-      { branch: { code: { contains: q, mode: "insensitive" } } },
-    ];
-  }
+    if (input.q?.trim()) {
+      const q = input.q.trim();
+      where.OR = [
+        { serviceNumber: { contains: q, mode: "insensitive" } },
+        { title: { contains: q, mode: "insensitive" } },
+        { serviceType: { contains: q, mode: "insensitive" } },
+        { client: { name: { contains: q, mode: "insensitive" } } },
+        { client: { code: { contains: q, mode: "insensitive" } } },
+        { branch: { name: { contains: q, mode: "insensitive" } } },
+        { branch: { code: { contains: q, mode: "insensitive" } } },
+      ];
+    }
 
-  const [serviceRequests, total] = await Promise.all([
-    prisma.serviceRequest.findMany({
-      where,
-      skip: pagination.skip,
-      take: pagination.take,
-      orderBy: [{ createdAt: "desc" }],
-      include: {
-        servicePartner: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
+    const [serviceRequests, total] = await Promise.all([
+      prisma.serviceRequest.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: [{ createdAt: "desc" }],
+        include: {
+          servicePartner: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          client: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          branch: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              statusHistory: true,
+            },
           },
         },
-        client: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-        branch: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-        _count: {
-          select: {
-            statusHistory: true,
-          },
-        },
-      },
-    }),
-    prisma.serviceRequest.count({ where }),
-  ]);
+      }),
+      prisma.serviceRequest.count({ where }),
+    ]);
 
-  return {
-    serviceRequests,
-    total,
-    page: pagination.page,
-    pageSize: pagination.pageSize,
-    totalPages: getTotalPages(total, pagination.pageSize),
-  };
+    return {
+      serviceRequests,
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalPages: getTotalPages(total, pagination.pageSize),
+    };
+  });
 }
 
 export async function getServiceRequestById(session: Session, id: string) {

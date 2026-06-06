@@ -5,6 +5,7 @@ import { invoiceUpsertSchema, type InvoiceLineInput, type InvoiceUpsertInput } f
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
+import { measurePerf } from "@/lib/observability/perf";
 
 type ListInvoicesInput = {
   q?: string;
@@ -187,60 +188,62 @@ export function getInvoiceScopeWhere(session: Session): Prisma.InvoiceWhereInput
 }
 
 export async function listInvoices(session: Session, input: ListInvoicesInput) {
-  const pagination = getPagination(input);
-  const where: Prisma.InvoiceWhereInput = {
-    ...getInvoiceScopeWhere(session),
-    deletedAt: null,
-  };
+  return measurePerf("invoices.list", async () => {
+    const pagination = getPagination(input);
+    const where: Prisma.InvoiceWhereInput = {
+      ...getInvoiceScopeWhere(session),
+      deletedAt: null,
+    };
 
-  if (input.status) {
-    where.status = input.status;
-  }
+    if (input.status) {
+      where.status = input.status;
+    }
 
-  if (input.vendorId?.trim()) {
-    where.vendorId = input.vendorId;
-  }
+    if (input.vendorId?.trim()) {
+      where.vendorId = input.vendorId;
+    }
 
-  if (input.purchaseOrderId?.trim()) {
-    where.purchaseOrderId = input.purchaseOrderId;
-  }
+    if (input.purchaseOrderId?.trim()) {
+      where.purchaseOrderId = input.purchaseOrderId;
+    }
 
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.OR = [
-      { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
-      { invoiceNumber: { contains: q, mode: "insensitive" } },
-      { notes: { contains: q, mode: "insensitive" } },
-      { vendor: { name: { contains: q, mode: "insensitive" } } },
-      { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
-      { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
-    ];
-  }
+    if (input.q?.trim()) {
+      const q = input.q.trim();
+      where.OR = [
+        { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
+        { invoiceNumber: { contains: q, mode: "insensitive" } },
+        { notes: { contains: q, mode: "insensitive" } },
+        { vendor: { name: { contains: q, mode: "insensitive" } } },
+        { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
+        { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
+      ];
+    }
 
-  const [invoices, total] = await Promise.all([
-    prisma.invoice.findMany({
-      where,
-      skip: pagination.skip,
-      take: pagination.take,
-      orderBy: [{ createdAt: "desc" }],
-      include: {
-      servicePartner: { select: { id: true, code: true, name: true } },
-      vendor: { select: { id: true, code: true, name: true } },
-      purchaseOrder: { select: { id: true, poNumber: true, status: true } },
-      serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
-      _count: { select: { items: true } },
-      },
-    }),
-    prisma.invoice.count({ where }),
-  ]);
+    const [invoices, total] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: [{ createdAt: "desc" }],
+        include: {
+          servicePartner: { select: { id: true, code: true, name: true } },
+          vendor: { select: { id: true, code: true, name: true } },
+          purchaseOrder: { select: { id: true, poNumber: true, status: true } },
+          serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
+          _count: { select: { items: true } },
+        },
+      }),
+      prisma.invoice.count({ where }),
+    ]);
 
-  return {
-    invoices,
-    total,
-    page: pagination.page,
-    pageSize: pagination.pageSize,
-    totalPages: getTotalPages(total, pagination.pageSize),
-  };
+    return {
+      invoices,
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalPages: getTotalPages(total, pagination.pageSize),
+    };
+  });
 }
 
 export async function getInvoiceById(session: Session, id: string) {

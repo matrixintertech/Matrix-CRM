@@ -106,6 +106,11 @@ async function main() {
       SMTP_HOST: "smtp.example.com",
       SMTP_PORT: "587",
       SMTP_USER: "smtp-user@example.com",
+      SMTP_PASSWORD: undefined,
+      SMTP_FROM: undefined,
+      EMAIL_USER: undefined,
+      EMAIL_PASS: undefined,
+      EMAIL_FROM: undefined,
     }),
     async () => {
       let blocked = false;
@@ -146,7 +151,19 @@ async function main() {
     pushResult(results, "rate_limit.memory_driver_allowed_when_explicit", result.allowed);
   });
 
-  await withEnv(baseEnv({ ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: "true" }), async () => {
+  await withEnv(
+    baseEnv({
+      ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: "true",
+      SMTP_HOST: undefined,
+      SMTP_PORT: undefined,
+      SMTP_USER: undefined,
+      SMTP_PASSWORD: undefined,
+      SMTP_FROM: undefined,
+      EMAIL_USER: undefined,
+      EMAIL_PASS: undefined,
+      EMAIL_FROM: undefined,
+    }),
+    async () => {
     const result = await sendOtpMessage({
       channel: "EMAIL",
       target: "user@example.com",
@@ -159,7 +176,8 @@ async function main() {
       "otp.provider_not_configured_is_safe",
       !result.ok && result.code === "PROVIDER_NOT_CONFIGURED"
     );
-  });
+    }
+  );
 
   const envExample = fs.readFileSync(envExamplePath, "utf8");
   pushResult(results, ".env.example.smtp_password_placeholder", envExample.includes('SMTP_PASSWORD="replace-with-smtp-password"'));
@@ -184,11 +202,9 @@ async function main() {
 
   await withEnv(baseEnv({ HEALTH_SHOW_DETAILS: "true", ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: "true" }), async () => {
     const prismaAny = prisma as any;
-    const originalConnect = prismaAny.$connect.bind(prismaAny);
-    const originalFindFirst = prismaAny.servicePartner.findFirst.bind(prismaAny.servicePartner);
+    const originalQueryRaw = prismaAny.$queryRaw.bind(prismaAny);
 
-    prismaAny.$connect = async () => undefined;
-    prismaAny.servicePartner.findFirst = async () => ({ id: "sp_qa" });
+    prismaAny.$queryRaw = async () => [{ ok: 1 }];
 
     try {
       const response = await healthGet();
@@ -199,8 +215,7 @@ async function main() {
       pushResult(results, "health.no_runtime_env_payload", !serialized.includes("runtimeEnv"));
       pushResult(results, "health.no_raw_database_url", !serialized.includes("postgresql://"));
     } finally {
-      prismaAny.$connect = originalConnect;
-      prismaAny.servicePartner.findFirst = originalFindFirst;
+      prismaAny.$queryRaw = originalQueryRaw;
     }
   });
 

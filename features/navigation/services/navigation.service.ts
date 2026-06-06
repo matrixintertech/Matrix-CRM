@@ -1,8 +1,10 @@
 import type { Session } from "next-auth";
 
+import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 
 export type SidebarNavItem = {
   id: string;
@@ -28,6 +30,9 @@ type NavigationRow = {
     };
   }[];
 };
+
+const NAVIGATION_ROW_CACHE_TTL_MS = 60_000;
+const PLATFORM_PARTNER_CACHE_TTL_MS = 5 * 60_000;
 
 const fallbackHrefByKey: Record<string, string> = {
   dashboard: "/",
@@ -125,62 +130,86 @@ function buildTree(rows: NavigationRow[], permissionKeys: Set<string>, isSuperAd
 }
 
 export async function getNavigationForSession(session: Session): Promise<SidebarNavItem[]> {
-  const platformCode = env().PLATFORM_SERVICE_PARTNER_CODE;
-  const platformPartner = await prisma.servicePartner.findUnique({
-    where: { code: platformCode },
-    select: { id: true },
-  });
+  return measurePerf(
+    "navigation.get_for_session",
+    async () => {
+      const platformCode = env().PLATFORM_SERVICE_PARTNER_CODE;
+      const platformPartnerId = await getOrLoadRuntimeCache(
+        "navigation.platform_partner",
+        platformCode,
+        PLATFORM_PARTNER_CACHE_TTL_MS,
+        async () => {
+          const platformPartner = await prisma.servicePartner.findUnique({
+            where: { code: platformCode },
+            select: { id: true },
+          });
+          return platformPartner?.id ?? null;
+        }
+      );
 
-  const candidateServicePartnerIds = [
-    session.user.servicePartnerId,
-    platformPartner?.id,
-  ].filter((value): value is string => Boolean(value));
+      const candidateServicePartnerIds = [session.user.servicePartnerId, platformPartnerId].filter(
+        (value): value is string => Boolean(value)
+      );
 
-  let rows: NavigationRow[] = [];
-  for (const servicePartnerId of candidateServicePartnerIds) {
-    rows = await prisma.navigationItem.findMany({
-      where: {
-        servicePartnerId,
-        isActive: true,
-      },
-      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
-      select: {
-        id: true,
-        key: true,
-        label: true,
-        href: true,
-        icon: true,
-        parentId: true,
-        sortOrder: true,
-        permissions: {
-          select: {
-            permission: {
-              select: { key: true },
-            },
+      const rowsByServicePartnerId = new Map<string, NavigationRow[]>();
+      await Promise.all(
+        candidateServicePartnerIds.map(async (servicePartnerId) => {
+          const rows = await getOrLoadRuntimeCache(
+            "navigation.rows",
+            servicePartnerId,
+            NAVIGATION_ROW_CACHE_TTL_MS,
+            () =>
+              prisma.navigationItem.findMany({
+                where: {
+                  servicePartnerId,
+                  isActive: true,
+                },
+                orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+                select: {
+                  id: true,
+                  key: true,
+                  label: true,
+                  href: true,
+                  icon: true,
+                  parentId: true,
+                  sortOrder: true,
+                  permissions: {
+                    select: {
+                      permission: {
+                        select: { key: true },
+                      },
+                    },
+                  },
+                },
+              })
+          );
+
+          rowsByServicePartnerId.set(servicePartnerId, rows);
+        })
+      );
+
+      const rows =
+        rowsByServicePartnerId.get(session.user.servicePartnerId) ??
+        (platformPartnerId ? rowsByServicePartnerId.get(platformPartnerId) : undefined) ??
+        [];
+
+      if (rows.length === 0) {
+        return [
+          {
+            id: "dev-fallback-dashboard",
+            key: "dashboard",
+            label: "Dashboard",
+            href: "/",
+            icon: null,
+            children: [],
+            isDevelopmentFallback: true,
           },
-        },
-      },
-    });
+        ];
+      }
 
-    if (rows.length > 0) {
-      break;
-    }
-  }
-
-  if (rows.length === 0) {
-    return [
-      {
-        id: "dev-fallback-dashboard",
-        key: "dashboard",
-        label: "Dashboard",
-        href: "/",
-        icon: null,
-        children: [],
-        isDevelopmentFallback: true,
-      },
-    ];
-  }
-
-  const permissions = session.user.isSuperAdmin ? [] : await getUserPermissions(session.user.id, session.user.roleKeys);
-  return buildTree(rows, new Set(permissions), session.user.isSuperAdmin);
+      const permissions = session.user.isSuperAdmin ? [] : await getUserPermissions(session.user.id, session.user.roleKeys);
+      return buildTree(rows, new Set(permissions), session.user.isSuperAdmin);
+    },
+    { userId: session.user.id, servicePartnerId: session.user.servicePartnerId }
+  );
 }

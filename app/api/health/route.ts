@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 
 function canShowHealthDetails() {
   const config = env();
@@ -23,9 +24,8 @@ export async function GET() {
   const includeDetails = canShowHealthDetails();
 
   try {
-    await prisma.$connect();
-    await prisma.servicePartner.findFirst({
-      select: { id: true },
+    await measurePerf("route.health", async () => {
+      await prisma.$queryRaw`SELECT 1`;
     });
 
     return NextResponse.json({

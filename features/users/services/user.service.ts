@@ -1,11 +1,12 @@
 import { Prisma, UserStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
-import { getUserPermissions, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
+import { getUserPermissions, invalidateAuthorizationCaches, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import type { UserUpsertInput } from "@/features/users/validations";
+import { measurePerf } from "@/lib/observability/perf";
 
 type ListUsersInput = {
   q?: string;
@@ -35,46 +36,48 @@ export function getUserTenantWhere(session: Session): Prisma.UserWhereInput {
 }
 
 export async function listUsers(session: Session, input: ListUsersInput) {
-  const pagination = getPagination(input);
-  const where: Prisma.UserWhereInput = {
-    ...getUserTenantWhere(session),
-    deletedAt: null,
-  };
+  return measurePerf("users.list", async () => {
+    const pagination = getPagination(input);
+    const where: Prisma.UserWhereInput = {
+      ...getUserTenantWhere(session),
+      deletedAt: null,
+    };
 
-  if (input.status) {
-    where.status = input.status;
-  }
+    if (input.status) {
+      where.status = input.status;
+    }
 
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.OR = [
-      { name: { contains: q, mode: "insensitive" } },
-      { email: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q, mode: "insensitive" } },
-    ];
-  }
+    if (input.q?.trim()) {
+      const q = input.q.trim();
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { phone: { contains: q, mode: "insensitive" } },
+      ];
+    }
 
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      skip: pagination.skip,
-      take: pagination.take,
-      orderBy: { createdAt: "desc" },
-      include: {
-        servicePartner: { select: { name: true, code: true } },
-        roles: { include: { role: true } },
-      },
-    }),
-    prisma.user.count({ where }),
-  ]);
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: { createdAt: "desc" },
+        include: {
+          servicePartner: { select: { name: true, code: true } },
+          roles: { include: { role: true } },
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
 
-  return {
-    users,
-    total,
-    page: pagination.page,
-    pageSize: pagination.pageSize,
-    totalPages: getTotalPages(total, pagination.pageSize),
-  };
+    return {
+      users,
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalPages: getTotalPages(total, pagination.pageSize),
+    };
+  });
 }
 
 export async function getUserById(session: Session, id: string) {
@@ -263,6 +266,8 @@ export async function syncUserRoles(session: Session, input: {
       });
     }
   });
+
+  invalidateAuthorizationCaches();
 
   return roles;
 }

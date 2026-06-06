@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 
 import { verifyOtpChallenge } from "@/features/auth/services/otp.service";
 import { env } from "@/lib/config/env";
+import { measurePerf } from "@/lib/observability/perf";
 import { loginSchema } from "@/validations/auth";
 
 export const authOptions: NextAuthOptions = {
@@ -32,30 +33,32 @@ export const authOptions: NextAuthOptions = {
         },
       },
       async authorize(rawCredentials) {
-        const parsed = loginSchema.safeParse(rawCredentials);
-        if (!parsed.success) {
-          return null;
-        }
+        return measurePerf("auth.credentials.authorize", async () => {
+          const parsed = loginSchema.safeParse(rawCredentials);
+          if (!parsed.success) {
+            return null;
+          }
 
-        const result = await verifyOtpChallenge({
-          target: parsed.data.target,
-          code: parsed.data.code,
-          purpose: parsed.data.purpose,
+          const result = await verifyOtpChallenge({
+            target: parsed.data.target,
+            code: parsed.data.code,
+            purpose: parsed.data.purpose,
+          });
+
+          if (!result.ok) {
+            return null;
+          }
+
+          return {
+            id: result.user.id,
+            servicePartnerId: result.user.servicePartnerId,
+            name: result.user.name,
+            email: result.user.email,
+            phone: result.user.phone,
+            roleKeys: result.user.roleKeys,
+            isSuperAdmin: result.user.isSuperAdmin,
+          };
         });
-
-        if (!result.ok) {
-          return null;
-        }
-
-        return {
-          id: result.user.id,
-          servicePartnerId: result.user.servicePartnerId,
-          name: result.user.name,
-          email: result.user.email,
-          phone: result.user.phone,
-          roleKeys: result.user.roleKeys,
-          isSuperAdmin: result.user.isSuperAdmin,
-        };
       },
     }),
   ],

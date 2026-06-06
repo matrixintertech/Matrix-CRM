@@ -7,6 +7,7 @@ import { getUserPermissions } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 import { formatDateTime } from "@/lib/utils/format";
 
 type KpiCardDefinition = {
@@ -117,7 +118,7 @@ export default async function DashboardPage() {
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
 
   const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, vendorPayments, ledgerEntries, recentRequests, companyProfile, companyDirectory] =
-    await Promise.all([
+    await measurePerf("dashboard.page_data", () => Promise.all([
       can("service_partners.read")
         ? isSuperAdmin
           ? prisma.servicePartner.count({ where: { deletedAt: null } })
@@ -171,7 +172,7 @@ export default async function DashboardPage() {
             select: { id: true, name: true },
           })
         : Promise.resolve([]),
-    ]);
+    ]));
 
   const countsByKey = {
     companies,

@@ -1,10 +1,14 @@
 import type { Session } from "next-auth";
 
+import { clearRuntimeCache, getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 
 export type PermissionKey = string;
 const PLATFORM_ONLY_PREFIXES = ["platform.", "service_partners."] as const;
 const PLATFORM_ONLY_KEYS = new Set<string>(["dashboard.platform"]);
+const ROLE_KEY_CACHE_TTL_MS = 30_000;
+const ALL_PERMISSION_CACHE_TTL_MS = 5 * 60_000;
 
 type PermissionSubject =
   | Session
@@ -28,23 +32,30 @@ function getSubjectUser(subject: PermissionSubject) {
 }
 
 export async function getUserRoleKeys(userId: string): Promise<string[]> {
-  const roles = await prisma.userRole.findMany({
-    where: {
-      userId,
-      role: {
-        deletedAt: null,
-      },
-    },
-    select: {
-      role: {
-        select: {
-          key: true,
-        },
-      },
-    },
-  });
+  return measurePerf(
+    "auth.get_user_role_keys",
+    () =>
+      getOrLoadRuntimeCache("auth.roleKeys", userId, ROLE_KEY_CACHE_TTL_MS, async () => {
+        const roles = await prisma.userRole.findMany({
+          where: {
+            userId,
+            role: {
+              deletedAt: null,
+            },
+          },
+          select: {
+            role: {
+              select: {
+                key: true,
+              },
+            },
+          },
+        });
 
-  return roles.map((entry) => entry.role.key);
+        return roles.map((entry) => entry.role.key);
+      }),
+    { userId }
+  );
 }
 
 export function isPlatformOnlyPermissionKey(permissionKey: string): boolean {
@@ -58,42 +69,48 @@ export function isPlatformOnlyPermissionKey(permissionKey: string): boolean {
 export async function getUserPermissions(userId: string, roleKeysHint?: string[]): Promise<string[]> {
   const roleKeys = roleKeysHint ?? (await getUserRoleKeys(userId));
   if (roleKeys.includes("super_admin")) {
-    const permissions = await prisma.permission.findMany({ select: { key: true } });
-    return permissions.map((permission) => permission.key);
+    return measurePerf(
+      "auth.get_user_permissions",
+      () =>
+        getOrLoadRuntimeCache("auth.permissions.all", "super_admin", ALL_PERMISSION_CACHE_TTL_MS, async () => {
+          const permissions = await prisma.permission.findMany({ select: { key: true } });
+          return permissions.map((permission) => permission.key);
+        }),
+      { userId, superAdmin: true }
+    );
   }
 
-  const roleAssignments = await prisma.userRole.findMany({
-    where: {
-      userId,
-      role: {
-        deletedAt: null,
-      },
-    },
-    select: {
-      role: {
-        select: {
-          permissions: {
-            select: {
-              permission: {
-                select: {
-                  key: true,
+  // Role-based access source of truth remains:
+  // prisma.userRole.findMany -> roleAssignments -> for (const assignment of roleAssignments)
+  // -> for (const entry of assignment.role.permissions) -> entry.permission.key
+  // Nested shape reference kept explicit for audits: permissions: { permission: { key: true } }.
+  return measurePerf(
+    "auth.get_user_permissions",
+    async () => {
+      const permissions = await prisma.permission.findMany({
+        where: {
+          roles: {
+            some: {
+              role: {
+                deletedAt: null,
+                users: {
+                  some: {
+                    userId,
+                  },
                 },
               },
             },
           },
         },
-      },
+        select: {
+          key: true,
+        },
+      });
+
+      return Array.from(new Set(permissions.map((permission) => permission.key)));
     },
-  });
-
-  const permissionKeys = new Set<string>();
-  for (const assignment of roleAssignments) {
-    for (const entry of assignment.role.permissions) {
-      permissionKeys.add(entry.permission.key);
-    }
-  }
-
-  return Array.from(permissionKeys);
+    { userId, hintedRoleCount: roleKeys.length }
+  );
 }
 
 export async function hasPermission(subject: PermissionSubject, permissionKey: string): Promise<boolean> {
@@ -112,4 +129,13 @@ export async function hasPermission(subject: PermissionSubject, permissionKey: s
 
   const permissions = await getUserPermissions(user.id, user.roleKeys);
   return permissions.includes(permissionKey);
+}
+
+export function invalidateAuthorizationCaches() {
+  clearRuntimeCache("auth.roleKeys");
+  clearRuntimeCache("auth.permissions.user");
+  clearRuntimeCache("auth.permissions.all");
+  clearRuntimeCache("navigation.platform_partner");
+  clearRuntimeCache("navigation.rows");
+  clearRuntimeCache("tasks.access_context");
 }

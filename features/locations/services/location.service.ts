@@ -1,4 +1,8 @@
+import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
+
+const LOCATION_CACHE_TTL_MS = 60 * 60_000;
 
 function normalizeLocationValue(value?: string | null) {
   return value?.trim() || null;
@@ -16,27 +20,33 @@ export class LocationSelectionError extends Error {
 }
 
 export async function listActiveStatesWithCities() {
-  return prisma.state.findMany({
-    where: {
-      isActive: true,
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      code: true,
-      cities: {
-        where: {
-          isActive: true,
-        },
-        orderBy: [{ name: "asc" }],
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-  });
+  return measurePerf(
+    "locations.list_active_states_with_cities",
+    () =>
+      getOrLoadRuntimeCache("locations.active_states", "default", LOCATION_CACHE_TTL_MS, () =>
+        prisma.state.findMany({
+          where: {
+            isActive: true,
+          },
+          orderBy: [{ name: "asc" }],
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            cities: {
+              where: {
+                isActive: true,
+              },
+              orderBy: [{ name: "asc" }],
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        })
+      )
+  );
 }
 
 export async function resolveStateCitySelection(

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { logActivity } from "@/lib/activity/activity-log";
-import { hasPermission } from "@/lib/auth/permissions";
+import { hasPermission, invalidateAuthorizationCaches } from "@/lib/auth/permissions";
 import { requireAnyPermission, requirePermission } from "@/lib/auth/rbac";
 import { requireAuth } from "@/lib/auth/session";
 import { requireTenantAccess } from "@/lib/auth/tenant";
@@ -373,6 +373,7 @@ export async function assignUserRoleAction(id: string, formData: FormData) {
     update: {},
     create: { userId: id, roleId: role.id },
   });
+  invalidateAuthorizationCaches();
 
   await logActivity({
     action: "user.role_assign",
@@ -433,6 +434,7 @@ export async function removeUserRoleAction(id: string, formData: FormData) {
     }
 
     await prisma.userRole.deleteMany({ where: { userId: id, roleId: parsed.data.roleId } });
+    invalidateAuthorizationCaches();
 
     await logActivity({
       action: "user.role_remove",

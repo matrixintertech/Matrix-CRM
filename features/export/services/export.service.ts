@@ -13,6 +13,7 @@ import { listTasks } from "@/features/tasks/services/task.service";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import type { ExportRow } from "@/lib/export/csv";
+import { measurePerf } from "@/lib/observability/perf";
 
 export type ExportModuleKey =
   | "activity-logs"
@@ -34,6 +35,7 @@ const countedPaymentStatuses: PaymentStatus[] = [
   PaymentStatus.PAID,
   PaymentStatus.PARTIALLY_PAID,
 ];
+const MAX_EXPORT_ROWS = 5_000;
 
 function getStringParam(searchParams: SearchParamsLike, key: string) {
   const value = searchParams.get(key);
@@ -88,32 +90,34 @@ export function getExportPermissionKey(moduleKey: ExportModuleKey) {
 }
 
 export async function getExportRows(session: Session, moduleKey: ExportModuleKey, searchParams: SearchParamsLike): Promise<ExportRow[]> {
-  switch (moduleKey) {
-    case "activity-logs":
-      return getActivityLogRows(session, searchParams);
-    case "clients":
-      return getClientRows(session, searchParams);
-    case "service-requests":
-      return getServiceRequestRows(session, searchParams);
-    case "tasks":
-      return getTaskRows(session, searchParams);
-    case "quotations":
-      return getQuotationRows(session, searchParams);
-    case "purchase-orders":
-      return getPurchaseOrderRows(session, searchParams);
-    case "invoices":
-      return getInvoiceRows(session, searchParams);
-    case "payments":
-      return getPaymentRows(session, searchParams);
-    case "ledger":
-      return getLedgerRows(session, searchParams);
-    case "vendor-payments":
-      return getVendorPaymentRows(session, searchParams);
-    case "finance-reports":
-      return getFinanceReportRows(session, searchParams);
-    default:
-      return [];
-  }
+  return measurePerf("export.rows", async () => {
+    switch (moduleKey) {
+      case "activity-logs":
+        return getActivityLogRows(session, searchParams);
+      case "clients":
+        return getClientRows(session, searchParams);
+      case "service-requests":
+        return getServiceRequestRows(session, searchParams);
+      case "tasks":
+        return getTaskRows(session, searchParams);
+      case "quotations":
+        return getQuotationRows(session, searchParams);
+      case "purchase-orders":
+        return getPurchaseOrderRows(session, searchParams);
+      case "invoices":
+        return getInvoiceRows(session, searchParams);
+      case "payments":
+        return getPaymentRows(session, searchParams);
+      case "ledger":
+        return getLedgerRows(session, searchParams);
+      case "vendor-payments":
+        return getVendorPaymentRows(session, searchParams);
+      case "finance-reports":
+        return getFinanceReportRows(session, searchParams);
+      default:
+        return [];
+    }
+  }, { moduleKey });
 }
 
 async function getActivityLogRows(session: Session, searchParams: SearchParamsLike) {
@@ -159,6 +163,7 @@ async function getActivityLogRows(session: Session, searchParams: SearchParamsLi
 
   const rows = await prisma.activityLog.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       actor: {
@@ -214,6 +219,7 @@ async function getClientRows(session: Session, searchParams: SearchParamsLike) {
 
   const rows = await prisma.client.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       servicePartner: {
@@ -265,6 +271,7 @@ async function getServiceRequestRows(session: Session, searchParams: SearchParam
 
   const rows = await prisma.serviceRequest.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       servicePartner: { select: { name: true } },
@@ -310,6 +317,7 @@ async function getTaskRows(session: Session, searchParams: SearchParamsLike) {
     dueTo,
     overdue,
     scope,
+    take: MAX_EXPORT_ROWS,
   });
 
   return result.tasks.map((row) => ({
@@ -347,6 +355,7 @@ async function getQuotationRows(session: Session, searchParams: SearchParamsLike
           }
         : {}),
     },
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       serviceRequest: { select: { serviceNumber: true, title: true } },
@@ -392,6 +401,7 @@ async function getPurchaseOrderRows(session: Session, searchParams: SearchParams
 
   const rows = await prisma.purchaseOrder.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       vendor: { select: { name: true, code: true } },
@@ -439,6 +449,7 @@ async function getInvoiceRows(session: Session, searchParams: SearchParamsLike) 
 
   const rows = await prisma.invoice.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       vendor: { select: { name: true, code: true } },
@@ -503,6 +514,7 @@ async function getPaymentRows(session: Session, searchParams: SearchParamsLike) 
 
   const rows = await prisma.payment.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       invoice: {
@@ -556,6 +568,7 @@ async function getLedgerRows(session: Session, searchParams: SearchParamsLike) {
 
   const rows = await prisma.ledgerEntry.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
     include: {
       payment: { select: { paymentNumber: true } },
@@ -602,6 +615,7 @@ async function getVendorPaymentRows(session: Session, searchParams: SearchParams
 
   const rows = await prisma.vendorPayment.findMany({
     where,
+    take: MAX_EXPORT_ROWS,
     orderBy: [{ createdAt: "desc" }],
     include: {
       vendor: { select: { name: true, code: true } },

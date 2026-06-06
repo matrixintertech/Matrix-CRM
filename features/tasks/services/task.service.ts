@@ -10,6 +10,7 @@ import type {
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 
 const COMPANY_ADMIN_LEVEL = 90;
 
@@ -27,6 +28,7 @@ type ListTasksInput = {
   dueFrom?: Date;
   dueTo?: Date;
   overdue?: boolean;
+  take?: number;
 };
 
 type TaskUserRecord = {
@@ -189,6 +191,126 @@ type LoadedTask = Prisma.TaskGetPayload<{
   };
 }>;
 
+type ListedTask = Prisma.TaskGetPayload<{
+  include: {
+    serviceRequest: {
+      select: {
+        id: true;
+        serviceNumber: true;
+        title: true;
+        servicePartnerId: true;
+      };
+    };
+    parentTask: {
+      select: {
+        id: true;
+        taskNumber: true;
+        title: true;
+        parentTaskId: true;
+        assignee: {
+          select: {
+            id: true;
+            name: true;
+            email: true;
+            phone: true;
+          };
+        };
+        assignedBy: {
+          select: {
+            id: true;
+            name: true;
+            email: true;
+            phone: true;
+          };
+        };
+        createdBy: {
+          select: {
+            id: true;
+            name: true;
+            email: true;
+            phone: true;
+          };
+        };
+      };
+    };
+    assignee: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+        phone: true;
+      };
+    };
+    createdBy: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+        phone: true;
+      };
+    };
+    assignedBy: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+        phone: true;
+      };
+    };
+    _count: {
+      select: {
+        childTasks: true;
+      };
+    };
+  };
+}>;
+
+type TaskListRecord = {
+  id: string;
+  servicePartnerId: string;
+  serviceRequestId: string;
+  parentTaskId: string | null;
+  taskNumber: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  requestedAt: Date | null;
+  startDate: Date | null;
+  dueDate: Date | null;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  assigneeUserId: string | null;
+  createdByUserId: string | null;
+  assignedByUserId: string | null;
+  serviceRequest: {
+    id: string;
+    serviceNumber: string;
+    title: string;
+    servicePartnerId: string;
+  };
+  _count: {
+    childTasks: number;
+  };
+};
+
+type TaskChainRecord = {
+  id: string;
+  parentTaskId: string | null;
+  taskNumber: string;
+  title: string;
+  assigneeUserId: string | null;
+  assignedByUserId: string | null;
+  createdByUserId: string | null;
+};
+
+type TaskUserSummary = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
 export type TaskHistoryEntry = {
   id: string;
   action: string;
@@ -348,6 +470,45 @@ function getTaskSummaryInclude() {
   };
 }
 
+function getTaskListSelect() {
+  return {
+    id: true,
+    servicePartnerId: true,
+    serviceRequestId: true,
+    parentTaskId: true,
+    taskNumber: true,
+    title: true,
+    description: true,
+    status: true,
+    requestedAt: true,
+    startDate: true,
+    dueDate: true,
+    completedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    assigneeUserId: true,
+    createdByUserId: true,
+    assignedByUserId: true,
+    serviceRequest: {
+      select: {
+        id: true,
+        serviceNumber: true,
+        title: true,
+        servicePartnerId: true,
+      },
+    },
+    _count: {
+      select: {
+        childTasks: {
+          where: {
+            deletedAt: null,
+          },
+        },
+      },
+    },
+  };
+}
+
 async function generateTaskNumber(servicePartnerId: string) {
   const servicePartner = await prisma.servicePartner.findUnique({
     where: { id: servicePartnerId },
@@ -404,45 +565,47 @@ async function getTaskRecordById(taskId: string, session: Session) {
 }
 
 async function getTaskAccessContext(session: Session): Promise<TaskAccessContext> {
-  const permissions = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
-  const roleLevels = await prisma.userRole.findMany({
-    where: {
-      userId: session.user.id,
-      role: {
-        deletedAt: null,
-      },
-    },
-    select: {
-      role: {
-        select: {
-          level: true,
+  return measurePerf("tasks.access_context", async () => {
+    const permissions = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
+    const roleLevels = await prisma.userRole.findMany({
+      where: {
+        userId: session.user.id,
+        role: {
+          deletedAt: null,
         },
       },
-    },
-  });
-  const maxRoleLevel = session.user.isSuperAdmin
-    ? Number.MAX_SAFE_INTEGER
-    : roleLevels.reduce((highest, entry) => Math.max(highest, entry.role.level), 0);
+      select: {
+        role: {
+          select: {
+            level: true,
+          },
+        },
+      },
+    });
+    const maxRoleLevel = session.user.isSuperAdmin
+      ? Number.MAX_SAFE_INTEGER
+      : roleLevels.reduce((highest, entry) => Math.max(highest, entry.role.level), 0);
 
-  return {
-    permissions,
-    userId: session.user.id,
-    servicePartnerId: session.user.servicePartnerId,
-    maxRoleLevel,
-    isSuperAdmin: session.user.isSuperAdmin,
-    isCompanyWide: session.user.isSuperAdmin || maxRoleLevel >= COMPANY_ADMIN_LEVEL,
-    canAssign: permissions.has("tasks.assign"),
-    canAssignAny: permissions.has("tasks.assign.any"),
-    canAssignDownline: permissions.has("tasks.assign.downline"),
-    canDelegate: permissions.has("tasks.delegate"),
-    canHistoryRead: permissions.has("tasks.history.read"),
-    canRemarkCreate: permissions.has("tasks.remark.create"),
-    canRead: permissions.has("tasks.read"),
-    canCreate: permissions.has("tasks.create"),
-    canUpdate: permissions.has("tasks.update"),
-    canDelete: permissions.has("tasks.delete"),
-    canStatusUpdate: permissions.has("tasks.status.update"),
-  };
+    return {
+      permissions,
+      userId: session.user.id,
+      servicePartnerId: session.user.servicePartnerId,
+      maxRoleLevel,
+      isSuperAdmin: session.user.isSuperAdmin,
+      isCompanyWide: session.user.isSuperAdmin || maxRoleLevel >= COMPANY_ADMIN_LEVEL,
+      canAssign: permissions.has("tasks.assign"),
+      canAssignAny: permissions.has("tasks.assign.any"),
+      canAssignDownline: permissions.has("tasks.assign.downline"),
+      canDelegate: permissions.has("tasks.delegate"),
+      canHistoryRead: permissions.has("tasks.history.read"),
+      canRemarkCreate: permissions.has("tasks.remark.create"),
+      canRead: permissions.has("tasks.read"),
+      canCreate: permissions.has("tasks.create"),
+      canUpdate: permissions.has("tasks.update"),
+      canDelete: permissions.has("tasks.delete"),
+      canStatusUpdate: permissions.has("tasks.status.update"),
+    };
+  });
 }
 
 async function getResponsibilityServiceRequestIds(userId: string, servicePartnerId: string) {
@@ -599,6 +762,184 @@ async function loadAncestors(servicePartnerId: string, task: { parentTaskId: str
   return nodes;
 }
 
+async function loadAncestorGraph(servicePartnerId: string, tasks: Array<{ parentTaskId: string | null }>) {
+  const ancestorMap = new Map<string, TaskChainNode>();
+  let frontier = Array.from(
+    new Set(
+      tasks
+        .map((task) => task.parentTaskId)
+        .filter((parentTaskId): parentTaskId is string => Boolean(parentTaskId))
+    )
+  );
+
+  while (frontier.length > 0) {
+    const parents = await prisma.task.findMany({
+      where: {
+        id: {
+          in: frontier,
+        },
+        servicePartnerId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        parentTaskId: true,
+        taskNumber: true,
+        title: true,
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        assignedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    frontier = [];
+    for (const parent of parents) {
+      if (ancestorMap.has(parent.id)) {
+        continue;
+      }
+
+      ancestorMap.set(parent.id, parent);
+      if (parent.parentTaskId && !ancestorMap.has(parent.parentTaskId)) {
+        frontier.push(parent.parentTaskId);
+      }
+    }
+  }
+
+  return ancestorMap;
+}
+
+async function loadAncestorRecordGraph(servicePartnerId: string, tasks: Array<{ parentTaskId: string | null }>) {
+  const ancestorMap = new Map<string, TaskChainRecord>();
+  let frontier = Array.from(
+    new Set(
+      tasks
+        .map((task) => task.parentTaskId)
+        .filter((parentTaskId): parentTaskId is string => Boolean(parentTaskId))
+    )
+  );
+
+  while (frontier.length > 0) {
+    const parents = await prisma.task.findMany({
+      where: {
+        id: {
+          in: frontier,
+        },
+        servicePartnerId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        parentTaskId: true,
+        taskNumber: true,
+        title: true,
+        assigneeUserId: true,
+        assignedByUserId: true,
+        createdByUserId: true,
+      },
+    });
+
+    frontier = [];
+    for (const parent of parents) {
+      if (ancestorMap.has(parent.id)) {
+        continue;
+      }
+
+      ancestorMap.set(parent.id, parent);
+      if (parent.parentTaskId && !ancestorMap.has(parent.parentTaskId)) {
+        frontier.push(parent.parentTaskId);
+      }
+    }
+  }
+
+  return ancestorMap;
+}
+
+function buildAncestorChainFromMap(task: { parentTaskId: string | null }, ancestorMap: Map<string, TaskChainNode>) {
+  const ancestors: TaskChainNode[] = [];
+  let currentParentId = task.parentTaskId;
+
+  while (currentParentId) {
+    const parent = ancestorMap.get(currentParentId);
+    if (!parent) {
+      break;
+    }
+
+    ancestors.push(parent);
+    currentParentId = parent.parentTaskId;
+  }
+
+  return ancestors;
+}
+
+function buildAncestorRecordChain(task: { parentTaskId: string | null }, ancestorMap: Map<string, TaskChainRecord>) {
+  const ancestors: TaskChainRecord[] = [];
+  let currentParentId = task.parentTaskId;
+
+  while (currentParentId) {
+    const parent = ancestorMap.get(currentParentId);
+    if (!parent) {
+      break;
+    }
+
+    ancestors.push(parent);
+    currentParentId = parent.parentTaskId;
+  }
+
+  return ancestors;
+}
+
+async function loadTaskUserMap(userIds: Iterable<string>) {
+  const uniqueUserIds = Array.from(new Set(Array.from(userIds).filter(Boolean)));
+  if (uniqueUserIds.length === 0) {
+    return new Map<string, TaskUserSummary>();
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      id: {
+        in: uniqueUserIds,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  });
+
+  return new Map(users.map((user) => [user.id, user]));
+}
+
+function mapTaskUser(userId: string | null, userMap: Map<string, TaskUserSummary>) {
+  if (!userId) {
+    return null;
+  }
+
+  return userMap.get(userId) ?? null;
+}
+
 function buildAssignmentChain(nodes: TaskChainNode[]) {
   return nodes.map((node) => {
     const assigner = userDisplayName(node.assignedBy ?? node.createdBy);
@@ -608,58 +949,189 @@ function buildAssignmentChain(nodes: TaskChainNode[]) {
 }
 
 async function decorateTasks(tasks: LoadedTask[]) {
-  const ancestorCache = new Map<string, TaskChainNode[]>();
+  if (tasks.length === 0) {
+    return [];
+  }
 
-  return Promise.all(
-    tasks.map(async (task) => {
-      let ancestors = ancestorCache.get(task.id);
-      if (!ancestors) {
-        ancestors = await loadAncestors(task.servicePartnerId, task);
-        ancestorCache.set(task.id, ancestors);
-      }
+  const ancestorMapsByServicePartner = new Map<string, Map<string, TaskChainNode>>();
 
-      const hierarchyDepth = ancestors.length;
-      const assignmentChain = buildAssignmentChain(
-        [...ancestors].reverse().concat([
-          {
-            id: task.id,
-            parentTaskId: task.parentTaskId,
-            taskNumber: task.taskNumber,
-            title: task.title,
-            assignee: task.assignee,
-            assignedBy: task.assignedBy,
-            createdBy: task.createdBy,
-          },
-        ])
-      );
+  for (const [servicePartnerId, servicePartnerTasks] of Object.entries(
+    tasks.reduce<Record<string, LoadedTask[]>>((groups, task) => {
+      groups[task.servicePartnerId] = [...(groups[task.servicePartnerId] ?? []), task];
+      return groups;
+    }, {})
+  )) {
+    ancestorMapsByServicePartner.set(servicePartnerId, await loadAncestorGraph(servicePartnerId, servicePartnerTasks));
+  }
 
-      let latestChildStatus: TaskStatus | null = null;
-      if (task.childTasks.length > 0) {
-        latestChildStatus = task.childTasks[0]?.status ?? null;
-      }
-
-      return {
-        ...task,
-        hierarchyDepth,
-        assignmentChain,
-        childTaskCount: task.childTasks.length,
-        latestChildStatus,
-        isSubTask: task.parentTaskId !== null,
-        parentTaskSummary: task.parentTask
-          ? {
-              id: task.parentTask.id,
-              taskNumber: task.parentTask.taskNumber,
-              title: task.parentTask.title,
-            }
-          : null,
-        serviceRequestSummary: {
-          id: task.serviceRequest.id,
-          serviceNumber: task.serviceRequest.serviceNumber,
-          title: task.serviceRequest.title,
+  return tasks.map((task) => {
+    const ancestorMap = ancestorMapsByServicePartner.get(task.servicePartnerId) ?? new Map<string, TaskChainNode>();
+    const ancestors = buildAncestorChainFromMap(task, ancestorMap);
+    const hierarchyDepth = ancestors.length;
+    const assignmentChain = buildAssignmentChain(
+      [...ancestors].reverse().concat([
+        {
+          id: task.id,
+          parentTaskId: task.parentTaskId,
+          taskNumber: task.taskNumber,
+          title: task.title,
+          assignee: task.assignee,
+          assignedBy: task.assignedBy,
+          createdBy: task.createdBy,
         },
-      };
-    })
+      ])
+    );
+
+    let latestChildStatus: TaskStatus | null = null;
+    if (task.childTasks.length > 0) {
+      latestChildStatus = task.childTasks[0]?.status ?? null;
+    }
+
+    return {
+      ...task,
+      hierarchyDepth,
+      assignmentChain,
+      childTaskCount: task.childTasks.length,
+      latestChildStatus,
+      isSubTask: task.parentTaskId !== null,
+      parentTaskSummary: task.parentTask
+        ? {
+            id: task.parentTask.id,
+            taskNumber: task.parentTask.taskNumber,
+            title: task.parentTask.title,
+          }
+        : null,
+      serviceRequestSummary: {
+        id: task.serviceRequest.id,
+        serviceNumber: task.serviceRequest.serviceNumber,
+        title: task.serviceRequest.title,
+      },
+    };
+  });
+}
+
+async function getLatestChildStatusMap(taskIds: string[]) {
+  if (taskIds.length === 0) {
+    return new Map<string, TaskStatus>();
+  }
+
+  const rows = await prisma.task.findMany({
+    where: {
+      deletedAt: null,
+      parentTaskId: {
+        in: taskIds,
+      },
+    },
+    orderBy: [{ parentTaskId: "asc" }, { updatedAt: "desc" }],
+    select: {
+      parentTaskId: true,
+      status: true,
+    },
+  });
+
+  const statusMap = new Map<string, TaskStatus>();
+  for (const row of rows) {
+    if (!row.parentTaskId || statusMap.has(row.parentTaskId)) {
+      continue;
+    }
+    statusMap.set(row.parentTaskId, row.status);
+  }
+
+  return statusMap;
+}
+
+async function decorateListedTasks(tasks: TaskListRecord[]) {
+  if (tasks.length === 0) {
+    return [];
+  }
+
+  const ancestorMapsByServicePartner = new Map<string, Map<string, TaskChainRecord>>();
+
+  await measurePerf("tasks.list.decorate.ancestor_graph", async () => {
+    for (const [servicePartnerId, servicePartnerTasks] of Object.entries(
+      tasks.reduce<Record<string, TaskListRecord[]>>((groups, task) => {
+        groups[task.servicePartnerId] = [...(groups[task.servicePartnerId] ?? []), task];
+        return groups;
+      }, {})
+    )) {
+      ancestorMapsByServicePartner.set(servicePartnerId, await loadAncestorRecordGraph(servicePartnerId, servicePartnerTasks));
+    }
+  });
+
+  const latestChildStatusMap = await measurePerf(
+    "tasks.list.decorate.child_statuses",
+    () => getLatestChildStatusMap(tasks.map((task) => task.id))
   );
+  const userMap = await measurePerf("tasks.list.decorate.user_map", () =>
+    loadTaskUserMap(
+      tasks
+        .flatMap((task) => [task.assigneeUserId, task.createdByUserId, task.assignedByUserId])
+        .filter((userId): userId is string => Boolean(userId))
+        .concat(
+        Array.from(ancestorMapsByServicePartner.values()).flatMap((ancestorMap) =>
+          Array.from(ancestorMap.values()).flatMap((ancestor) => [
+            ancestor.assigneeUserId,
+            ancestor.createdByUserId,
+            ancestor.assignedByUserId,
+          ]).filter((userId): userId is string => Boolean(userId))
+        )
+      )
+    )
+  );
+
+  return tasks.map((task) => {
+    const ancestorMap = ancestorMapsByServicePartner.get(task.servicePartnerId) ?? new Map<string, TaskChainRecord>();
+    const ancestors = buildAncestorRecordChain(task, ancestorMap);
+    const hierarchyDepth = ancestors.length;
+    const assignmentNodes: TaskChainNode[] = [...ancestors]
+      .reverse()
+      .map((ancestor) => ({
+        id: ancestor.id,
+        parentTaskId: ancestor.parentTaskId,
+        taskNumber: ancestor.taskNumber,
+        title: ancestor.title,
+        assignee: mapTaskUser(ancestor.assigneeUserId, userMap),
+        assignedBy: mapTaskUser(ancestor.assignedByUserId, userMap),
+        createdBy: mapTaskUser(ancestor.createdByUserId, userMap),
+      }))
+      .concat([
+        {
+          id: task.id,
+          parentTaskId: task.parentTaskId,
+          taskNumber: task.taskNumber,
+          title: task.title,
+          assignee: mapTaskUser(task.assigneeUserId, userMap),
+          assignedBy: mapTaskUser(task.assignedByUserId, userMap),
+          createdBy: mapTaskUser(task.createdByUserId, userMap),
+        },
+      ]);
+    const assignmentChain = buildAssignmentChain(assignmentNodes);
+    const immediateParent = task.parentTaskId ? ancestorMap.get(task.parentTaskId) ?? null : null;
+
+    return {
+      ...task,
+      assignee: mapTaskUser(task.assigneeUserId, userMap),
+      createdBy: mapTaskUser(task.createdByUserId, userMap),
+      assignedBy: mapTaskUser(task.assignedByUserId, userMap),
+      hierarchyDepth,
+      assignmentChain,
+      childTaskCount: task._count.childTasks,
+      latestChildStatus: latestChildStatusMap.get(task.id) ?? null,
+      isSubTask: task.parentTaskId !== null,
+      parentTaskSummary: immediateParent
+        ? {
+            id: immediateParent.id,
+            taskNumber: immediateParent.taskNumber,
+            title: immediateParent.title,
+          }
+        : null,
+      serviceRequestSummary: {
+        id: task.serviceRequest.id,
+        serviceNumber: task.serviceRequest.serviceNumber,
+        title: task.serviceRequest.title,
+      },
+    };
+  });
 }
 
 async function canViewTaskRecord(task: LoadedTask, context: TaskAccessContext, snapshot?: TaskVisibilitySnapshot | null) {
@@ -983,42 +1455,47 @@ export async function listTaskServiceRequestOptions(session: Session) {
 }
 
 export async function listTasks(session: Session, input: ListTasksInput = {}) {
-  const context = await getTaskAccessContext(session);
-  if (!context.canRead && !context.isSuperAdmin) {
+  return measurePerf("tasks.list", async () => {
+    const context = await getTaskAccessContext(session);
+    if (!context.canRead && !context.isSuperAdmin) {
+      return {
+        tasks: [],
+        visibility: {
+          canSeeCompanyScope: context.isCompanyWide,
+        },
+      };
+    }
+
+    const snapshot = await measurePerf("tasks.list.visibility", () => getTaskVisibilitySnapshot(session, context));
+    const where: Prisma.TaskWhereInput = {
+      deletedAt: null,
+      ...scopeByTenant(session, {}),
+    };
+
+    if (snapshot) {
+      where.id = {
+        in: Array.from(snapshot.visibleIds),
+      };
+    }
+
+    applyTaskFilters(where, input, context, snapshot);
+
+    const tasks = await measurePerf("tasks.list.query", () =>
+      prisma.task.findMany({
+        where,
+        take: input.take,
+        orderBy: [{ createdAt: "asc" }],
+        select: getTaskListSelect(),
+      })
+    );
+
     return {
-      tasks: [],
+      tasks: await measurePerf("tasks.list.decorate", () => decorateListedTasks(tasks)),
       visibility: {
         canSeeCompanyScope: context.isCompanyWide,
       },
     };
-  }
-
-  const snapshot = await getTaskVisibilitySnapshot(session, context);
-  const where: Prisma.TaskWhereInput = {
-    deletedAt: null,
-    ...scopeByTenant(session, {}),
-  };
-
-  if (snapshot) {
-    where.id = {
-      in: Array.from(snapshot.visibleIds),
-    };
-  }
-
-  applyTaskFilters(where, input, context, snapshot);
-
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy: [{ createdAt: "asc" }],
-    include: getTaskSummaryInclude(),
   });
-
-  return {
-    tasks: await decorateTasks(tasks),
-    visibility: {
-      canSeeCompanyScope: context.isCompanyWide,
-    },
-  };
 }
 
 export async function listTasksForServiceRequest(session: Session, serviceRequestId: string) {
@@ -1111,34 +1588,45 @@ export async function createTask(session: Session, input: CreateTaskInput) {
 }
 
 export async function getTaskById(session: Session, taskId: string) {
-  const context = await getTaskAccessContext(session);
-  const task = await getTaskRecordById(taskId, session);
-  if (!task) {
-    return null;
-  }
+  return measurePerf("tasks.get_by_id", async () => {
+    const context = await getTaskAccessContext(session);
+    const task = await getTaskRecordById(taskId, session);
+    if (!task) {
+      return null;
+    }
 
-  const snapshot = await getTaskVisibilitySnapshot(session, context);
-  const allowed = await canViewTaskRecord(task, context, snapshot);
-  if (!allowed) {
-    return null;
-  }
+    const snapshot = await getTaskVisibilitySnapshot(session, context);
+    const allowed = await canViewTaskRecord(task, context, snapshot);
+    if (!allowed) {
+      return null;
+    }
 
-  const decorated = (await decorateTasks([task]))[0];
-  const visibleChildTasks = await Promise.all(
-    task.childTasks.map(async (child) => {
-      const loadedChild = await getTaskRecordById(child.id, session);
-      if (!loadedChild) {
-        return null;
-      }
-      const childAllowed = await canViewTaskRecord(loadedChild, context, snapshot);
-      return childAllowed ? (await decorateTasks([loadedChild]))[0] : null;
-    })
-  );
+    const decorated = (await decorateTasks([task]))[0];
+    const childIds = task.childTasks.map((child) => child.id);
+    const loadedChildTasks =
+      childIds.length > 0
+        ? await prisma.task.findMany({
+            where: {
+              id: { in: childIds },
+              deletedAt: null,
+              ...scopeByTenant(session, {}),
+            },
+            include: getTaskSummaryInclude(),
+          })
+        : [];
 
-  return {
-    ...decorated,
-    childTasks: visibleChildTasks.filter((taskRow): taskRow is NonNullable<typeof taskRow> => Boolean(taskRow)),
-  };
+    const visibleChildTasks = await Promise.all(
+      loadedChildTasks.map(async (childTask) => {
+        const childAllowed = await canViewTaskRecord(childTask, context, snapshot);
+        return childAllowed ? (await decorateTasks([childTask]))[0] : null;
+      })
+    );
+
+    return {
+      ...decorated,
+      childTasks: visibleChildTasks.filter((taskRow): taskRow is NonNullable<typeof taskRow> => Boolean(taskRow)),
+    };
+  });
 }
 
 export async function getTaskHistoryEntries(session: Session, taskId: string): Promise<TaskHistoryEntry[]> {

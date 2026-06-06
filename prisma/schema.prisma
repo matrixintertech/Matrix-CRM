@@ -278,6 +278,8 @@ model ServicePartner {
 
   @@index([status])
   @@index([createdAt])
+  @@index([deletedAt, status])
+  @@index([deletedAt, name])
 }
 
 model User {
@@ -342,6 +344,8 @@ model User {
   @@index([servicePartnerId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([servicePartnerId, lastLoginAt])
 }
 
 model Account {
@@ -406,6 +410,8 @@ model OtpChallenge {
   @@index([servicePartnerId])
   @@index([target, purpose, createdAt])
   @@index([expiresAt])
+  @@index([target, purpose, consumedAt, createdAt])
+  @@index([servicePartnerId, userId, purpose, consumedAt, createdAt])
 }
 
 model Role {
@@ -578,6 +584,8 @@ model Client {
   @@index([servicePartnerId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([servicePartnerId, deletedAt, name])
 }
 
 model ClientUser {
@@ -627,6 +635,8 @@ model Branch {
   @@unique([clientId, code])
   @@index([servicePartnerId])
   @@index([clientId])
+  @@index([servicePartnerId, deletedAt])
+  @@index([clientId, deletedAt])
 }
 
 model Category {
@@ -770,6 +780,9 @@ model ServiceRequest {
   @@index([clientId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([servicePartnerId, clientId, deletedAt])
+  @@index([servicePartnerId, requestedAt])
 }
 
 model ServiceRequestStatusHistory {
@@ -804,6 +817,8 @@ model Assignment {
   @@index([servicePartnerId])
   @@index([serviceRequestId, role])
   @@index([userId])
+  @@index([servicePartnerId, userId, unassignedAt])
+  @@index([serviceRequestId, unassignedAt])
 }
 
 model ServiceAssignment {
@@ -926,6 +941,11 @@ model Task {
   @@index([assignedByUserId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([assigneeUserId, deletedAt, status])
+  @@index([parentTaskId, deletedAt])
+  @@index([serviceRequestId, deletedAt])
+  @@index([servicePartnerId, requestedAt])
 }
 
 model TaskLine {
@@ -990,6 +1010,8 @@ model ActivityLog {
   @@index([module, action])
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([servicePartnerId, createdAt])
+  @@index([servicePartnerId, entityType, entityId])
 }
 
 model InventoryItem {
@@ -1149,6 +1171,7 @@ model Vendor {
   @@unique([servicePartnerId, code])
   @@index([servicePartnerId])
   @@index([status])
+  @@index([servicePartnerId, deletedAt, status])
 }
 
 model Rfq {
@@ -1181,6 +1204,7 @@ model Rfq {
   @@index([serviceRequestId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
 }
 
 model RfqItem {
@@ -1256,6 +1280,9 @@ model PurchaseOrder {
   @@index([vendorId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([servicePartnerId, orderDate])
+  @@index([vendorId, deletedAt])
 }
 
 model PurchaseOrderItem {
@@ -1317,6 +1344,10 @@ model Invoice {
   @@index([vendorId])
   @@index([status])
   @@index([createdAt])
+  @@index([purchaseOrderId])
+  @@index([servicePartnerId, deletedAt, status])
+  @@index([servicePartnerId, invoiceDate])
+  @@index([vendorId, deletedAt])
 }
 
 model InvoiceItem {
@@ -1373,6 +1404,9 @@ model Payment {
   @@index([clientId])
   @@index([status])
   @@index([createdAt])
+  @@index([servicePartnerId, status, createdAt])
+  @@index([invoiceId, status])
+  @@index([servicePartnerId, paidAt])
 }
 
 model Expense {
@@ -1443,6 +1477,9 @@ model VendorPayment {
   @@index([vendorId])
   @@index([status])
   @@index([createdAt])
+  @@index([purchaseOrderId])
+  @@index([servicePartnerId, status, createdAt])
+  @@index([servicePartnerId, paidAt])
 }
 
 model LedgerEntry {
@@ -1478,6 +1515,7 @@ model LedgerEntry {
   @@index([expenseId])
   @@index([vendorPaymentId])
   @@index([inventoryTransactionId])
+  @@index([servicePartnerId, sourceType, entryDate])
 }
 
 model Attachment {

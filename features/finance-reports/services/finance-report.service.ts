@@ -5,6 +5,7 @@ import type { FinanceReportFilterInput } from "@/features/finance-reports/valida
 import { hasPermission } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
+import { measurePerf } from "@/lib/observability/perf";
 
 const countedPaymentStatuses: PaymentStatus[] = [
   PaymentStatus.APPROVED,
@@ -194,24 +195,25 @@ function resolveCountedStatusFilter(status?: PaymentStatus) {
 }
 
 export async function getFinanceReportData(session: Session, input: FinanceReportFilterInput) {
-  await assertCanReadFinanceReports(session);
+  return measurePerf("finance_reports.get_data", async () => {
+    await assertCanReadFinanceReports(session);
 
-  const invoiceWhere = buildInvoiceWhere(session, input);
-  const paymentWhere = buildInvoicePaymentWhere(session, input);
-  const vendorPaymentWhere = buildVendorPaymentWhere(session, input);
-  const ledgerWhere = buildLedgerWhere(session, input);
+    const invoiceWhere = buildInvoiceWhere(session, input);
+    const paymentWhere = buildInvoicePaymentWhere(session, input);
+    const vendorPaymentWhere = buildVendorPaymentWhere(session, input);
+    const ledgerWhere = buildLedgerWhere(session, input);
 
-  const countedInvoiceStatuses = resolveCountedStatusFilter(input.paymentStatus);
-  const countedVendorStatuses = resolveCountedStatusFilter(input.paymentStatus);
+    const countedInvoiceStatuses = resolveCountedStatusFilter(input.paymentStatus);
+    const countedVendorStatuses = resolveCountedStatusFilter(input.paymentStatus);
 
-  const [
-    invoices,
-    invoicePaymentsForCash,
-    vendorPaymentsForCash,
-    ledgerAggregate,
-    ledgerSourceCounts,
-    ledgerEntriesCount,
-  ] = await Promise.all([
+    const [
+      invoices,
+      invoicePaymentsForCash,
+      vendorPaymentsForCash,
+      ledgerAggregate,
+      ledgerSourceCounts,
+      ledgerEntriesCount,
+    ] = await Promise.all([
     prisma.invoice.findMany({
       where: invoiceWhere,
       orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
@@ -323,30 +325,30 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
     prisma.ledgerEntry.count({
       where: ledgerWhere,
     }),
-  ]);
+    ]);
 
-  const invoiceIds = invoices.map((invoice) => invoice.id);
-  const invoicePaidGroups =
-    invoiceIds.length > 0
-      ? await prisma.payment.groupBy({
-          by: ["invoiceId"],
-          where: {
-            invoiceId: { in: invoiceIds },
-            status: { in: countedPaymentStatuses },
-          },
-          _sum: {
-            amount: true,
-          },
-        })
-      : [];
+    const invoiceIds = invoices.map((invoice) => invoice.id);
+    const invoicePaidGroups =
+      invoiceIds.length > 0
+        ? await prisma.payment.groupBy({
+            by: ["invoiceId"],
+            where: {
+              invoiceId: { in: invoiceIds },
+              status: { in: countedPaymentStatuses },
+            },
+            _sum: {
+              amount: true,
+            },
+          })
+        : [];
 
-  const paidAmountByInvoiceId = new Map(
-    invoicePaidGroups
-      .filter((group): group is typeof group & { invoiceId: string } => Boolean(group.invoiceId))
-      .map((group) => [group.invoiceId, roundMoney(Number(group._sum.amount ?? 0))])
-  );
+    const paidAmountByInvoiceId = new Map(
+      invoicePaidGroups
+        .filter((group): group is typeof group & { invoiceId: string } => Boolean(group.invoiceId))
+        .map((group) => [group.invoiceId, roundMoney(Number(group._sum.amount ?? 0))])
+    );
 
-  const payables = invoices.map((invoice) => {
+    const payables = invoices.map((invoice) => {
     const grandTotal = roundMoney(Number(invoice.grandTotal));
     const paidAmount = paidAmountByInvoiceId.get(invoice.id) ?? 0;
     const balanceDue = roundMoney(Math.max(grandTotal - paidAmount, 0));
@@ -365,15 +367,15 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       paidAmount,
       balanceDue,
     };
-  });
+    });
 
-  const totalVendorInvoiceAmount = roundMoney(payables.reduce((sum, row) => sum + row.grandTotal, 0));
-  const outstandingPayables = roundMoney(payables.reduce((sum, row) => sum + row.balanceDue, 0));
-  const totalInvoicePaymentsMade = roundMoney(invoicePaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
-  const totalStandaloneVendorPayments = roundMoney(vendorPaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
-  const totalOutgoingPayments = roundMoney(totalInvoicePaymentsMade + totalStandaloneVendorPayments);
+    const totalVendorInvoiceAmount = roundMoney(payables.reduce((sum, row) => sum + row.grandTotal, 0));
+    const outstandingPayables = roundMoney(payables.reduce((sum, row) => sum + row.balanceDue, 0));
+    const totalInvoicePaymentsMade = roundMoney(invoicePaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
+    const totalStandaloneVendorPayments = roundMoney(vendorPaymentsForCash.reduce((sum, row) => sum + Number(row.amount), 0));
+    const totalOutgoingPayments = roundMoney(totalInvoicePaymentsMade + totalStandaloneVendorPayments);
 
-  const paymentsMade = [
+    const paymentsMade = [
     ...invoicePaymentsForCash
       .filter((payment) => payment.invoice)
       .map((payment) => ({
@@ -400,70 +402,71 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       vendorInvoiceNumber: null,
       invoiceNumber: null,
     })),
-  ].sort((left, right) => {
+    ].sort((left, right) => {
     const leftTime = left.paidAt?.getTime() ?? 0;
     const rightTime = right.paidAt?.getTime() ?? 0;
     return rightTime - leftTime;
+    });
+
+    const cashMovementMap = new Map<string, { incoming: number; outgoing: number }>();
+    for (const payment of invoicePaymentsForCash) {
+      if (!payment.paidAt) {
+        continue;
+      }
+      const periodKey = formatPeriodKey(payment.paidAt);
+      const current = cashMovementMap.get(periodKey) ?? { incoming: 0, outgoing: 0 };
+      current.outgoing = roundMoney(current.outgoing + Number(payment.amount));
+      cashMovementMap.set(periodKey, current);
+    }
+    for (const vendorPayment of vendorPaymentsForCash) {
+      if (!vendorPayment.paidAt) {
+        continue;
+      }
+      const periodKey = formatPeriodKey(vendorPayment.paidAt);
+      const current = cashMovementMap.get(periodKey) ?? { incoming: 0, outgoing: 0 };
+      current.outgoing = roundMoney(current.outgoing + Number(vendorPayment.amount));
+      cashMovementMap.set(periodKey, current);
+    }
+
+    const cashMovement = [...cashMovementMap.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([period, values]) => ({
+        period,
+        label: formatPeriodLabel(period),
+        incoming: roundMoney(values.incoming),
+        outgoing: roundMoney(values.outgoing),
+        net: roundMoney(values.incoming - values.outgoing),
+      }));
+
+    const totalDebit = roundMoney(Number(ledgerAggregate._sum.debitAmount ?? 0));
+    const totalCredit = roundMoney(Number(ledgerAggregate._sum.creditAmount ?? 0));
+    const ledgerSummary = {
+      entriesCount: ledgerEntriesCount,
+      totalDebit,
+      totalCredit,
+      netAmount: roundMoney(totalDebit - totalCredit),
+      sourceTypeCounts: ledgerSourceCounts.map((row) => ({
+        sourceType: row.sourceType,
+        count: row._count._all,
+        totalDebit: roundMoney(Number(row._sum.debitAmount ?? 0)),
+        totalCredit: roundMoney(Number(row._sum.creditAmount ?? 0)),
+        netAmount: roundMoney(Number(row._sum.debitAmount ?? 0) - Number(row._sum.creditAmount ?? 0)),
+      })),
+    };
+
+    return {
+      summary: {
+        totalVendorInvoiceAmount,
+        totalInvoicePaymentsMade,
+        outstandingPayables,
+        totalStandaloneVendorPayments,
+        totalOutgoingPayments,
+        ledgerEntriesCount,
+      },
+      payables,
+      paymentsMade,
+      cashMovement,
+      ledgerSummary,
+    };
   });
-
-  const cashMovementMap = new Map<string, { incoming: number; outgoing: number }>();
-  for (const payment of invoicePaymentsForCash) {
-    if (!payment.paidAt) {
-      continue;
-    }
-    const periodKey = formatPeriodKey(payment.paidAt);
-    const current = cashMovementMap.get(periodKey) ?? { incoming: 0, outgoing: 0 };
-    current.outgoing = roundMoney(current.outgoing + Number(payment.amount));
-    cashMovementMap.set(periodKey, current);
-  }
-  for (const vendorPayment of vendorPaymentsForCash) {
-    if (!vendorPayment.paidAt) {
-      continue;
-    }
-    const periodKey = formatPeriodKey(vendorPayment.paidAt);
-    const current = cashMovementMap.get(periodKey) ?? { incoming: 0, outgoing: 0 };
-    current.outgoing = roundMoney(current.outgoing + Number(vendorPayment.amount));
-    cashMovementMap.set(periodKey, current);
-  }
-
-  const cashMovement = [...cashMovementMap.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([period, values]) => ({
-      period,
-      label: formatPeriodLabel(period),
-      incoming: roundMoney(values.incoming),
-      outgoing: roundMoney(values.outgoing),
-      net: roundMoney(values.incoming - values.outgoing),
-    }));
-
-  const totalDebit = roundMoney(Number(ledgerAggregate._sum.debitAmount ?? 0));
-  const totalCredit = roundMoney(Number(ledgerAggregate._sum.creditAmount ?? 0));
-  const ledgerSummary = {
-    entriesCount: ledgerEntriesCount,
-    totalDebit,
-    totalCredit,
-    netAmount: roundMoney(totalDebit - totalCredit),
-    sourceTypeCounts: ledgerSourceCounts.map((row) => ({
-      sourceType: row.sourceType,
-      count: row._count._all,
-      totalDebit: roundMoney(Number(row._sum.debitAmount ?? 0)),
-      totalCredit: roundMoney(Number(row._sum.creditAmount ?? 0)),
-      netAmount: roundMoney(Number(row._sum.debitAmount ?? 0) - Number(row._sum.creditAmount ?? 0)),
-    })),
-  };
-
-  return {
-    summary: {
-      totalVendorInvoiceAmount,
-      totalInvoicePaymentsMade,
-      outstandingPayables,
-      totalStandaloneVendorPayments,
-      totalOutgoingPayments,
-      ledgerEntriesCount,
-    },
-    payables,
-    paymentsMade,
-    cashMovement,
-    ledgerSummary,
-  };
 }
