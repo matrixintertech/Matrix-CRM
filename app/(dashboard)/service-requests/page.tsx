@@ -89,7 +89,7 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
       {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
       <form
-        className="grid gap-2 rounded-2xl border border-[#d8e3f4] bg-white p-3 shadow-[0_8px_24px_rgba(25,56,120,0.04)] md:grid-cols-5"
+        className="grid gap-3 rounded-2xl border border-[#d8e3f4] bg-white p-3 shadow-[0_8px_24px_rgba(25,56,120,0.04)] md:grid-cols-5"
         action=""
       >
         <input
@@ -136,10 +136,10 @@ export default async function ServiceRequestsPage({ searchParams }: ServiceReque
           ))}
         </select>
         <div className="md:col-span-5">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <button
               type="submit"
-              className="h-10 rounded-xl border border-[#2f5ef8] bg-[#f4f7ff] px-4 text-sm font-semibold text-[#2754ef] transition hover:bg-[#ebf0ff]"
+              className="h-11 rounded-xl border border-[#2f5ef8] bg-[#f4f7ff] px-4 text-sm font-semibold text-[#2754ef] transition hover:bg-[#ebf0ff]"
             >
               Apply
             </button>

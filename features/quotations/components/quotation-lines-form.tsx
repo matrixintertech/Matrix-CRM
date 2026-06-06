@@ -164,12 +164,12 @@ export function QuotationLinesForm({ itemOptions, initialLines }: QuotationLines
 
   return (
     <div className="space-y-3 rounded-md border border-[var(--border)] bg-white p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold">Quotation lines</h3>
         <button
           type="button"
           onClick={addLine}
-          className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
           disabled={itemOptions.length === 0}
         >
           Add line
@@ -246,12 +246,12 @@ export function QuotationLinesForm({ itemOptions, initialLines }: QuotationLines
                   maxLength={400}
                 />
               </label>
-              <div className="flex items-end gap-2">
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
                 <p className="text-xs text-[var(--muted)]">Line total: INR {calculated.lineTotal.toFixed(2)}</p>
                 <button
                   type="button"
                   onClick={() => removeLine(index)}
-                  className="h-9 rounded-md border border-red-200 px-2 text-xs text-red-700"
+                  className="h-10 rounded-xl border border-red-200 px-3 text-xs font-medium text-red-700"
                 >
                   Remove
                 </button>

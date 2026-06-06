@@ -49,7 +49,7 @@ const styles: Record<string, string> = {
 export function StatusBadge({ value }: { value: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${styles[value] ?? styles.INACTIVE}`}
+      className={`inline-flex min-h-7 items-center rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none ring-1 ring-inset sm:text-xs ${styles[value] ?? styles.INACTIVE}`}
     >
       {formatEnumLabel(value)}
     </span>

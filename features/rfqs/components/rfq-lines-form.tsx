@@ -124,12 +124,12 @@ export function RfqLinesForm({ itemOptions, initialLines }: RfqLinesFormProps) {
 
   return (
     <div className="space-y-3 rounded-md border border-[var(--border)] bg-white p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold">RFQ lines</h3>
         <button
           type="button"
           onClick={addLine}
-          className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
           disabled={itemOptions.length === 0}
         >
           Add line
@@ -207,7 +207,7 @@ export function RfqLinesForm({ itemOptions, initialLines }: RfqLinesFormProps) {
               </label>
             </div>
             <div className="flex items-center justify-end">
-              <button type="button" onClick={() => removeLine(index)} className="h-9 rounded-md border border-red-200 px-2 text-xs text-red-700">
+              <button type="button" onClick={() => removeLine(index)} className="h-10 w-full rounded-xl border border-red-200 px-3 text-xs font-medium text-red-700 sm:w-auto">
                 Remove
               </button>
             </div>

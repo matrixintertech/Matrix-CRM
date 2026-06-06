@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
+import { measureServerTiming, withServerTimingHeaders } from "@/lib/observability/server-timing";
 
 function canShowHealthDetails() {
   const config = env();
@@ -24,24 +25,32 @@ export async function GET() {
   const includeDetails = canShowHealthDetails();
 
   try {
-    await measurePerf("route.health", async () => {
-      await prisma.$queryRaw`SELECT 1`;
-    });
+    const { metric } = await measureServerTiming("db", async () =>
+      measurePerf("route.health", async () => {
+        await prisma.$queryRaw`SELECT 1`;
+      }),
+      "database ping"
+    );
 
-    return NextResponse.json({
-      ok: true,
-      ...basePayload,
-      database: "connected",
-      ...(includeDetails
-        ? {
-            details: {
-              nodeEnv: env().NODE_ENV,
-              otpDeliveryChannel: env().OTP_DELIVERY_CHANNEL,
-              rateLimitDriver: env().RATE_LIMIT_DRIVER,
-            },
-          }
-        : {}),
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        ...basePayload,
+        database: "connected",
+        ...(includeDetails
+          ? {
+              details: {
+                nodeEnv: env().NODE_ENV,
+                otpDeliveryChannel: env().OTP_DELIVERY_CHANNEL,
+                rateLimitDriver: env().RATE_LIMIT_DRIVER,
+              },
+            }
+          : {}),
+      },
+      {
+        headers: withServerTimingHeaders(undefined, [metric]),
+      }
+    );
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
     const errorCode =
@@ -69,7 +78,9 @@ export async function GET() {
         reason,
         ...(safeMessage ? { message: safeMessage } : {}),
       },
-      { status: 503 }
+      {
+        status: 503,
+      }
     );
   }
 }

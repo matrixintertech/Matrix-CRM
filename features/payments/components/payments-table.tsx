@@ -55,7 +55,50 @@ export function PaymentsTable({ invoiceId, redirectTo, payments, canUpdate, canD
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+      <div className="space-y-3 md:hidden">
+        {payments.map((payment) => (
+          <article key={payment.id} className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-900">{payment.paymentNumber}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">Updated {formatDateTime(payment.updatedAt)}</p>
+              </div>
+              <StatusBadge value={payment.status} />
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Date</p>
+                <p className="mt-1 text-sm text-slate-900">{formatDateTime(payment.paidAt)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Amount</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{toMoney(payment.amount)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Mode</p>
+                <p className="mt-1 text-sm text-slate-900">{payment.mode ?? "-"}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Reference</p>
+                <p className="mt-1 text-sm text-slate-900">{payment.referenceNumber?.trim() || "-"}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {canStatusUpdate ? <PaymentStatusActions paymentId={payment.id} currentStatus={payment.status} redirectTo={redirectTo} /> : null}
+              {canDelete ? (
+                <form action={deletePaymentAction.bind(null, payment.id)}>
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
+                  <button type="submit" className="min-h-11 w-full rounded-xl border border-red-200 px-3 text-sm font-medium text-red-700">
+                    Void
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>

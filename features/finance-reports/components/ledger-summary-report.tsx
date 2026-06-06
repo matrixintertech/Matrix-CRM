@@ -45,7 +45,34 @@ export function LedgerSummaryReport({
       {sourceTypeCounts.length === 0 ? (
         <p className="px-5 py-4 text-sm text-[var(--muted)]">No ledger entries found.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="space-y-3 p-4 md:hidden">
+            {sourceTypeCounts.map((row) => (
+              <article key={row.sourceType} className="rounded-2xl border border-[var(--border)] p-4">
+                <p className="text-sm font-semibold text-slate-900">{row.sourceType}</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Count</p>
+                    <p className="mt-1 text-sm text-slate-900">{row.count}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Debit</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatCurrencyInr(row.totalDebit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Credit</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatCurrencyInr(row.totalCredit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Net</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatCurrencyInr(row.netAmount)}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="crm-scroll-shell hidden md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
@@ -68,7 +95,8 @@ export function LedgerSummaryReport({
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </section>
   );

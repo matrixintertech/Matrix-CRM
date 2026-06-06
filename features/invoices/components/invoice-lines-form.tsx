@@ -152,12 +152,12 @@ export function InvoiceLinesForm({ itemOptions, initialLines }: InvoiceLinesForm
 
   return (
     <div className="space-y-3 rounded-md border border-[var(--border)] bg-white p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold">Invoice lines</h3>
         <button
           type="button"
           onClick={addLine}
-          className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
           disabled={itemOptions.length === 0}
         >
           Add line
@@ -228,7 +228,7 @@ export function InvoiceLinesForm({ itemOptions, initialLines }: InvoiceLinesForm
                 />
               </label>
               <div className="flex items-end md:col-span-1">
-                <button type="button" onClick={() => removeLine(index)} className="h-9 w-full rounded-md border border-red-200 px-2 text-xs text-red-700">
+                <button type="button" onClick={() => removeLine(index)} className="h-10 w-full rounded-xl border border-red-200 px-2 text-xs font-medium text-red-700">
                   Remove
                 </button>
               </div>

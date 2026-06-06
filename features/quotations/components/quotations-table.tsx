@@ -74,7 +74,58 @@ export function QuotationsTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+      <div className="space-y-3 md:hidden">
+        {quotations.map((quotation) => (
+          <article key={quotation.id} className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-900">{quotation.quotationNumber}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">Valid until: {formatDateTime(quotation.validUntil)}</p>
+              </div>
+              <StatusBadge value={quotation.status} />
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Subtotal</p>
+                <p className="mt-1 text-sm text-slate-900">INR {quotation.subtotal.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Tax Total</p>
+                <p className="mt-1 text-sm text-slate-900">INR {quotation.taxTotal.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Grand Total</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">INR {quotation.grandTotal.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Lines</p>
+                <p className="mt-1 text-sm text-slate-900">{quotation.items.length}</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              {canUpdateStatus ? <QuotationStatusActions quotationId={quotation.id} currentStatus={quotation.status} redirectTo={redirectTo} /> : null}
+              {canSubmit ? (
+                <form action={submitQuotationAction.bind(null, quotation.id)}>
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
+                  <button type="submit" className="min-h-11 w-full rounded-xl border border-indigo-200 px-3 text-sm font-medium text-indigo-700">
+                    Submit
+                  </button>
+                </form>
+              ) : null}
+              {canDelete ? (
+                <form action={deleteQuotationAction.bind(null, quotation.id)}>
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
+                  <button type="submit" className="min-h-11 w-full rounded-xl border border-red-200 px-3 text-sm font-medium text-red-700">
+                    Delete
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>
@@ -137,7 +188,7 @@ export function QuotationsTable({
           <summary className="cursor-pointer text-sm font-medium text-[var(--primary)]">
             View lines for {quotation.quotationNumber}
           </summary>
-          <div className="mt-3 overflow-x-auto rounded-md border border-[var(--border)]">
+          <div className="mt-3 crm-scroll-shell rounded-md border border-[var(--border)]">
             <table className="min-w-full text-left text-xs">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-[var(--muted)]">
                 <tr>

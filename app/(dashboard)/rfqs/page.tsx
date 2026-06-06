@@ -77,7 +77,7 @@ export default async function RfqsPage({ searchParams }: RfqsPageProps) {
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
       {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
-      <form className="grid gap-2 rounded-md border border-[var(--border)] bg-white p-3 md:grid-cols-4" action="">
+      <form className="grid gap-3 rounded-2xl border border-[var(--border)] bg-white p-3 shadow-sm md:grid-cols-4" action="">
         <input
           type="search"
           name="q"
@@ -101,8 +101,8 @@ export default async function RfqsPage({ searchParams }: RfqsPageProps) {
             </option>
           ))}
         </select>
-        <div>
-          <button type="submit" className="h-9 rounded-md border border-slate-200 px-3 text-sm font-medium">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <button type="submit" className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-medium">
             Apply
           </button>
         </div>

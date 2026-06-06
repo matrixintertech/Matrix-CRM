@@ -2,7 +2,7 @@ import { env } from "@/lib/config/env";
 
 type PerfMeta = Record<string, string | number | boolean | null | undefined>;
 
-function isPerfLoggingEnabled() {
+export function isPerfLoggingEnabled() {
   try {
     return env().PERF_LOGGING;
   } catch {

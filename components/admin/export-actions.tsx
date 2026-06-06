@@ -22,14 +22,14 @@ function buildHref(moduleKey: ExportModuleKey, format: "csv" | "excel" | "pdf", 
 
 export function ExportActions({ moduleKey, query }: ExportActionsProps) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <Link href={buildHref(moduleKey, "csv", query)} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <Link href={buildHref(moduleKey, "csv", query)} prefetch={false} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-center text-sm font-medium">
         Export CSV
       </Link>
-      <Link href={buildHref(moduleKey, "excel", query)} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+      <Link href={buildHref(moduleKey, "excel", query)} prefetch={false} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-center text-sm font-medium">
         Export Excel
       </Link>
-      <Link href={buildHref(moduleKey, "pdf", query)} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm">
+      <Link href={buildHref(moduleKey, "pdf", query)} prefetch={false} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-center text-sm font-medium">
         Export PDF
       </Link>
     </div>

@@ -15,8 +15,9 @@ import { listUsers } from "@/features/users/services/user.service";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
 import { clearRuntimeCache } from "@/lib/cache/runtime-cache";
-import { getOrSetServerCache, getServerCacheStatus, resetServerCacheState } from "@/lib/cache/server-cache";
+import { getOrSetServerCache, getServerCacheDiagnostics, getServerCacheStatus, resetServerCacheState } from "@/lib/cache/server-cache";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 
 type ThresholdConfig = {
@@ -234,6 +235,8 @@ async function main() {
   const session = await loadQaSession();
   const results: TimingPairResult[] = [];
   const roleSignature = buildRoleSignature(session.user.roleKeys);
+  const runtimeEnv = env();
+  const cacheDiagnostics = getServerCacheDiagnostics();
 
   clearRuntimeCache();
   resetServerCacheState();
@@ -367,6 +370,25 @@ async function main() {
   }
 
   const otpConfig = getOtpProviderConfigurationStatus();
+  const cacheFallbackWarning =
+    runtimeEnv.IS_PRODUCTION && cacheDiagnostics.effectiveDriver !== "upstash"
+      ? "Production is not using Upstash server cache. Expect cold-start and per-instance cache misses."
+      : null;
+
+  console.log("Cache Configuration");
+  console.log(
+    `[${cacheDiagnostics.effectiveDriver === "upstash" ? "PASS" : runtimeEnv.IS_PRODUCTION ? "WARN" : "INFO"}] cache.driver: configured=${cacheDiagnostics.configuredDriver}, effective=${cacheDiagnostics.effectiveDriver}, upstashConfigured=${cacheDiagnostics.upstashConfigured}, defaultTtlSeconds=${cacheDiagnostics.defaultTtlSeconds}`
+  );
+  console.log(
+    `[${runtimeEnv.RATE_LIMIT_DRIVER === "upstash" ? "PASS" : runtimeEnv.IS_PRODUCTION ? "WARN" : "INFO"}] rate_limit.driver: configured=${runtimeEnv.RATE_LIMIT_DRIVER}`
+  );
+  console.log(
+    `[${runtimeEnv.PERF_LOGGING ? "INFO" : "INFO"}] perf.flags: perfLogging=${runtimeEnv.PERF_LOGGING}, cacheDebug=${runtimeEnv.CACHE_DEBUG}`
+  );
+  if (cacheFallbackWarning) {
+    console.log(`[WARN] cache.production_fallback: ${cacheFallbackWarning}`);
+  }
+
   console.log("Performance QA Results");
   console.log("operation | cold-ish ms | warm ms | status | cache");
   for (const result of results) {
@@ -382,6 +404,16 @@ async function main() {
   console.log(
     `[${otpConfig.otpMode === "dev" || otpConfig.deliveryChannel !== "email" || (otpConfig.smtpConfigured && otpConfig.smtpFromConfigured) ? "PASS" : "WARN"}] otp.provider.config_check: cold-ish=0ms warm=0ms mode=${otpConfig.otpMode}, channel=${otpConfig.deliveryChannel}, smtpConfigured=${otpConfig.smtpConfigured}, fromConfigured=${otpConfig.smtpFromConfigured}`
   );
+
+  console.log("Manual Production Checklist");
+  console.log("- CACHE_DRIVER=upstash");
+  console.log("- CACHE_DEFAULT_TTL_SECONDS=60");
+  console.log("- CACHE_DEBUG=false");
+  console.log("- RATE_LIMIT_DRIVER=upstash");
+  console.log("- UPSTASH_REDIS_REST_URL set");
+  console.log("- UPSTASH_REDIS_REST_TOKEN set");
+  console.log("- Vercel region close to Neon");
+  console.log("- Neon region close to primary users");
 
   const failed = results.filter((result) => result.status === "fail");
   if (failed.length > 0) {

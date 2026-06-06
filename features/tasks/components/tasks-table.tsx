@@ -103,7 +103,82 @@ export function TasksTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+      <div className="space-y-3 md:hidden">
+        {tasks.map((task) => (
+          <article key={task.id} className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{task.taskNumber}</p>
+                <PrefetchLink href={`/tasks/${task.id}`} className="mt-1 block text-base font-semibold text-[var(--primary)]">
+                  {task.title}
+                </PrefetchLink>
+                <p className="mt-1 text-sm text-[var(--muted)]">{task.description?.trim() ? task.description : "-"}</p>
+              </div>
+              <StatusBadge value={task.status} />
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {showServiceRequest ? (
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Service Request</p>
+                  <PrefetchLink href={`/service-requests/${task.serviceRequestSummary.id}`} className="text-sm text-[var(--primary)] underline-offset-2 hover:underline">
+                    {task.serviceRequestSummary.serviceNumber}
+                  </PrefetchLink>
+                </div>
+              ) : null}
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Responsible</p>
+                <p className="text-sm text-slate-900">{userLabel(task.assignee)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Assigned By</p>
+                <p className="text-sm text-slate-900">{userLabel(task.assignedBy)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Requested At</p>
+                <p className="text-sm text-slate-900">{formatDateTime(task.requestedAt)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Due Date</p>
+                <p className="text-sm text-slate-900">{formatDateTime(task.dueDate)}</p>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Hierarchy</p>
+                <div className="space-y-1 text-sm text-slate-900">
+                  <p>Level {task.hierarchyDepth}{task.parentTaskSummary ? "" : " (top-level)"}</p>
+                  <p>{task.childTaskCount} child task(s)</p>
+                  {task.parentTaskSummary ? (
+                    <p>
+                      Parent:{" "}
+                      <PrefetchLink href={`/tasks/${task.parentTaskSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                        {task.parentTaskSummary.taskNumber}
+                      </PrefetchLink>
+                    </p>
+                  ) : null}
+                  {task.assignmentChain.length > 0 ? <p className="break-words text-[var(--muted)]">{task.assignmentChain.join(" | ")}</p> : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2">
+              <PrefetchLink href={`/tasks/${task.id}`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border)] px-3 text-sm font-medium">
+                View
+              </PrefetchLink>
+              {canUpdateStatus ? <TaskStatusActions taskId={task.id} currentStatus={task.status} redirectTo={redirectTo} /> : null}
+              {canDelete ? (
+                <form action={deleteTaskAction.bind(null, task.id)}>
+                  <input type="hidden" name="redirectTo" value={redirectTo} />
+                  <button type="submit" className="min-h-11 w-full rounded-xl border border-red-200 px-3 text-sm font-medium text-red-700">
+                    Delete
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
             <tr>

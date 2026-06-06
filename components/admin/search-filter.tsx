@@ -7,7 +7,10 @@ type SearchFilterProps = {
 
 export function SearchFilter({ query, status, statusOptions, placeholder = "Search" }: SearchFilterProps) {
   return (
-    <form className="flex flex-col gap-3 rounded-2xl border border-[#d8e3f4] bg-white p-3.5 shadow-[0_10px_24px_rgba(25,56,120,0.04)] sm:flex-row sm:items-center" action="">
+    <form
+      className="grid gap-3 rounded-2xl border border-[#d8e3f4] bg-white p-3.5 shadow-[0_10px_24px_rgba(25,56,120,0.04)] md:grid-cols-[minmax(0,1fr),auto,auto]"
+      action=""
+    >
       <label className="relative min-w-0 flex-1">
         <svg
           viewBox="0 0 24 24"
@@ -24,14 +27,14 @@ export function SearchFilter({ query, status, statusOptions, placeholder = "Sear
           name="q"
           defaultValue={query}
           placeholder={placeholder}
-          className="h-10 min-w-0 w-full rounded-xl border border-[#d2def1] bg-[#fcfdff] pl-10 pr-3 text-sm text-[#15305f] placeholder:text-[#8aa0c7] focus:border-[#3f64ff] focus:outline-none focus:ring-2 focus:ring-[#d9e5ff]"
+          className="h-11 min-w-0 w-full rounded-xl border border-[#d2def1] bg-[#fcfdff] pl-10 pr-3 text-sm text-[#15305f] placeholder:text-[#8aa0c7] focus:border-[#3f64ff] focus:outline-none focus:ring-2 focus:ring-[#d9e5ff]"
         />
       </label>
       {statusOptions ? (
         <select
           name="status"
           defaultValue={status ?? ""}
-          className="h-10 rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] focus:border-[#3f64ff] focus:outline-none focus:ring-2 focus:ring-[#d9e5ff]"
+          className="h-11 w-full rounded-xl border border-[#d2def1] bg-[#fcfdff] px-3 text-sm text-[#15305f] focus:border-[#3f64ff] focus:outline-none focus:ring-2 focus:ring-[#d9e5ff] md:w-auto"
         >
           <option value="">All statuses</option>
           {statusOptions.map((option) => (
@@ -43,7 +46,7 @@ export function SearchFilter({ query, status, statusOptions, placeholder = "Sear
       ) : null}
       <button
         type="submit"
-        className="inline-flex h-10 items-center justify-center rounded-xl bg-[#2f5ef8] px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff]"
+        className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-[#2f5ef8] px-4 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff] md:w-auto"
       >
         Apply
       </button>

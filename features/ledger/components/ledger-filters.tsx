@@ -31,7 +31,7 @@ export function LedgerFilters({ q, sourceType, dateFrom, dateTo }: LedgerFilters
       </select>
       <input type="date" name="dateFrom" defaultValue={dateFrom ?? ""} className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm" />
       <input type="date" name="dateTo" defaultValue={dateTo ?? ""} className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm" />
-      <button type="submit" className="h-10 rounded-xl bg-[var(--primary)] px-3 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)]">
+      <button type="submit" className="h-11 rounded-xl bg-[var(--primary)] px-3 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)]">
         Apply
       </button>
     </form>

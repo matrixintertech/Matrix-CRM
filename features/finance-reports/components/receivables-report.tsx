@@ -36,7 +36,59 @@ export function ReceivablesReport({ rows }: { rows: ReceivableRow[] }) {
       {rows.length === 0 ? (
         <p className="px-5 py-4 text-sm text-[var(--muted)]">No vendor invoices found.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="space-y-3 p-4 md:hidden">
+            {rows.map((row) => (
+              <article key={row.id} className="rounded-2xl border border-[var(--border)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/invoices/${row.id}`} className="font-semibold text-[var(--primary)] underline">
+                      {row.vendorInvoiceNumber}
+                    </Link>
+                    <p className="mt-1 text-sm text-slate-900">{row.invoiceNumber}</p>
+                    <p className="mt-1 text-sm text-[var(--muted)]">{row.vendor.name} ({row.vendor.code})</p>
+                  </div>
+                  <StatusBadge value={row.status} />
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Purchase Order</p>
+                    <div className="mt-1 text-sm text-slate-900">
+                      {row.purchaseOrder ? (
+                        <Link href={`/purchase-orders/${row.purchaseOrder.id}`} className="text-[var(--primary)] underline">
+                          {row.purchaseOrder.poNumber}
+                        </Link>
+                      ) : (
+                        "-"
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Invoice Date</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatDateTime(row.invoiceDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Received Date</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatDateTime(row.receivedDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Due Date</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatOptional(row.dueDate ? formatDateTime(row.dueDate) : null)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Grand Total</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatCurrencyInr(row.grandTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Balance Due</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatCurrencyInr(row.balanceDue)}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="crm-scroll-shell hidden md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
@@ -87,7 +139,8 @@ export function ReceivablesReport({ rows }: { rows: ReceivableRow[] }) {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </section>
   );

@@ -137,7 +137,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
       {successMessage ? <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{successMessage}</p> : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {scopeOptions
           .filter((option) => (option.value === "company" ? result.visibility.canSeeCompanyScope : true))
           .map((option) => {
@@ -178,7 +178,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
               <PrefetchLink
                 key={option.value}
                 href={`/tasks?${next.toString()}`}
-                className={`rounded-md border px-3 py-2 text-sm ${scope === option.value ? "border-[var(--primary)] text-[var(--primary)]" : "border-[var(--border)]"}`}
+                className={`rounded-xl border px-3 py-2.5 text-center text-sm ${scope === option.value ? "border-[var(--primary)] text-[var(--primary)]" : "border-[var(--border)]"}`}
               >
                 {option.label}
               </PrefetchLink>
@@ -186,7 +186,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           })}
       </div>
 
-      <form className="grid gap-3 rounded-md border border-[var(--border)] p-4 md:grid-cols-3" action="">
+      <form className="grid gap-3 rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm md:grid-cols-3" action="">
         <label className="space-y-1 text-sm md:col-span-3">
           <span className="font-medium">Search</span>
           <input
@@ -265,8 +265,8 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           <span className="font-medium">Due To</span>
           <input type="date" name="dueTo" defaultValue={dueTo ?? ""} className="h-10 w-full rounded-md border border-[var(--border)] px-3" />
         </label>
-        <div className="flex flex-wrap items-end gap-2 md:col-span-3">
-          <button type="submit" className="rounded-md border border-[var(--border)] px-4 py-2 text-sm font-medium">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end md:col-span-3">
+          <button type="submit" className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-medium">
             Apply Filters
           </button>
           {canExport ? (

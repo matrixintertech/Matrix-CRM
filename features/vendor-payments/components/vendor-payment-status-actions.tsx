@@ -25,16 +25,16 @@ export function VendorPaymentStatusActions({
   redirectTo,
 }: VendorPaymentStatusActionsProps) {
   return (
-    <form action={updateVendorPaymentStatusAction.bind(null, vendorPaymentId)} className="flex items-center gap-2">
+    <form action={updateVendorPaymentStatusAction.bind(null, vendorPaymentId)} className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <input type="hidden" name="redirectTo" value={redirectTo} />
-      <select name="status" defaultValue={currentStatus} className="h-8 rounded-md border border-[var(--border)] px-2 text-xs">
+      <select name="status" defaultValue={currentStatus} className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm">
         {statusOptions.map((status) => (
           <option key={status} value={status}>
             {status}
           </option>
         ))}
       </select>
-      <button type="submit" className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium">
+      <button type="submit" className="min-h-10 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium">
         Save
       </button>
     </form>

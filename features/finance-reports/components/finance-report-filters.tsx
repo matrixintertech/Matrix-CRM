@@ -75,11 +75,11 @@ export function FinanceReportFilters({
         </label>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="submit" className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)]">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <button type="submit" className="rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_18px_rgba(47,94,248,0.16)]">
           Apply
         </button>
-        <a href="/finance-reports" className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium">
+        <a href="/finance-reports" className="rounded-xl border border-[var(--border)] px-4 py-3 text-center text-sm font-medium">
           Reset
         </a>
       </div>

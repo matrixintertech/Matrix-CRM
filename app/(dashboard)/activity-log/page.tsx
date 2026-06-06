@@ -51,31 +51,31 @@ export default async function ActivityLogPage({ searchParams }: ActivityLogPageP
       <PageHeader title="Activity Log" description="Permission-gated audit trail for operational activity across CRM modules." />
 
       <div className="crm-panel">
-        <form action="/activity-log" method="get" className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <form action="/activity-log" method="get" className="mb-4 grid gap-3">
           <div className="grid gap-3 md:grid-cols-5">
             <label className="space-y-1 text-sm">
               <span className="font-medium">Search</span>
-              <input defaultValue={q ?? ""} name="q" className="h-9 rounded-md border border-[var(--border)] px-3" placeholder="Search logs" />
+              <input defaultValue={q ?? ""} name="q" className="h-10 rounded-xl border border-[var(--border)] px-3" placeholder="Search logs" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Action</span>
-              <input defaultValue={action ?? ""} name="action" className="h-9 rounded-md border border-[var(--border)] px-3" />
+              <input defaultValue={action ?? ""} name="action" className="h-10 rounded-xl border border-[var(--border)] px-3" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Module</span>
-              <input defaultValue={moduleFilter ?? ""} name="module" className="h-9 rounded-md border border-[var(--border)] px-3" />
+              <input defaultValue={moduleFilter ?? ""} name="module" className="h-10 rounded-xl border border-[var(--border)] px-3" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Date From</span>
-              <input type="date" defaultValue={dateFrom ?? ""} name="dateFrom" className="h-9 rounded-md border border-[var(--border)] px-3" />
+              <input type="date" defaultValue={dateFrom ?? ""} name="dateFrom" className="h-10 rounded-xl border border-[var(--border)] px-3" />
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">Date To</span>
-              <input type="date" defaultValue={dateTo ?? ""} name="dateTo" className="h-9 rounded-md border border-[var(--border)] px-3" />
+              <input type="date" defaultValue={dateTo ?? ""} name="dateTo" className="h-10 rounded-xl border border-[var(--border)] px-3" />
             </label>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button type="submit" className="rounded-xl bg-[var(--primary)] px-4 py-3 text-sm font-medium text-white">
               Apply
             </button>
             {canExport ? (
@@ -93,7 +93,42 @@ export default async function ActivityLogPage({ searchParams }: ActivityLogPageP
           </div>
         </form>
 
-        <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+        <div className="space-y-3 md:hidden">
+          {result.logs.map((log) => (
+            <article key={log.id} className="rounded-2xl border border-[var(--border)] p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900">{log.action}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{formatDateTime(log.createdAt)}</p>
+                </div>
+                <span className="rounded-full border border-[#dbe5f4] bg-[#f7faff] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#5f7398]">
+                  {log.module}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Company</p>
+                  <p className="mt-1 text-sm text-slate-900">{log.servicePartner.name}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Actor</p>
+                  <p className="mt-1 text-sm text-slate-900">{log.actor?.name || log.actor?.email || "-"}</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Entity</p>
+                  <p className="mt-1 break-all text-sm text-slate-900">{`${log.entityType}${log.entityId ? ` / ${log.entityId}` : ""}`}</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Message</p>
+                  <p className="mt-1 text-sm text-slate-900">{log.message || "-"}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+          {result.logs.length === 0 ? <p className="px-3 py-4 text-sm text-[var(--muted)]">No activity logs found.</p> : null}
+        </div>
+
+        <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>

@@ -17,12 +17,12 @@ type QuotationStatusActionsProps = {
 
 export function QuotationStatusActions({ quotationId, currentStatus, redirectTo }: QuotationStatusActionsProps) {
   return (
-    <form action={updateQuotationStatusAction.bind(null, quotationId)} className="flex items-center gap-2">
+    <form action={updateQuotationStatusAction.bind(null, quotationId)} className="flex flex-col gap-2 sm:flex-row sm:items-center">
       <input type="hidden" name="redirectTo" value={redirectTo} />
       <select
         name="status"
         defaultValue={currentStatus}
-        className="h-8 rounded-md border border-[var(--border)] px-2 text-xs"
+        className="h-10 rounded-xl border border-[var(--border)] px-3 text-sm"
       >
         {statusOptions.map((status) => (
           <option key={status} value={status}>
@@ -30,7 +30,7 @@ export function QuotationStatusActions({ quotationId, currentStatus, redirectTo 
           </option>
         ))}
       </select>
-      <button type="submit" className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium">
+      <button type="submit" className="min-h-10 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium">
         Save
       </button>
     </form>

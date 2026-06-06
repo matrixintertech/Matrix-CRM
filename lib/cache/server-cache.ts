@@ -1,5 +1,5 @@
 import { env } from "@/lib/config/env";
-import { logPerf, measurePerf } from "@/lib/observability/perf";
+import { logPerf } from "@/lib/observability/perf";
 
 type CachedEnvelope = {
   storedAt: number;
@@ -14,6 +14,13 @@ type PrefixIndex = Map<string, Set<string>>;
 export type ServerCacheStatus = {
   state: "hit" | "miss" | "stale";
   source: "local" | "shared" | "none";
+};
+
+export type ServerCacheDiagnostics = {
+  configuredDriver: "memory" | "upstash";
+  effectiveDriver: "memory" | "upstash";
+  upstashConfigured: boolean;
+  defaultTtlSeconds: number;
 };
 
 type GetOrSetOptions = {
@@ -42,14 +49,21 @@ if (!globalCacheState.__matrixServerCachePrefixIndex) {
   globalCacheState.__matrixServerCachePrefixIndex = localPrefixIndex;
 }
 
-function getSharedCacheDriver() {
+export function getServerCacheDiagnostics(): ServerCacheDiagnostics {
   const config = env();
+  const upstashConfigured = Boolean(config.UPSTASH_REDIS_REST_URL && config.UPSTASH_REDIS_REST_TOKEN);
+  const effectiveDriver = config.CACHE_DRIVER === "upstash" && upstashConfigured ? "upstash" : "memory";
 
-  if (config.CACHE_DRIVER === "upstash" && config.UPSTASH_REDIS_REST_URL && config.UPSTASH_REDIS_REST_TOKEN) {
-    return "upstash" as const;
-  }
+  return {
+    configuredDriver: config.CACHE_DRIVER,
+    effectiveDriver,
+    upstashConfigured,
+    defaultTtlSeconds: config.CACHE_DEFAULT_TTL_SECONDS,
+  };
+}
 
-  return "memory" as const;
+export function getServerCacheDriver() {
+  return getServerCacheDiagnostics().effectiveDriver;
 }
 
 function getFullCacheKey(namespace: string, key: string) {
@@ -65,7 +79,7 @@ function getPrefixTag(namespace: string, prefix: string) {
 }
 
 function getDefaultTtlSeconds() {
-  return env().CACHE_DEFAULT_TTL_SECONDS;
+  return getServerCacheDiagnostics().defaultTtlSeconds;
 }
 
 function safeJsonParse<T>(value: string | null): T | null {
@@ -223,48 +237,89 @@ function normalizePrefixes(namespace: string, prefixes?: string[]) {
 }
 
 export async function getServerCache<T>(namespace: string, key: string): Promise<T | null> {
-  return measurePerf("cache.get", async () => {
-    pruneLocalStore();
+  const startedAt = performance.now();
+  const diagnostics = getServerCacheDiagnostics();
+  let state: ServerCacheStatus["state"] = "miss";
+  let source: ServerCacheStatus["source"] = "none";
 
-    const fullKey = getFullCacheKey(namespace, key);
-    const localValue = readLocal<T>(fullKey);
-    if (localValue !== null) {
-      return localValue;
-    }
+  pruneLocalStore();
 
-    if (getSharedCacheDriver() !== "upstash") {
-      return null;
-    }
+  const fullKey = getFullCacheKey(namespace, key);
+  const localValue = readLocal<T>(fullKey);
+  if (localValue !== null) {
+    state = "hit";
+    source = "local";
+    logPerf("cache.get", performance.now() - startedAt, {
+      namespace,
+      driver: diagnostics.effectiveDriver,
+      configuredDriver: diagnostics.configuredDriver,
+      state,
+      source,
+    });
+    return localValue;
+  }
 
-    const sharedPayload = await readShared<CachedEnvelope>(fullKey);
-    if (!sharedPayload || sharedPayload.expiresAt <= Date.now()) {
-      return null;
-    }
+  if (diagnostics.effectiveDriver !== "upstash") {
+    logPerf("cache.get", performance.now() - startedAt, {
+      namespace,
+      driver: diagnostics.effectiveDriver,
+      configuredDriver: diagnostics.configuredDriver,
+      state,
+      source,
+    });
+    return null;
+  }
 
-    writeLocal(fullKey, sharedPayload, [namespace]);
-    return safeJsonParse<T>(sharedPayload.value);
-  }, { namespace, key });
+  source = "shared";
+  const sharedPayload = await readShared<CachedEnvelope>(fullKey);
+  if (!sharedPayload || sharedPayload.expiresAt <= Date.now()) {
+    logPerf("cache.get", performance.now() - startedAt, {
+      namespace,
+      driver: diagnostics.effectiveDriver,
+      configuredDriver: diagnostics.configuredDriver,
+      state,
+      source,
+    });
+    return null;
+  }
+
+  state = "hit";
+  writeLocal(fullKey, sharedPayload, [namespace]);
+  logPerf("cache.get", performance.now() - startedAt, {
+    namespace,
+    driver: diagnostics.effectiveDriver,
+    configuredDriver: diagnostics.configuredDriver,
+    state,
+    source,
+  });
+  return safeJsonParse<T>(sharedPayload.value);
 }
 
 export async function setServerCache<T>(namespace: string, key: string, value: T, options: SetOptions): Promise<T> {
-  return measurePerf("cache.set", async () => {
-    const ttlSeconds = Math.max(1, options.ttlSeconds);
-    const fullKey = getFullCacheKey(namespace, key);
-    const payload: CachedEnvelope = {
-      storedAt: Date.now(),
-      expiresAt: Date.now() + ttlSeconds * 1000,
-      value: safeJsonStringify(value),
-    };
-    const prefixes = normalizePrefixes(namespace, options.prefixes);
+  const startedAt = performance.now();
+  const ttlSeconds = Math.max(1, options.ttlSeconds);
+  const fullKey = getFullCacheKey(namespace, key);
+  const payload: CachedEnvelope = {
+    storedAt: Date.now(),
+    expiresAt: Date.now() + ttlSeconds * 1000,
+    value: safeJsonStringify(value),
+  };
+  const prefixes = normalizePrefixes(namespace, options.prefixes);
+  const diagnostics = getServerCacheDiagnostics();
 
-    writeLocal(fullKey, payload, prefixes);
+  writeLocal(fullKey, payload, prefixes);
 
-    if (getSharedCacheDriver() === "upstash") {
-      await writeShared(fullKey, payload, prefixes);
-    }
+  if (diagnostics.effectiveDriver === "upstash") {
+    await writeShared(fullKey, payload, prefixes);
+  }
 
-    return value;
-  }, { namespace, key });
+  logPerf("cache.set", performance.now() - startedAt, {
+    namespace,
+    driver: diagnostics.effectiveDriver,
+    configuredDriver: diagnostics.configuredDriver,
+    ttlSeconds,
+  });
+  return value;
 }
 
 export async function getOrSetServerCache<T>(
@@ -291,7 +346,7 @@ export async function deleteServerCache(namespace: string, key: string) {
   const fullKey = getFullCacheKey(namespace, key);
   localStore.delete(fullKey);
 
-  if (getSharedCacheDriver() !== "upstash") {
+  if (getServerCacheDriver() !== "upstash") {
     return;
   }
 
@@ -314,7 +369,7 @@ export async function deleteServerCacheByPrefix(prefix: string) {
     localPrefixIndex.delete(prefix);
   }
 
-  if (getSharedCacheDriver() !== "upstash") {
+  if (getServerCacheDriver() !== "upstash") {
     return;
   }
 
@@ -346,7 +401,7 @@ export function getServerCacheStatus(namespace: string, key: string): ServerCach
     return { state: "hit", source: "local" };
   }
 
-  return { state: "miss", source: getSharedCacheDriver() === "upstash" ? "shared" : "none" };
+  return { state: "miss", source: getServerCacheDriver() === "upstash" ? "shared" : "none" };
 }
 
 export function resetServerCacheState() {

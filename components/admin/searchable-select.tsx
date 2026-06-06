@@ -118,15 +118,15 @@ export function SearchableSelect({
             }
           }}
           disabled={disabled}
-          className="flex h-9 w-full items-center justify-between rounded-md border border-[var(--border)] bg-white px-3 text-left disabled:bg-slate-50 disabled:text-slate-500"
+          className="flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-white px-3 text-left disabled:bg-slate-50 disabled:text-slate-500"
         >
-          <span className={value ? "text-slate-900" : "text-slate-500"}>{triggerLabel}</span>
+          <span className={`${value ? "text-slate-900" : "text-slate-500"} min-w-0 flex-1 truncate`}>{triggerLabel}</span>
           <span className="text-xs text-slate-500" aria-hidden="true">
             {isOpen ? "Close" : "Search"}
           </span>
         </button>
         {isOpen ? (
-          <div className="absolute z-20 mt-1 w-full rounded-md border border-[var(--border)] bg-white p-2 shadow-lg">
+          <div className="absolute z-20 mt-1 w-full rounded-xl border border-[var(--border)] bg-white p-2 shadow-lg">
             <input
               ref={searchInputRef}
               type="text"
@@ -139,7 +139,7 @@ export function SearchableSelect({
                 }
               }}
               placeholder={searchPlaceholder}
-              className="mb-2 h-9 w-full rounded-md border border-[var(--border)] px-3"
+              className="mb-2 h-10 w-full rounded-xl border border-[var(--border)] px-3"
             />
             {!required && value ? (
               <button
@@ -154,7 +154,7 @@ export function SearchableSelect({
               id={listboxId}
               role="listbox"
               aria-label={label}
-              className="max-h-56 overflow-y-auto rounded-md border border-slate-100"
+              className="max-h-[min(16rem,50vh)] overflow-y-auto rounded-xl border border-slate-100"
             >
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((option) => {

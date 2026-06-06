@@ -17,11 +17,13 @@ html,
 body {
   margin: 0;
   padding: 0;
+  min-width: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 * {
@@ -50,11 +52,13 @@ a:focus-visible {
 }
 
 .crm-page {
+  min-width: 0;
   display: grid;
   gap: 1.5rem;
 }
 
 .crm-panel {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--card);
@@ -121,11 +125,36 @@ a:focus-visible {
 }
 
 .crm-form-panel {
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: var(--card);
   padding: 1.25rem;
   box-shadow: 0 10px 28px rgba(18, 49, 105, 0.05);
+}
+
+.crm-mobile-card-grid {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.crm-mobile-card {
+  min-width: 0;
+  border: 1px solid #dbe5f4;
+  border-radius: 1rem;
+  background: #ffffff;
+  padding: 1rem;
+  box-shadow: 0 10px 28px rgba(18, 49, 105, 0.05);
+}
+
+.crm-scroll-shell {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.crm-scroll-shell > * {
+  min-width: 100%;
 }
 
 .matrix-auth-page {

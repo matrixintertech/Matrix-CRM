@@ -144,79 +144,149 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
       {matrixRows.length === 0 ? (
         <p className="text-sm text-[var(--muted)]">No permissions match this search.</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-[var(--border)]">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
-              <tr>
-                <th className="px-3 py-2">Module</th>
-                {visibleActions.map((action) => (
-                  <th key={action} className="px-3 py-2 text-center">
-                    {getPermissionActionLabel(action)}
-                  </th>
-                ))}
-                <th className="px-3 py-2 text-center">Bulk</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matrixRows.map((row) => {
-                const modulePermissions = Array.from(row.actions.values());
-                return (
-                  <tr key={row.module} className="border-t border-[var(--border)]">
-                    <td className="px-3 py-3 align-top">
-                      <div>
-                        <p className="font-medium text-slate-900">{formatModuleLabel(row.module)}</p>
-                        <p className="text-xs text-[var(--muted)]">{modulePermissions.length} action permissions</p>
-                      </div>
-                    </td>
+        <div className="space-y-3">
+          <div className="space-y-3 md:hidden">
+            {matrixRows.map((row) => {
+              const modulePermissions = Array.from(row.actions.values());
+
+              return (
+                <section key={row.module} className="rounded-2xl border border-[var(--border)] bg-white p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-medium text-slate-900">{formatModuleLabel(row.module)}</p>
+                      <p className="text-xs text-[var(--muted)]">{modulePermissions.length} action permissions</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => selectAllForModule(modulePermissions)}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
+                        disabled={isProtectedRole}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => clearForModule(modulePermissions)}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
+                        disabled={isProtectedRole}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-2">
                     {visibleActions.map((action) => {
                       const permission = row.actions.get(action);
+                      const label = getPermissionActionLabel(action);
+
                       if (!permission) {
                         return (
-                          <td key={action} className="px-3 py-3 text-center text-slate-300">
-                            -
-                          </td>
+                          <div key={action} className="flex items-center justify-between rounded-xl border border-dashed border-slate-200 px-3 py-2 text-sm text-slate-400">
+                            <span>{label}</span>
+                            <span>Not available</span>
+                          </div>
                         );
                       }
 
                       return (
-                        <td key={permission.id} className="px-3 py-3 text-center">
-                          <label className="inline-flex items-center justify-center">
-                            <input
-                              type="checkbox"
-                              checked={selectedPermissionIds.has(permission.id)}
-                              onChange={() => togglePermission(permission.id)}
-                              disabled={isProtectedRole}
-                              aria-label={permission.key}
-                            />
-                          </label>
-                        </td>
+                        <label key={permission.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e5ebf6] px-3 py-3 text-sm">
+                          <div className="min-w-0">
+                            <p className="font-medium text-slate-900">{label}</p>
+                            <p className="truncate text-xs text-[var(--muted)]">{permission.key}</p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={selectedPermissionIds.has(permission.id)}
+                            onChange={() => togglePermission(permission.id)}
+                            disabled={isProtectedRole}
+                            aria-label={permission.key}
+                            className="h-4 w-4 shrink-0"
+                          />
+                        </label>
                       );
                     })}
-                    <td className="px-3 py-3 align-top">
-                      <div className="flex flex-col items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => selectAllForModule(modulePermissions)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-                          disabled={isProtectedRole}
-                        >
-                          All
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => clearForModule(modulePermissions)}
-                          className="rounded-md border border-slate-200 px-2 py-1 text-xs"
-                          disabled={isProtectedRole}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
+                <tr>
+                  <th className="px-3 py-2">Module</th>
+                  {visibleActions.map((action) => (
+                    <th key={action} className="px-3 py-2 text-center">
+                      {getPermissionActionLabel(action)}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-center">Bulk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matrixRows.map((row) => {
+                  const modulePermissions = Array.from(row.actions.values());
+                  return (
+                    <tr key={row.module} className="border-t border-[var(--border)]">
+                      <td className="px-3 py-3 align-top">
+                        <div>
+                          <p className="font-medium text-slate-900">{formatModuleLabel(row.module)}</p>
+                          <p className="text-xs text-[var(--muted)]">{modulePermissions.length} action permissions</p>
+                        </div>
+                      </td>
+                      {visibleActions.map((action) => {
+                        const permission = row.actions.get(action);
+                        if (!permission) {
+                          return (
+                            <td key={action} className="px-3 py-3 text-center text-slate-300">
+                              -
+                            </td>
+                          );
+                        }
+
+                        return (
+                          <td key={permission.id} className="px-3 py-3 text-center">
+                            <label className="inline-flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedPermissionIds.has(permission.id)}
+                                onChange={() => togglePermission(permission.id)}
+                                disabled={isProtectedRole}
+                                aria-label={permission.key}
+                              />
+                            </label>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex flex-col items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => selectAllForModule(modulePermissions)}
+                            className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            disabled={isProtectedRole}
+                          >
+                            All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => clearForModule(modulePermissions)}
+                            className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            disabled={isProtectedRole}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -227,7 +297,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
       <button
         type="submit"
         disabled={isProtectedRole}
-        className="rounded-md bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-xl bg-[var(--primary)] px-3 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         Save permissions
       </button>

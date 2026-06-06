@@ -101,25 +101,14 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
 
   return (
     <header className="sticky top-0 z-20 border-b border-[#e3eaf6] bg-white/90 backdrop-blur">
-      <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4 lg:px-6 xl:px-8">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <button
               type="button"
               aria-label="Toggle sidebar"
               onClick={onToggleSidebar}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#dde6f6] text-[#3f5378] transition hover:bg-[#f6f9ff] lg:hidden"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              aria-label="Collapse or expand sidebar"
-              onClick={onToggleSidebar}
-              className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#dde6f6] text-[#3f5378] transition hover:bg-[#f6f9ff] lg:flex"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#dde6f6] text-[#3f5378] transition hover:bg-[#f6f9ff] xl:hidden"
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 7h16M4 12h16M4 17h16" />
@@ -129,7 +118,7 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
             <div className="min-w-0 space-y-2">
               <Breadcrumb items={breadcrumbs} />
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h2 className="truncate text-lg font-semibold text-[#0f2347] sm:text-xl">
+                <h2 className="truncate text-base font-semibold text-[#0f2347] sm:text-lg lg:text-xl">
                   {breadcrumbs[breadcrumbs.length - 1]?.label ?? "Dashboard"}
                 </h2>
                 <span className="rounded-full border border-[#dbe5f4] bg-[#f7faff] px-2.5 py-1 text-xs font-medium text-[#59709c]">
@@ -139,7 +128,7 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:gap-3 md:w-auto md:justify-end">
             <Link
               href="/notifications"
               aria-label="Notifications"
@@ -153,7 +142,7 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
             <button
               type="button"
               onClick={handleLogout}
-              className="hidden h-10 items-center justify-center rounded-xl border border-[#dbe5f4] bg-[#f7faff] px-4 text-sm font-semibold text-[#214077] transition hover:bg-[#eef4ff] md:inline-flex"
+              className="hidden h-10 items-center justify-center rounded-xl border border-[#dbe5f4] bg-[#f7faff] px-4 text-sm font-semibold text-[#214077] transition hover:bg-[#eef4ff] lg:inline-flex"
             >
               Logout
             </button>
@@ -167,11 +156,11 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-[#0b2a67] text-sm font-semibold text-white">
                   {initials || "SA"}
                 </div>
-                <div className="hidden text-left xl:block">
+                <div className="hidden max-w-[12rem] text-left lg:block xl:max-w-none">
                   <p className="text-sm font-semibold text-[#102341]">{displayName}</p>
                   <p className="text-xs text-[#6d82a9]">{roleLabel}</p>
                 </div>
-                <svg viewBox="0 0 24 24" className="hidden h-4 w-4 text-[#7a8fb5] xl:block" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg viewBox="0 0 24 24" className="hidden h-4 w-4 text-[#7a8fb5] lg:block" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="m7 10 5 5 5-5" />
                 </svg>
               </button>
@@ -195,7 +184,7 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-[#b42318] hover:bg-[#fff1f1] md:hidden"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium text-[#b42318] hover:bg-[#fff1f1] lg:hidden"
                   >
                     Logout
                   </button>

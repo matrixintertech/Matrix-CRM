@@ -68,7 +68,68 @@ export function VendorPaymentsTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-[var(--border)]">
+    <div className="space-y-3">
+      <div className="space-y-3 md:hidden">
+        {vendorPayments.map((vendorPayment) => (
+          <article key={vendorPayment.id} className="rounded-2xl border border-[var(--border)] bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Link href={`/vendor-payments/${vendorPayment.id}`} className="font-semibold text-[var(--primary)] underline">
+                  {vendorPayment.paymentNumber}
+                </Link>
+                <p className="mt-1 text-xs text-[var(--muted)]">Updated {formatDateTime(vendorPayment.updatedAt)}</p>
+              </div>
+              <StatusBadge value={vendorPayment.status} />
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Vendor</p>
+                <p className="mt-1 text-sm text-slate-900">{vendorPayment.vendor.name} ({vendorPayment.vendor.code})</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Date</p>
+                <p className="mt-1 text-sm text-slate-900">{formatDateTime(vendorPayment.paidAt)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Amount</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{toMoney(vendorPayment.amount)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Requested By</p>
+                <p className="mt-1 text-sm text-slate-900">{userLabel(vendorPayment.requestedBy)}</p>
+              </div>
+            </div>
+            {showActions ? (
+              <div className="mt-4 flex flex-col gap-2">
+                {canStatusUpdate ? (
+                  <VendorPaymentStatusActions
+                    vendorPaymentId={vendorPayment.id}
+                    currentStatus={vendorPayment.status}
+                    redirectTo={redirectTo}
+                  />
+                ) : null}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {canUpdate ? (
+                    <Link href={`/vendor-payments/${vendorPayment.id}/edit`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-3 text-sm font-medium">
+                      Edit
+                    </Link>
+                  ) : null}
+                  {canDelete ? (
+                    <form action={deleteVendorPaymentAction.bind(null, vendorPayment.id)}>
+                      <input type="hidden" name="redirectTo" value={redirectTo} />
+                      <button type="submit" className="min-h-11 w-full rounded-xl border border-red-200 px-3 text-sm font-medium text-red-700">
+                        Void
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </article>
+        ))}
+      </div>
+
+      <div className="crm-scroll-shell hidden rounded-md border border-[var(--border)] md:block">
       <table className="min-w-full text-left text-sm">
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
           <tr>
@@ -141,6 +202,7 @@ export function VendorPaymentsTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

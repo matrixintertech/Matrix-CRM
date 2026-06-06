@@ -361,8 +361,6 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const sections = resolveSections(items);
   const usingFallback = items.some((item) => item.isDevelopmentFallback);
-  const visibilityClass = isOpen ? "flex" : "hidden";
-  const desktopVisibilityClass = isOpen ? "lg:flex" : "lg:hidden";
 
   const initialKeys = useMemo(() => {
     const keySet = collectInitialOpenKeys(items, pathname);
@@ -395,12 +393,28 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
 
   return (
     <aside
-      className={`${visibilityClass} ${desktopVisibilityClass} fixed inset-y-0 left-0 z-30 w-[296px] shrink-0 border-r border-[#102a63] bg-gradient-to-b from-[#08214f] via-[#061f4a] to-[#061a42] px-5 py-6 text-white lg:static lg:z-auto lg:flex-col`}
+      className={`fixed inset-y-0 left-0 z-40 flex w-[min(85vw,296px)] shrink-0 flex-col border-r border-[#102a63] bg-gradient-to-b from-[#08214f] via-[#061f4a] to-[#061a42] px-4 py-5 text-white shadow-[0_24px_60px_rgba(5,18,44,0.45)] transition-transform duration-200 ease-out ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      } xl:static xl:z-auto xl:w-[296px] xl:translate-x-0 xl:px-5 xl:py-6 xl:shadow-none`}
     >
-      <MatrixLogo />
-      <p className="mt-4 text-sm leading-6 text-[#a8bee8]">Operations, procurement, finance, and access control in one workspace.</p>
+      <div className="flex items-start justify-between gap-3 xl:block">
+        <div className="min-w-0">
+          <MatrixLogo />
+          <p className="mt-3 text-sm leading-6 text-[#a8bee8]">Operations, procurement, finance, and access control in one workspace.</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          onClick={onNavigate}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-[#d7e5ff] xl:hidden"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
 
-      <nav aria-label="Primary navigation" className="mt-8 flex-1 overflow-y-auto pr-1">
+      <nav aria-label="Primary navigation" className="mt-6 flex-1 overflow-y-auto pr-1 xl:mt-8">
         {sections.map((section) => (
           <div key={section.title || "main"} className="mb-6">
             <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#9db6e8]">{section.title}</p>

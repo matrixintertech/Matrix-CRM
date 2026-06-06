@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { buildCsv } from "@/lib/export/csv";
 import { buildExcelWorkbook } from "@/lib/export/excel";
 import { buildPdfDocument } from "@/lib/export/pdf";
+import { measureServerTiming, withServerTimingHeaders, type ServerTimingMetric } from "@/lib/observability/server-timing";
 
 const supportedModules = new Set<ExportModuleKey>([
   "activity-logs",
@@ -25,6 +26,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ module: string }> }
 ) {
+  const metrics: ServerTimingMetric[] = [];
   const session = await getCurrentSession();
   if (!session?.user?.id || !session.user.servicePartnerId) {
     return NextResponse.json({ ok: false, error: { message: "Authentication required." } }, { status: 401 });
@@ -43,33 +45,42 @@ export async function GET(
   }
 
   const format = request.nextUrl.searchParams.get("format") ?? "csv";
-  const rows = await getExportRows(session as never, moduleKey, request.nextUrl.searchParams);
+  const timedRows = await measureServerTiming("export-rows", () => getExportRows(session as never, moduleKey, request.nextUrl.searchParams), "export rows");
+  const rows = timedRows.result;
+  metrics.push(timedRows.metric);
   const filenameBase = `${moduleKey}-${new Date().toISOString().slice(0, 10)}`;
 
   if (format === "excel") {
-    const workbook = buildExcelWorkbook(rows, moduleKey);
+    const timedWorkbook = await measureServerTiming("export-excel", async () => buildExcelWorkbook(rows, moduleKey), "excel build");
+    const workbook = timedWorkbook.result;
+    metrics.push(timedWorkbook.metric);
     return new NextResponse(workbook, {
-      headers: {
+      headers: withServerTimingHeaders({
         "Content-Type": "application/vnd.ms-excel; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filenameBase}.xls"`,
-      },
+      }, metrics),
     });
   }
 
   if (format === "pdf") {
-    const pdf = buildPdfDocument(moduleKey, rows);
+    const timedPdf = await measureServerTiming("export-pdf", async () => buildPdfDocument(moduleKey, rows), "pdf build");
+    const pdf = timedPdf.result;
+    metrics.push(timedPdf.metric);
     return new NextResponse(pdf, {
-      headers: {
+      headers: withServerTimingHeaders({
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filenameBase}.pdf"`,
-      },
+      }, metrics),
     });
   }
 
-  return new NextResponse(buildCsv(rows), {
-    headers: {
+  const timedCsv = await measureServerTiming("export-csv", async () => buildCsv(rows), "csv build");
+  metrics.push(timedCsv.metric);
+
+  return new NextResponse(timedCsv.result, {
+    headers: withServerTimingHeaders({
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${filenameBase}.csv"`,
-    },
+    }, metrics),
   });
 }

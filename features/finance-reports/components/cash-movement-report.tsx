@@ -19,7 +19,30 @@ export function CashMovementReport({ rows }: { rows: CashMovementRow[] }) {
       {rows.length === 0 ? (
         <p className="px-5 py-4 text-sm text-[var(--muted)]">No cash movement found.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+          <div className="space-y-3 p-4 md:hidden">
+            {rows.map((row) => (
+              <article key={row.period} className="rounded-2xl border border-[var(--border)] p-4">
+                <p className="text-sm font-semibold text-slate-900">{row.label}</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Incoming</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatCurrencyInr(row.incoming)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Outgoing</p>
+                    <p className="mt-1 text-sm text-slate-900">{formatCurrencyInr(row.outgoing)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Net</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatCurrencyInr(row.net)}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="crm-scroll-shell hidden md:block">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-[var(--muted)]">
               <tr>
@@ -40,7 +63,8 @@ export function CashMovementReport({ rows }: { rows: CashMovementRow[] }) {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </section>
   );

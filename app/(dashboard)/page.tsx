@@ -266,7 +266,7 @@ export default async function DashboardPage() {
               {isSuperAdmin ? "Platform view" : "Tenant view"}
             </div>
             <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-[#111f3d]">{title}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#111f3d] sm:text-3xl">{title}</h1>
               <p className="max-w-3xl text-sm leading-6 text-[#667b9f]">{subtitle}</p>
             </div>
           </div>
@@ -315,7 +315,45 @@ export default async function DashboardPage() {
               <EmptyState title="No recent requests" description="New service requests will appear here once they are created for this workspace." />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="space-y-3 p-4 md:hidden">
+                {recentRequests.map((request) => (
+                  <article key={request.id} className="rounded-2xl border border-[#edf2fb] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7c8fb2]">{request.serviceNumber}</p>
+                        <p className="mt-1 text-sm font-semibold text-[#1d335d]">{request.title}</p>
+                      </div>
+                      <StatusBadge value={request.status} />
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      {isSuperAdmin ? (
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7c8fb2]">Company</p>
+                          <p className="mt-1 text-sm text-[#1d335d]">{request.servicePartner.name}</p>
+                        </div>
+                      ) : null}
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7c8fb2]">Client</p>
+                        <p className="mt-1 text-sm text-[#1d335d]">{request.client.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7c8fb2]">Branch</p>
+                        <p className="mt-1 text-sm text-[#1d335d]">{request.branch?.name ?? "-"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7c8fb2]">Requested At</p>
+                        <p className="mt-1 text-sm text-[#1d335d]">{formatDateTime(request.requestedAt ?? request.createdAt)}</p>
+                      </div>
+                    </div>
+                    <PrefetchLink href={`/service-requests/${request.id}`} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border border-[#dbe5f4] px-4 text-sm font-semibold text-[#2454e6]">
+                      Open
+                    </PrefetchLink>
+                  </article>
+                ))}
+              </div>
+
+              <div className="crm-scroll-shell hidden md:block">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-[#f7faff] text-left text-xs uppercase tracking-[0.16em] text-[#7c8fb2]">
@@ -350,7 +388,8 @@ export default async function DashboardPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </section>
 
