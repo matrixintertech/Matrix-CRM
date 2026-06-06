@@ -7,12 +7,30 @@ import type {
   UpdateTaskInput,
   UpdateTaskStatusInput,
 } from "@/features/tasks/validations";
+import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
 
 const COMPANY_ADMIN_LEVEL = 90;
+const TASK_ACCESS_CONTEXT_CACHE_TTL_MS = 30_000;
+
+function getDatabaseSchemaName() {
+  try {
+    const schema = new URL(env().DATABASE_URL).searchParams.get("schema")?.trim();
+    if (schema && /^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) {
+      return schema;
+    }
+  } catch {
+    // Ignore malformed URLs and fall back to the default schema.
+  }
+
+  return "public";
+}
+
+const TASK_TABLE_SQL = Prisma.raw(`"${getDatabaseSchemaName()}"."Task"`);
 
 type TaskScopeFilter = "all" | "my" | "delegated" | "downline" | "company";
 
@@ -566,45 +584,53 @@ async function getTaskRecordById(taskId: string, session: Session) {
 
 async function getTaskAccessContext(session: Session): Promise<TaskAccessContext> {
   return measurePerf("tasks.access_context", async () => {
-    const permissions = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
-    const roleLevels = await prisma.userRole.findMany({
-      where: {
-        userId: session.user.id,
-        role: {
-          deletedAt: null,
-        },
-      },
-      select: {
-        role: {
-          select: {
-            level: true,
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId ?? "none",
+      session.user.isSuperAdmin ? "super_admin" : session.user.roleKeys.slice().sort().join("|"),
+    ].join(":");
+
+    return getOrLoadRuntimeCache("tasks.access_context", cacheKey, TASK_ACCESS_CONTEXT_CACHE_TTL_MS, async () => {
+      const permissions = new Set(await getUserPermissions(session.user.id, session.user.roleKeys));
+      const roleLevels = await prisma.userRole.findMany({
+        where: {
+          userId: session.user.id,
+          role: {
+            deletedAt: null,
           },
         },
-      },
-    });
-    const maxRoleLevel = session.user.isSuperAdmin
-      ? Number.MAX_SAFE_INTEGER
-      : roleLevels.reduce((highest, entry) => Math.max(highest, entry.role.level), 0);
+        select: {
+          role: {
+            select: {
+              level: true,
+            },
+          },
+        },
+      });
+      const maxRoleLevel = session.user.isSuperAdmin
+        ? Number.MAX_SAFE_INTEGER
+        : roleLevels.reduce((highest, entry) => Math.max(highest, entry.role.level), 0);
 
-    return {
-      permissions,
-      userId: session.user.id,
-      servicePartnerId: session.user.servicePartnerId,
-      maxRoleLevel,
-      isSuperAdmin: session.user.isSuperAdmin,
-      isCompanyWide: session.user.isSuperAdmin || maxRoleLevel >= COMPANY_ADMIN_LEVEL,
-      canAssign: permissions.has("tasks.assign"),
-      canAssignAny: permissions.has("tasks.assign.any"),
-      canAssignDownline: permissions.has("tasks.assign.downline"),
-      canDelegate: permissions.has("tasks.delegate"),
-      canHistoryRead: permissions.has("tasks.history.read"),
-      canRemarkCreate: permissions.has("tasks.remark.create"),
-      canRead: permissions.has("tasks.read"),
-      canCreate: permissions.has("tasks.create"),
-      canUpdate: permissions.has("tasks.update"),
-      canDelete: permissions.has("tasks.delete"),
-      canStatusUpdate: permissions.has("tasks.status.update"),
-    };
+      return {
+        permissions,
+        userId: session.user.id,
+        servicePartnerId: session.user.servicePartnerId,
+        maxRoleLevel,
+        isSuperAdmin: session.user.isSuperAdmin,
+        isCompanyWide: session.user.isSuperAdmin || maxRoleLevel >= COMPANY_ADMIN_LEVEL,
+        canAssign: permissions.has("tasks.assign"),
+        canAssignAny: permissions.has("tasks.assign.any"),
+        canAssignDownline: permissions.has("tasks.assign.downline"),
+        canDelegate: permissions.has("tasks.delegate"),
+        canHistoryRead: permissions.has("tasks.history.read"),
+        canRemarkCreate: permissions.has("tasks.remark.create"),
+        canRead: permissions.has("tasks.read"),
+        canCreate: permissions.has("tasks.create"),
+        canUpdate: permissions.has("tasks.update"),
+        canDelete: permissions.has("tasks.delete"),
+        canStatusUpdate: permissions.has("tasks.status.update"),
+      };
+    });
   });
 }
 
@@ -623,35 +649,57 @@ async function getResponsibilityServiceRequestIds(userId: string, servicePartner
   return new Set(rows.map((row) => row.serviceRequestId));
 }
 
-async function getDescendantTaskIds(servicePartnerId: string, rootIds: Iterable<string>) {
-  const discovered = new Set<string>();
-  let frontier = Array.from(new Set(Array.from(rootIds).filter(Boolean)));
+async function getDirectAndDescendantTaskIds(userId: string, servicePartnerId: string) {
+  const rows = await prisma.$queryRaw<Array<{ id: string; scope: string }>>(Prisma.sql`
+    WITH RECURSIVE direct_tasks AS (
+      SELECT "id"
+      FROM ${TASK_TABLE_SQL}
+      WHERE "servicePartnerId" = ${servicePartnerId}
+        AND "deletedAt" IS NULL
+        AND (
+          "assigneeUserId" = ${userId}
+          OR "createdByUserId" = ${userId}
+          OR "assignedByUserId" = ${userId}
+        )
+    ),
+    descendant_tasks AS (
+      SELECT child."id"
+      FROM ${TASK_TABLE_SQL} AS child
+      INNER JOIN direct_tasks AS direct_task
+        ON child."parentTaskId" = direct_task."id"
+      WHERE child."servicePartnerId" = ${servicePartnerId}
+        AND child."deletedAt" IS NULL
+      UNION
+      SELECT child."id"
+      FROM ${TASK_TABLE_SQL} AS child
+      INNER JOIN descendant_tasks AS descendant_task
+        ON child."parentTaskId" = descendant_task."id"
+      WHERE child."servicePartnerId" = ${servicePartnerId}
+        AND child."deletedAt" IS NULL
+    )
+    SELECT "id", 'direct' AS "scope"
+    FROM direct_tasks
+    UNION ALL
+    SELECT "id", 'descendant' AS "scope"
+    FROM descendant_tasks
+  `);
 
-  while (frontier.length > 0) {
-    const children = await prisma.task.findMany({
-      where: {
-        servicePartnerId,
-        deletedAt: null,
-        parentTaskId: {
-          in: frontier,
-        },
-      },
-      select: {
-        id: true,
-      },
-    });
+  const directIds = new Set<string>();
+  const descendantIds = new Set<string>();
 
-    frontier = [];
-    for (const child of children) {
-      if (discovered.has(child.id)) {
-        continue;
-      }
-      discovered.add(child.id);
-      frontier.push(child.id);
+  for (const row of rows) {
+    if (row.scope === "direct") {
+      directIds.add(row.id);
+      continue;
     }
+
+    descendantIds.add(row.id);
   }
 
-  return discovered;
+  return {
+    directIds,
+    descendantIds,
+  };
 }
 
 async function getTaskVisibilitySnapshot(session: Session, context: TaskAccessContext): Promise<TaskVisibilitySnapshot | null> {
@@ -659,26 +707,13 @@ async function getTaskVisibilitySnapshot(session: Session, context: TaskAccessCo
     return null;
   }
 
-  const [responsibilityServiceRequestIds, directTasks] = await Promise.all([
+  const [responsibilityServiceRequestIds, taskVisibilityIds] = await Promise.all([
     getResponsibilityServiceRequestIds(context.userId, context.servicePartnerId),
-    prisma.task.findMany({
-      where: {
-        servicePartnerId: context.servicePartnerId,
-        deletedAt: null,
-        OR: [
-          { assigneeUserId: context.userId },
-          { createdByUserId: context.userId },
-          { assignedByUserId: context.userId },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    }),
+    getDirectAndDescendantTaskIds(context.userId, context.servicePartnerId),
   ]);
 
-  const directIds = new Set(directTasks.map((task) => task.id));
-  const descendantIds = await getDescendantTaskIds(context.servicePartnerId, directIds);
+  const directIds = taskVisibilityIds.directIds;
+  const descendantIds = taskVisibilityIds.descendantIds;
   const visibleIds = new Set<string>([...directIds, ...descendantIds]);
 
   if (responsibilityServiceRequestIds.size > 0) {
@@ -948,6 +983,22 @@ function buildAssignmentChain(nodes: TaskChainNode[]) {
   });
 }
 
+function groupTasksByServicePartner<T extends { servicePartnerId: string }>(tasks: T[]) {
+  const groupedTasks = new Map<string, T[]>();
+
+  for (const task of tasks) {
+    const servicePartnerTasks = groupedTasks.get(task.servicePartnerId);
+    if (servicePartnerTasks) {
+      servicePartnerTasks.push(task);
+      continue;
+    }
+
+    groupedTasks.set(task.servicePartnerId, [task]);
+  }
+
+  return groupedTasks;
+}
+
 async function decorateTasks(tasks: LoadedTask[]) {
   if (tasks.length === 0) {
     return [];
@@ -955,12 +1006,7 @@ async function decorateTasks(tasks: LoadedTask[]) {
 
   const ancestorMapsByServicePartner = new Map<string, Map<string, TaskChainNode>>();
 
-  for (const [servicePartnerId, servicePartnerTasks] of Object.entries(
-    tasks.reduce<Record<string, LoadedTask[]>>((groups, task) => {
-      groups[task.servicePartnerId] = [...(groups[task.servicePartnerId] ?? []), task];
-      return groups;
-    }, {})
-  )) {
+  for (const [servicePartnerId, servicePartnerTasks] of groupTasksByServicePartner(tasks)) {
     ancestorMapsByServicePartner.set(servicePartnerId, await loadAncestorGraph(servicePartnerId, servicePartnerTasks));
   }
 
@@ -1048,12 +1094,7 @@ async function decorateListedTasks(tasks: TaskListRecord[]) {
   const ancestorMapsByServicePartner = new Map<string, Map<string, TaskChainRecord>>();
 
   await measurePerf("tasks.list.decorate.ancestor_graph", async () => {
-    for (const [servicePartnerId, servicePartnerTasks] of Object.entries(
-      tasks.reduce<Record<string, TaskListRecord[]>>((groups, task) => {
-        groups[task.servicePartnerId] = [...(groups[task.servicePartnerId] ?? []), task];
-        return groups;
-      }, {})
-    )) {
+    for (const [servicePartnerId, servicePartnerTasks] of groupTasksByServicePartner(tasks)) {
       ancestorMapsByServicePartner.set(servicePartnerId, await loadAncestorRecordGraph(servicePartnerId, servicePartnerTasks));
     }
   });

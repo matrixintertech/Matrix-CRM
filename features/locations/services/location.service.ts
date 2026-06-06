@@ -2,7 +2,7 @@ import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
 
-const LOCATION_CACHE_TTL_MS = 60 * 60_000;
+const LOCATION_CACHE_TTL_MS = 12 * 60 * 60_000;
 
 function normalizeLocationValue(value?: string | null) {
   return value?.trim() || null;

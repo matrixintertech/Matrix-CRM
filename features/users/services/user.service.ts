@@ -62,16 +62,84 @@ export async function listUsers(session: Session, input: ListUsersInput) {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: "desc" },
-        include: {
-          servicePartner: { select: { name: true, code: true } },
-          roles: { include: { role: true } },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          status: true,
+          createdAt: true,
+          servicePartnerId: true,
         },
       }),
       prisma.user.count({ where }),
     ]);
 
+    const servicePartnerIds = Array.from(
+      new Set(users.map((user) => user.servicePartnerId).filter((servicePartnerId): servicePartnerId is string => Boolean(servicePartnerId)))
+    );
+    const userIds = users.map((user) => user.id);
+
+    const [servicePartners, userRoles] = await Promise.all([
+      servicePartnerIds.length > 0
+        ? prisma.servicePartner.findMany({
+            where: {
+              id: {
+                in: servicePartnerIds,
+              },
+            },
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          })
+        : Promise.resolve([]),
+      userIds.length > 0
+        ? prisma.userRole.findMany({
+            where: {
+              userId: {
+                in: userIds,
+              },
+              role: {
+                deletedAt: null,
+              },
+            },
+            select: {
+              userId: true,
+              role: {
+                select: {
+                  key: true,
+                  name: true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const servicePartnerMap = new Map(servicePartners.map((servicePartner) => [servicePartner.id, servicePartner]));
+    const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string } }>>>((map, entry) => {
+      const roles = map.get(entry.userId);
+      if (roles) {
+        roles.push({ role: entry.role });
+      } else {
+        map.set(entry.userId, [{ role: entry.role }]);
+      }
+      return map;
+    }, new Map());
+
     return {
-      users,
+      users: users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        status: user.status,
+        createdAt: user.createdAt,
+        servicePartner: servicePartnerMap.get(user.servicePartnerId) ?? { name: "-", code: "-" },
+        roles: userRolesMap.get(user.id) ?? [],
+      })),
       total,
       page: pagination.page,
       pageSize: pagination.pageSize,

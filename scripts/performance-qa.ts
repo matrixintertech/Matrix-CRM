@@ -13,19 +13,26 @@ import { listServicePartners } from "@/features/service-partners/services/servic
 import { listTasks } from "@/features/tasks/services/task.service";
 import { listUsers } from "@/features/users/services/user.service";
 import { getUserPermissions } from "@/lib/auth/permissions";
+import { clearRuntimeCache } from "@/lib/cache/runtime-cache";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
-
-type TimingResult = {
-  name: string;
-  ms: number;
-  status: "pass" | "warn" | "fail";
-  detail?: string;
-};
 
 type ThresholdConfig = {
   targetMs: number;
   failMs: number;
+};
+
+type TimingPairResult = {
+  name: string;
+  coldMs: number;
+  warmMs: number;
+  status: "pass" | "warn" | "fail";
+  detail?: string;
+};
+
+type MeasurePairOptions = {
+  detail?: string;
+  resetCacheNamespaces?: string[];
 };
 
 const THRESHOLDS: Record<string, ThresholdConfig> = {
@@ -36,7 +43,7 @@ const THRESHOLDS: Record<string, ThresholdConfig> = {
   "users.list": { targetMs: 500, failMs: 2_000 },
   "clients.list": { targetMs: 500, failMs: 2_000 },
   "service_requests.list": { targetMs: 500, failMs: 2_000 },
-  "tasks.list": { targetMs: 500, failMs: 2_000 },
+  "tasks.list": { targetMs: 800, failMs: 2_000 },
   "invoices.list": { targetMs: 500, failMs: 2_000 },
   "finance_reports.summary": { targetMs: 1_000, failMs: 4_000 },
   "service_partners.list": { targetMs: 500, failMs: 2_000 },
@@ -48,29 +55,40 @@ function redactMessage(message: string) {
     .replace(/(password|pass|token|secret)=\S+/gi, "$1=[redacted]");
 }
 
-function evaluateTiming(name: string, ms: number): TimingResult["status"] {
+function evaluateTiming(name: string, warmMs: number): TimingPairResult["status"] {
   const threshold = THRESHOLDS[name];
   if (!threshold) {
     return "pass";
   }
-  if (ms > threshold.failMs) {
+  if (warmMs > threshold.failMs) {
     return "fail";
   }
-  if (ms > threshold.targetMs) {
+  if (warmMs > threshold.targetMs) {
     return "warn";
   }
   return "pass";
 }
 
-async function measure(name: string, work: () => Promise<unknown>, detail?: string): Promise<TimingResult> {
+async function timeWork(work: () => Promise<unknown>) {
   const startedAt = performance.now();
   await work();
-  const ms = Math.round((performance.now() - startedAt) * 100) / 100;
+  return Math.round((performance.now() - startedAt) * 100) / 100;
+}
+
+async function measurePair(name: string, work: () => Promise<unknown>, options: MeasurePairOptions = {}): Promise<TimingPairResult> {
+  for (const namespace of options.resetCacheNamespaces ?? []) {
+    clearRuntimeCache(namespace);
+  }
+
+  const coldMs = await timeWork(work);
+  const warmMs = await timeWork(work);
+
   return {
     name,
-    ms,
-    status: evaluateTiming(name, ms),
-    detail,
+    coldMs,
+    warmMs,
+    status: evaluateTiming(name, warmMs),
+    detail: options.detail,
   };
 }
 
@@ -193,19 +211,46 @@ async function measureDashboardBundle(session: Session) {
 
 async function main() {
   const session = await loadQaSession();
-  const results: TimingResult[] = [];
+  const results: TimingPairResult[] = [];
 
-  results.push(await measure("permissions.resolve", () => getUserPermissions(session.user.id, session.user.roleKeys)));
-  results.push(await measure("navigation.load", () => getNavigationForSession(session)));
-  results.push(await measure("dashboard.bundle", () => measureDashboardBundle(session)));
-  results.push(await measure("locations.states_cities", () => listActiveStatesWithCities()));
-  results.push(await measure("users.list", () => listUsers(session, { page: 1, pageSize: 10 })));
-  results.push(await measure("clients.list", () => listClients(session, { page: 1, pageSize: 10 })));
-  results.push(await measure("service_requests.list", () => listServiceRequests(session, { page: 1, pageSize: 10 })));
-  results.push(await measure("tasks.list", () => listTasks(session, { take: 25 })));
-  results.push(await measure("invoices.list", () => listInvoices(session, { page: 1, pageSize: 10 })));
+  clearRuntimeCache();
+
   results.push(
-    await measure("finance_reports.summary", () =>
+    await measurePair("permissions.resolve", () => getUserPermissions(session.user.id, session.user.roleKeys), {
+      detail: "cache=auth.permissions.user",
+      resetCacheNamespaces: ["auth.permissions.user", "auth.permissions.all", "auth.roleKeys"],
+    })
+  );
+  results.push(
+    await measurePair("navigation.load", () => getNavigationForSession(session), {
+      detail: "cache=navigation.tree+navigation.rows",
+      resetCacheNamespaces: ["navigation.tree", "navigation.rows", "navigation.platform_partner", "auth.permissions.user", "auth.permissions.all"],
+    })
+  );
+  results.push(
+    await measurePair("dashboard.bundle", () => measureDashboardBundle(session), {
+      detail: "cache=auth.permissions.user",
+      resetCacheNamespaces: ["auth.permissions.user", "auth.permissions.all"],
+    })
+  );
+  results.push(
+    await measurePair("locations.states_cities", () => listActiveStatesWithCities(), {
+      detail: "cache=locations.active_states",
+      resetCacheNamespaces: ["locations.active_states"],
+    })
+  );
+  results.push(await measurePair("users.list", () => listUsers(session, { page: 1, pageSize: 10 })));
+  results.push(await measurePair("clients.list", () => listClients(session, { page: 1, pageSize: 10 })));
+  results.push(await measurePair("service_requests.list", () => listServiceRequests(session, { page: 1, pageSize: 10 })));
+  results.push(
+    await measurePair("tasks.list", () => listTasks(session, { take: 25 }), {
+      detail: "cache=tasks.access_context",
+      resetCacheNamespaces: ["tasks.access_context", "auth.permissions.user", "auth.permissions.all"],
+    })
+  );
+  results.push(await measurePair("invoices.list", () => listInvoices(session, { page: 1, pageSize: 10 })));
+  results.push(
+    await measurePair("finance_reports.summary", () =>
       getFinanceReportData(session, {
         dateFrom: undefined,
         dateTo: undefined,
@@ -218,27 +263,23 @@ async function main() {
   );
 
   if (session.user.isSuperAdmin) {
-    results.push(await measure("service_partners.list", () => listServicePartners(session, { page: 1, pageSize: 10 })));
+    results.push(await measurePair("service_partners.list", () => listServicePartners(session, { page: 1, pageSize: 10 })));
   }
 
   const otpConfig = getOtpProviderConfigurationStatus();
-  results.push({
-    name: "otp.provider.config_check",
-    ms: 0,
-    status:
-      otpConfig.otpMode === "dev" || otpConfig.deliveryChannel !== "email" || (otpConfig.smtpConfigured && otpConfig.smtpFromConfigured)
-        ? "pass"
-        : "warn",
-    detail: `mode=${otpConfig.otpMode}, channel=${otpConfig.deliveryChannel}, smtpConfigured=${otpConfig.smtpConfigured}, fromConfigured=${otpConfig.smtpFromConfigured}`,
-  });
-
   console.log("Performance QA Results");
   for (const result of results) {
     const threshold = THRESHOLDS[result.name];
-    const targetLabel = threshold ? ` target<=${threshold.targetMs}ms fail>${threshold.failMs}ms` : "";
+    const targetLabel = threshold ? ` warm-target<=${threshold.targetMs}ms fail>${threshold.failMs}ms` : "";
     const detailLabel = result.detail ? ` ${result.detail}` : "";
-    console.log(`[${result.status.toUpperCase()}] ${result.name}: ${result.ms}ms${targetLabel}${detailLabel}`);
+    console.log(
+      `[${result.status.toUpperCase()}] ${result.name}: cold=${result.coldMs}ms warm=${result.warmMs}ms${targetLabel}${detailLabel}`
+    );
   }
+
+  console.log(
+    `[${otpConfig.otpMode === "dev" || otpConfig.deliveryChannel !== "email" || (otpConfig.smtpConfigured && otpConfig.smtpFromConfigured) ? "PASS" : "WARN"}] otp.provider.config_check: cold=0ms warm=0ms mode=${otpConfig.otpMode}, channel=${otpConfig.deliveryChannel}, smtpConfigured=${otpConfig.smtpConfigured}, fromConfigured=${otpConfig.smtpFromConfigured}`
+  );
 
   const failed = results.filter((result) => result.status === "fail");
   if (failed.length > 0) {

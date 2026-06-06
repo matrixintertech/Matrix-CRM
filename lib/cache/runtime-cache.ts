@@ -4,6 +4,11 @@ type CacheEntry<T> = {
   promise?: Promise<T>;
 };
 
+export type RuntimeCacheStatus = {
+  state: "hit" | "miss" | "pending" | "stale";
+  expiresAt: number | null;
+};
+
 const globalCache = globalThis as unknown as {
   __matrixRuntimeCache?: Map<string, CacheEntry<unknown>>;
 };
@@ -16,6 +21,38 @@ if (!globalCache.__matrixRuntimeCache) {
 
 function getCacheKey(namespace: string, key: string) {
   return `${namespace}:${key}`;
+}
+
+export function getRuntimeCacheStatus(namespace: string, key: string): RuntimeCacheStatus {
+  const cacheKey = getCacheKey(namespace, key);
+  const existing = store.get(cacheKey);
+  const now = Date.now();
+
+  if (!existing) {
+    return {
+      state: "miss",
+      expiresAt: null,
+    };
+  }
+
+  if (existing.promise) {
+    return {
+      state: "pending",
+      expiresAt: existing.expiresAt,
+    };
+  }
+
+  if (existing.value !== undefined && existing.expiresAt > now) {
+    return {
+      state: "hit",
+      expiresAt: existing.expiresAt,
+    };
+  }
+
+  return {
+    state: "stale",
+    expiresAt: existing.expiresAt,
+  };
 }
 
 export function clearRuntimeCache(namespace?: string) {

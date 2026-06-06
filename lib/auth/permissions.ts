@@ -137,5 +137,6 @@ export function invalidateAuthorizationCaches() {
   clearRuntimeCache("auth.permissions.all");
   clearRuntimeCache("navigation.platform_partner");
   clearRuntimeCache("navigation.rows");
+  clearRuntimeCache("navigation.tree");
   clearRuntimeCache("tasks.access_context");
 }

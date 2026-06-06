@@ -63,14 +63,15 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
         skip: pagination.skip,
         take: pagination.take,
         orderBy: [{ createdAt: "desc" }],
-        include: {
-          servicePartner: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
+        select: {
+          id: true,
+          serviceNumber: true,
+          title: true,
+          serviceType: true,
+          status: true,
+          requestedAt: true,
+          targetDate: true,
+          createdAt: true,
           client: {
             select: {
               id: true,

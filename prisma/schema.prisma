@@ -497,6 +497,7 @@ model NavigationItem {
   @@index([servicePartnerId])
   @@index([parentId])
   @@index([isActive, sortOrder])
+  @@index([servicePartnerId, isActive, sortOrder])
 }
 
 model NavigationItemPermission {
@@ -537,6 +538,7 @@ model State {
   cities City[]
 
   @@index([country, isActive])
+  @@index([isActive, name])
 }
 
 model City {
@@ -551,6 +553,7 @@ model City {
 
   @@unique([stateId, name])
   @@index([stateId, isActive])
+  @@index([stateId, isActive, name])
 }
 
 model Client {
@@ -782,6 +785,7 @@ model ServiceRequest {
   @@index([createdAt])
   @@index([servicePartnerId, deletedAt, status])
   @@index([servicePartnerId, clientId, deletedAt])
+  @@index([servicePartnerId, branchId, deletedAt])
   @@index([servicePartnerId, requestedAt])
 }
 
@@ -945,6 +949,10 @@ model Task {
   @@index([assigneeUserId, deletedAt, status])
   @@index([parentTaskId, deletedAt])
   @@index([serviceRequestId, deletedAt])
+  @@index([servicePartnerId, parentTaskId, deletedAt])
+  @@index([servicePartnerId, assigneeUserId, deletedAt])
+  @@index([servicePartnerId, createdByUserId, deletedAt])
+  @@index([servicePartnerId, assignedByUserId, deletedAt])
   @@index([servicePartnerId, requestedAt])
 }
 
