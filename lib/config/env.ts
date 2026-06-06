@@ -56,6 +56,12 @@ const rawEnvSchema = z.object({
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASSWORD: z.string().min(1).optional(),
   SMTP_FROM: z.string().min(1).optional(),
+  EMAIL_HOST: z.string().min(1).optional(),
+  EMAIL_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  EMAIL_SECURE: booleanFromEnv.optional(),
+  EMAIL_USER: z.string().min(1).optional(),
+  EMAIL_PASS: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(1).optional(),
   RATE_LIMIT_DRIVER: rateLimitDriverSchema.optional(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
@@ -113,9 +119,20 @@ function isBuildPhase() {
 }
 
 function hasAnySmtpConfig(data: z.infer<typeof rawEnvSchema>): boolean {
-  return [data.SMTP_HOST, data.SMTP_PORT, data.SMTP_SECURE, data.SMTP_USER, data.SMTP_PASSWORD, data.SMTP_FROM].some(
-    (value) => value !== undefined
-  );
+  return [
+    data.SMTP_HOST,
+    data.SMTP_PORT,
+    data.SMTP_SECURE,
+    data.SMTP_USER,
+    data.SMTP_PASSWORD,
+    data.SMTP_FROM,
+    data.EMAIL_HOST,
+    data.EMAIL_PORT,
+    data.EMAIL_SECURE,
+    data.EMAIL_USER,
+    data.EMAIL_PASS,
+    data.EMAIL_FROM,
+  ].some((value) => value !== undefined);
 }
 
 export function resetEnvCache() {
@@ -151,18 +168,27 @@ export function env(): Env {
   const rateLimitDriver = data.RATE_LIMIT_DRIVER ?? "memory";
   const healthShowDetails = data.HEALTH_SHOW_DETAILS ?? false;
   const allowMemoryRateLimitInProduction = data.ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION ?? false;
+  const legacyEmailRequested = Boolean(
+    data.EMAIL_USER || data.EMAIL_PASS || data.EMAIL_HOST || data.EMAIL_PORT || data.EMAIL_SECURE !== undefined || data.EMAIL_FROM
+  );
+  const smtpHost = data.SMTP_HOST ?? data.EMAIL_HOST ?? (legacyEmailRequested ? "smtp.gmail.com" : undefined);
+  const smtpPort = data.SMTP_PORT ?? data.EMAIL_PORT ?? (legacyEmailRequested ? 465 : undefined);
+  const smtpSecure = data.SMTP_SECURE ?? data.EMAIL_SECURE ?? (legacyEmailRequested ? true : false);
+  const smtpUser = data.SMTP_USER ?? data.EMAIL_USER;
+  const smtpPassword = data.SMTP_PASSWORD ?? data.EMAIL_PASS;
+  const smtpFrom = data.SMTP_FROM ?? data.EMAIL_FROM ?? data.EMAIL_USER;
 
   if (isProduction && otpDevMode) {
     throw new Error("Invalid environment variables: OTP_DEV_MODE cannot be true in production");
   }
 
   const smtpConfigured =
-    Boolean(data.SMTP_HOST) &&
-    Boolean(data.SMTP_PORT) &&
-    data.SMTP_SECURE !== undefined &&
-    Boolean(data.SMTP_USER) &&
-    Boolean(data.SMTP_PASSWORD) &&
-    Boolean(data.SMTP_FROM);
+    Boolean(smtpHost) &&
+    Boolean(smtpPort) &&
+    smtpSecure !== undefined &&
+    Boolean(smtpUser) &&
+    Boolean(smtpPassword) &&
+    Boolean(smtpFrom);
 
   if (otpDeliveryChannel === "email" && hasAnySmtpConfig(data) && !smtpConfigured) {
     throw new Error(
@@ -207,12 +233,12 @@ export function env(): Env {
     OTP_SEND_RATE_LIMIT_MAX: data.OTP_SEND_RATE_LIMIT_MAX ?? 5,
     OTP_VERIFY_RATE_LIMIT_WINDOW_SECONDS: data.OTP_VERIFY_RATE_LIMIT_WINDOW_SECONDS ?? 900,
     OTP_VERIFY_RATE_LIMIT_MAX: data.OTP_VERIFY_RATE_LIMIT_MAX ?? 10,
-    SMTP_HOST: data.SMTP_HOST,
-    SMTP_PORT: data.SMTP_PORT,
-    SMTP_SECURE: data.SMTP_SECURE ?? false,
-    SMTP_USER: data.SMTP_USER,
-    SMTP_PASSWORD: data.SMTP_PASSWORD,
-    SMTP_FROM: data.SMTP_FROM,
+    SMTP_HOST: smtpHost,
+    SMTP_PORT: smtpPort,
+    SMTP_SECURE: smtpSecure,
+    SMTP_USER: smtpUser,
+    SMTP_PASSWORD: smtpPassword,
+    SMTP_FROM: smtpFrom,
     SMTP_CONFIGURED: smtpConfigured,
     RATE_LIMIT_DRIVER: rateLimitDriver,
     UPSTASH_REDIS_REST_URL: data.UPSTASH_REDIS_REST_URL,
