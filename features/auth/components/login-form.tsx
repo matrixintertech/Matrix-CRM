@@ -40,6 +40,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [maskedTarget, setMaskedTarget] = useState<string | null>(null);
+  const [devOtpPreview, setDevOtpPreview] = useState<string | null>(null);
   const [resendAfter, setResendAfter] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -93,6 +94,7 @@ export function LoginForm() {
       }
 
       setMaskedTarget(payload.data.maskedTarget);
+      setDevOtpPreview(payload.data.devOtpPreview ?? null);
       setCode("");
       setResendAfter(payload.data.resendAfterSeconds);
       setMessage(payload.message);
@@ -167,6 +169,7 @@ export function LoginForm() {
   function resetVerification() {
     setMaskedTarget(null);
     setCode("");
+    setDevOtpPreview(null);
     setResendAfter(0);
     setMessage(null);
     setError(null);
@@ -254,6 +257,16 @@ export function LoginForm() {
         <div className="matrix-login-feedback">
           {error ? <p className="matrix-login-error">{error}</p> : null}
           {!error && message ? <p className="matrix-login-muted">{message}</p> : null}
+          {devOtpPreview ? (
+            <div className="matrix-login-dev-otp">
+              <span className="matrix-login-dev-otp-icon" aria-hidden="true">
+                !
+              </span>
+              <p>
+                Dev OTP preview: <strong>{devOtpPreview}</strong>
+              </p>
+            </div>
+          ) : null}
         </div>
       </form>
     </div>

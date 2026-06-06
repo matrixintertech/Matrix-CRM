@@ -36,7 +36,10 @@ export async function POST(request: NextRequest) {
       ipAddress: getRequestIp(request),
       userAgent: request.headers.get("user-agent"),
     });
-  } catch {
+  } catch (error) {
+    console.error("OTP send request failed.", {
+      reason: error instanceof Error ? error.message.slice(0, 200) : "unknown",
+    });
     return NextResponse.json(failure("INTERNAL_ERROR", "Unable to process OTP request right now."), { status: 500 });
   }
 

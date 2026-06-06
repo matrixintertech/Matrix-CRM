@@ -5,13 +5,40 @@ import ws from "ws";
 
 type PrismaClientOptions = ConstructorParameters<typeof PrismaClient>[0];
 
+type NeonAdapterMode = "enabled" | "disabled" | "auto";
+
 function shouldUseNeonAdapter(connectionString: string | undefined): connectionString is string {
-  return typeof connectionString === "string" && connectionString.includes(".neon.tech") && isNeonAdapterEnabled();
+  if (typeof connectionString !== "string" || !connectionString.includes(".neon.tech")) {
+    return false;
+  }
+
+  const mode = getNeonAdapterMode();
+  if (mode === "enabled") {
+    return true;
+  }
+
+  if (mode === "disabled") {
+    return false;
+  }
+
+  return process.platform === "win32" && process.env.NODE_ENV !== "production";
 }
 
-function isNeonAdapterEnabled() {
+function getNeonAdapterMode(): NeonAdapterMode {
   const flag = process.env.PRISMA_USE_NEON_ADAPTER?.trim().toLowerCase();
-  return flag === "true" || flag === "1" || flag === "yes" || flag === "on";
+  if (!flag || flag === "auto") {
+    return "auto";
+  }
+
+  if (flag === "true" || flag === "1" || flag === "yes" || flag === "on") {
+    return "enabled";
+  }
+
+  if (flag === "false" || flag === "0" || flag === "no" || flag === "off") {
+    return "disabled";
+  }
+
+  return "auto";
 }
 
 function getSchemaName(connectionString: string) {
