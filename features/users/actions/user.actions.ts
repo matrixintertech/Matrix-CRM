@@ -373,7 +373,7 @@ export async function assignUserRoleAction(id: string, formData: FormData) {
     update: {},
     create: { userId: id, roleId: role.id },
   });
-  invalidateAuthorizationCaches();
+  await invalidateAuthorizationCaches();
 
   await logActivity({
     action: "user.role_assign",
@@ -434,7 +434,7 @@ export async function removeUserRoleAction(id: string, formData: FormData) {
     }
 
     await prisma.userRole.deleteMany({ where: { userId: id, roleId: parsed.data.roleId } });
-    invalidateAuthorizationCaches();
+    await invalidateAuthorizationCaches();
 
     await logActivity({
       action: "user.role_remove",

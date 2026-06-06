@@ -21,6 +21,7 @@ const booleanFromEnv = z.preprocess((value) => {
 
 const otpDeliveryChannelSchema = z.enum(["email", "sms"]);
 const rateLimitDriverSchema = z.enum(["memory", "upstash"]);
+const cacheDriverSchema = z.enum(["memory", "upstash"]);
 
 const rawEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -63,6 +64,9 @@ const rawEnvSchema = z.object({
   EMAIL_PASS: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(1).optional(),
   RATE_LIMIT_DRIVER: rateLimitDriverSchema.optional(),
+  CACHE_DRIVER: cacheDriverSchema.optional(),
+  CACHE_DEFAULT_TTL_SECONDS: z.coerce.number().int().min(1).max(86400).optional(),
+  CACHE_DEBUG: booleanFromEnv.optional(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: booleanFromEnv.optional(),
@@ -104,6 +108,9 @@ const normalizedEnvSchema = z.object({
   SMTP_FROM: z.string().min(1).optional(),
   SMTP_CONFIGURED: z.boolean(),
   RATE_LIMIT_DRIVER: rateLimitDriverSchema,
+  CACHE_DRIVER: cacheDriverSchema,
+  CACHE_DEFAULT_TTL_SECONDS: z.number().int().min(1).max(86400),
+  CACHE_DEBUG: z.boolean(),
   UPSTASH_REDIS_REST_URL: z.string().url().optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
   ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: z.boolean(),
@@ -168,9 +175,11 @@ export function env(): Env {
   const otpDevMode = data.OTP_DEV_MODE ?? false;
   const otpDeliveryChannel = data.OTP_DELIVERY_CHANNEL ?? "email";
   const rateLimitDriver = data.RATE_LIMIT_DRIVER ?? "memory";
+  const cacheDriver = data.CACHE_DRIVER ?? (data.UPSTASH_REDIS_REST_URL && data.UPSTASH_REDIS_REST_TOKEN ? "upstash" : "memory");
   const healthShowDetails = data.HEALTH_SHOW_DETAILS ?? false;
   const allowMemoryRateLimitInProduction = data.ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION ?? false;
   const perfLogging = data.PERF_LOGGING ?? false;
+  const cacheDebug = data.CACHE_DEBUG ?? false;
   const legacyEmailRequested = Boolean(
     data.EMAIL_USER || data.EMAIL_PASS || data.EMAIL_HOST || data.EMAIL_PORT || data.EMAIL_SECURE !== undefined || data.EMAIL_FROM
   );
@@ -202,6 +211,12 @@ export function env(): Env {
   if (rateLimitDriver === "upstash" && (!data.UPSTASH_REDIS_REST_URL || !data.UPSTASH_REDIS_REST_TOKEN)) {
     throw new Error(
       "Invalid environment variables: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required when RATE_LIMIT_DRIVER=upstash"
+    );
+  }
+
+  if (cacheDriver === "upstash" && (!data.UPSTASH_REDIS_REST_URL || !data.UPSTASH_REDIS_REST_TOKEN)) {
+    throw new Error(
+      "Invalid environment variables: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required when CACHE_DRIVER=upstash"
     );
   }
 
@@ -244,6 +259,9 @@ export function env(): Env {
     SMTP_FROM: smtpFrom,
     SMTP_CONFIGURED: smtpConfigured,
     RATE_LIMIT_DRIVER: rateLimitDriver,
+    CACHE_DRIVER: cacheDriver,
+    CACHE_DEFAULT_TTL_SECONDS: data.CACHE_DEFAULT_TTL_SECONDS ?? 60,
+    CACHE_DEBUG: cacheDebug,
     UPSTASH_REDIS_REST_URL: data.UPSTASH_REDIS_REST_URL,
     UPSTASH_REDIS_REST_TOKEN: data.UPSTASH_REDIS_REST_TOKEN,
     ALLOW_MEMORY_RATE_LIMIT_IN_PRODUCTION: allowMemoryRateLimitInProduction,

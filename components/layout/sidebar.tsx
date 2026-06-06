@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import type { SidebarNavItem } from "@/features/navigation/services/navigation.service";
 
 type SidebarProps = {
@@ -304,12 +304,12 @@ function MenuItem({ item, pathname, level, openKeys, onToggle, onNavigate }: Men
             </span>
           </span>
         ) : (
-          <Link href={item.href} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3">
+          <PrefetchLink href={item.href} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3">
             <span className="opacity-95">
               <IconForKey keyName={item.key} level={level} />
             </span>
             <span className="truncate">{item.label}</span>
-          </Link>
+          </PrefetchLink>
         )}
 
         {hasChildren ? (

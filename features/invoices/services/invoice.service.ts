@@ -3,6 +3,9 @@ import type { Session } from "next-auth";
 
 import { invoiceUpsertSchema, type InvoiceLineInput, type InvoiceUpsertInput } from "@/features/invoices/validations";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
@@ -190,6 +193,19 @@ export function getInvoiceScopeWhere(session: Session): Prisma.InvoiceWhereInput
 export async function listInvoices(session: Session, input: ListInvoicesInput) {
   return measurePerf("invoices.list", async () => {
     const pagination = getPagination(input);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        vendorId: input.vendorId?.trim() || null,
+        purchaseOrderId: input.purchaseOrderId?.trim() || null,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+    ].join(":");
     const where: Prisma.InvoiceWhereInput = {
       ...getInvoiceScopeWhere(session),
       deletedAt: null,
@@ -219,30 +235,41 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
       ];
     }
 
-    const [invoices, total] = await Promise.all([
-      prisma.invoice.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.take,
-        orderBy: [{ createdAt: "desc" }],
-        include: {
-          servicePartner: { select: { id: true, code: true, name: true } },
-          vendor: { select: { id: true, code: true, name: true } },
-          purchaseOrder: { select: { id: true, poNumber: true, status: true } },
-          serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
-          _count: { select: { items: true } },
-        },
-      }),
-      prisma.invoice.count({ where }),
-    ]);
+    const loadInvoices = async () => {
+      const [invoices, total] = await Promise.all([
+        prisma.invoice.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.take,
+          orderBy: [{ createdAt: "desc" }],
+          include: {
+            servicePartner: { select: { id: true, code: true, name: true } },
+            vendor: { select: { id: true, code: true, name: true } },
+            purchaseOrder: { select: { id: true, poNumber: true, status: true } },
+            serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
+            _count: { select: { items: true } },
+          },
+        }),
+        prisma.invoice.count({ where }),
+      ]);
 
-    return {
-      invoices,
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: getTotalPages(total, pagination.pageSize),
+      return {
+        invoices,
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: getTotalPages(total, pagination.pageSize),
+      };
     };
+
+    if (pagination.page === 1) {
+      return getOrSetServerCache("invoices.list", cacheKey, loadInvoices, {
+        ttlSeconds: 20,
+        prefixes: [cachePrefixes.invoices, `${cachePrefixes.invoices}:tenant:${session.user.servicePartnerId}`],
+      });
+    }
+
+    return loadInvoices();
   });
 }
 
@@ -325,22 +352,31 @@ export async function listInvoiceServicePartnersForForm(session: Session) {
 export async function listVendorsForInvoiceForm(session: Session, servicePartnerId?: string) {
   const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
 
-  return prisma.vendor.findMany({
-    where: {
-      deletedAt: null,
-      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
-      ...scopeByTenant(session, {}),
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      servicePartnerId: true,
-      status: true,
-      isVerified: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.invoice_vendors",
+    `${session.user.id}:${resolvedServicePartnerId ?? "all"}`,
+    () =>
+      prisma.vendor.findMany({
+        where: {
+          deletedAt: null,
+          ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+          ...scopeByTenant(session, {}),
+        },
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          servicePartnerId: true,
+          status: true,
+          isVerified: true,
+        },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export async function listPurchaseOrdersForInvoiceForm(session: Session, servicePartnerId?: string) {
@@ -656,7 +692,7 @@ export async function createInvoice(session: Session, input: InvoiceUpsertInput)
   const { computedLines, subtotal, taxTotal, grandTotal } = computeLines(normalizedInput.items);
   const approvalFields = getApprovalFields(normalizedInput.status, session);
 
-  return prisma.$transaction(async (tx) => {
+  const invoice = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.create({
       data: {
         servicePartnerId,
@@ -685,6 +721,9 @@ export async function createInvoice(session: Session, input: InvoiceUpsertInput)
 
     return invoice;
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return invoice;
 }
 
 export async function updateInvoice(session: Session, id: string, input: InvoiceUpsertInput) {
@@ -735,7 +774,7 @@ export async function updateInvoice(session: Session, id: string, input: Invoice
     approvedAt: existing.approvedAt,
   });
 
-  return prisma.$transaction(async (tx) => {
+  const invoice = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.update({
       where: { id },
       data: {
@@ -767,6 +806,9 @@ export async function updateInvoice(session: Session, id: string, input: Invoice
 
     return invoice;
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return invoice;
 }
 
 export async function updateInvoiceStatus(session: Session, id: string, status: InvoiceStatus) {
@@ -781,13 +823,16 @@ export async function updateInvoiceStatus(session: Session, id: string, status: 
     approvedAt: existing.approvedAt,
   });
 
-  return prisma.invoice.update({
+  const invoice = await prisma.invoice.update({
     where: { id },
     data: {
       status,
       ...approvalFields,
     },
   });
+
+  await invalidateTenantDataCaches(existing.servicePartnerId);
+  return invoice;
 }
 
 export async function softDeleteInvoice(session: Session, id: string) {
@@ -796,11 +841,14 @@ export async function softDeleteInvoice(session: Session, id: string) {
     throw new Error("Invoice not found.");
   }
 
-  return prisma.invoice.update({
+  const invoice = await prisma.invoice.update({
     where: { id },
     data: {
       status: InvoiceStatus.CANCELLED,
       deletedAt: new Date(),
     },
   });
+
+  await invalidateTenantDataCaches(existing.servicePartnerId);
+  return invoice;
 }

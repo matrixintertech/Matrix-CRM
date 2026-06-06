@@ -4,6 +4,8 @@ import type { Session } from "next-auth";
 import type { FinanceReportFilterInput } from "@/features/finance-reports/validations";
 import { hasPermission } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
 
@@ -197,150 +199,164 @@ function resolveCountedStatusFilter(status?: PaymentStatus) {
 export async function getFinanceReportData(session: Session, input: FinanceReportFilterInput) {
   return measurePerf("finance_reports.get_data", async () => {
     await assertCanReadFinanceReports(session);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        invoiceStatus: input.invoiceStatus ?? null,
+        paymentStatus: input.paymentStatus ?? null,
+        sourceType: input.sourceType ?? null,
+        dateFrom: input.dateFrom?.toISOString() ?? null,
+        dateTo: input.dateTo?.toISOString() ?? null,
+      }),
+    ].join(":");
 
-    const invoiceWhere = buildInvoiceWhere(session, input);
-    const paymentWhere = buildInvoicePaymentWhere(session, input);
-    const vendorPaymentWhere = buildVendorPaymentWhere(session, input);
-    const ledgerWhere = buildLedgerWhere(session, input);
+    return getOrSetServerCache("finance_reports.summary", cacheKey, async () => {
+      const invoiceWhere = buildInvoiceWhere(session, input);
+      const paymentWhere = buildInvoicePaymentWhere(session, input);
+      const vendorPaymentWhere = buildVendorPaymentWhere(session, input);
+      const ledgerWhere = buildLedgerWhere(session, input);
 
-    const countedInvoiceStatuses = resolveCountedStatusFilter(input.paymentStatus);
-    const countedVendorStatuses = resolveCountedStatusFilter(input.paymentStatus);
+      const countedInvoiceStatuses = resolveCountedStatusFilter(input.paymentStatus);
+      const countedVendorStatuses = resolveCountedStatusFilter(input.paymentStatus);
 
-    const [
-      invoices,
-      invoicePaymentsForCash,
-      vendorPaymentsForCash,
-      ledgerAggregate,
-      ledgerSourceCounts,
-      ledgerEntriesCount,
-    ] = await Promise.all([
-    prisma.invoice.findMany({
-      where: invoiceWhere,
-      orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        servicePartnerId: true,
-        vendorInvoiceNumber: true,
-        invoiceNumber: true,
-        status: true,
-        invoiceDate: true,
-        receivedDate: true,
-        dueDate: true,
-        grandTotal: true,
-        vendor: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
+      const [
+        invoices,
+        invoicePaymentsForCash,
+        vendorPaymentsForCash,
+        ledgerAggregate,
+        ledgerSourceCounts,
+        ledgerEntriesCount,
+      ] = await Promise.all([
+      prisma.invoice.findMany({
+        where: invoiceWhere,
+        orderBy: [{ invoiceDate: "desc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          servicePartnerId: true,
+          vendorInvoiceNumber: true,
+          invoiceNumber: true,
+          status: true,
+          invoiceDate: true,
+          receivedDate: true,
+          dueDate: true,
+          grandTotal: true,
+          vendor: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          purchaseOrder: {
+            select: {
+              id: true,
+              poNumber: true,
+            },
           },
         },
-        purchaseOrder: {
-          select: {
-            id: true,
-            poNumber: true,
-          },
+      }),
+      prisma.payment.findMany({
+        where: {
+          ...paymentWhere,
+          ...(countedInvoiceStatuses.length > 0 ? { status: { in: countedInvoiceStatuses } } : { id: "__no-match__" }),
         },
-      },
-    }),
-    prisma.payment.findMany({
-      where: {
-        ...paymentWhere,
-        ...(countedInvoiceStatuses.length > 0 ? { status: { in: countedInvoiceStatuses } } : { id: "__no-match__" }),
-      },
-      orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        invoiceId: true,
-        paymentNumber: true,
-        amount: true,
-        status: true,
-        paidAt: true,
-        invoice: {
-          select: {
-            id: true,
-            vendorInvoiceNumber: true,
-            invoiceNumber: true,
-            vendor: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
+        orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          invoiceId: true,
+          paymentNumber: true,
+          amount: true,
+          status: true,
+          paidAt: true,
+          invoice: {
+            select: {
+              id: true,
+              vendorInvoiceNumber: true,
+              invoiceNumber: true,
+              vendor: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                },
+              },
+              purchaseOrder: {
+                select: {
+                  id: true,
+                  poNumber: true,
+                },
               },
             },
-            purchaseOrder: {
-              select: {
-                id: true,
-                poNumber: true,
-              },
+          },
+        },
+      }),
+      prisma.vendorPayment.findMany({
+        where: {
+          ...vendorPaymentWhere,
+          ...(countedVendorStatuses.length > 0 ? { status: { in: countedVendorStatuses } } : { id: "__no-match__" }),
+        },
+        orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
+        select: {
+          id: true,
+          paymentNumber: true,
+          amount: true,
+          status: true,
+          paidAt: true,
+          vendor: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          purchaseOrder: {
+            select: {
+              id: true,
+              poNumber: true,
             },
           },
         },
-      },
-    }),
-    prisma.vendorPayment.findMany({
-      where: {
-        ...vendorPaymentWhere,
-        ...(countedVendorStatuses.length > 0 ? { status: { in: countedVendorStatuses } } : { id: "__no-match__" }),
-      },
-      orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
-      select: {
-        id: true,
-        paymentNumber: true,
-        amount: true,
-        status: true,
-        paidAt: true,
-        vendor: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
+      }),
+      prisma.ledgerEntry.aggregate({
+        where: ledgerWhere,
+        _sum: {
+          debitAmount: true,
+          creditAmount: true,
         },
-        purchaseOrder: {
-          select: {
-            id: true,
-            poNumber: true,
-          },
+      }),
+      prisma.ledgerEntry.groupBy({
+        by: ["sourceType"],
+        where: ledgerWhere,
+        _count: {
+          _all: true,
         },
-      },
-    }),
-    prisma.ledgerEntry.aggregate({
-      where: ledgerWhere,
-      _sum: {
-        debitAmount: true,
-        creditAmount: true,
-      },
-    }),
-    prisma.ledgerEntry.groupBy({
-      by: ["sourceType"],
-      where: ledgerWhere,
-      _count: {
-        _all: true,
-      },
-      _sum: {
-        debitAmount: true,
-        creditAmount: true,
-      },
-    }),
-    prisma.ledgerEntry.count({
-      where: ledgerWhere,
-    }),
-    ]);
+        _sum: {
+          debitAmount: true,
+          creditAmount: true,
+        },
+      }),
+      prisma.ledgerEntry.count({
+        where: ledgerWhere,
+      }),
+      ]);
 
-    const invoiceIds = invoices.map((invoice) => invoice.id);
-    const invoicePaidGroups =
-      invoiceIds.length > 0
-        ? await prisma.payment.groupBy({
-            by: ["invoiceId"],
-            where: {
-              invoiceId: { in: invoiceIds },
-              status: { in: countedPaymentStatuses },
-            },
-            _sum: {
-              amount: true,
-            },
-          })
-        : [];
+      const invoiceIds = invoices.map((invoice) => invoice.id);
+      const invoicePaidGroups =
+        invoiceIds.length > 0
+          ? await prisma.payment.groupBy({
+              by: ["invoiceId"],
+              where: {
+                invoiceId: { in: invoiceIds },
+                status: { in: countedPaymentStatuses },
+              },
+              _sum: {
+                amount: true,
+              },
+            })
+          : [];
 
     const paidAmountByInvoiceId = new Map(
       invoicePaidGroups
@@ -454,8 +470,8 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       })),
     };
 
-    return {
-      summary: {
+      return {
+        summary: {
         totalVendorInvoiceAmount,
         totalInvoicePaymentsMade,
         outstandingPayables,
@@ -467,6 +483,10 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       paymentsMade,
       cashMovement,
       ledgerSummary,
-    };
+      };
+    }, {
+      ttlSeconds: 30,
+      prefixes: [cachePrefixes.financeReports, `${cachePrefixes.financeReports}:tenant:${session.user.servicePartnerId}`],
+    });
   });
 }

@@ -3,6 +3,9 @@ import type { Session } from "next-auth";
 
 import type { ServiceRequestStatusInput, ServiceRequestUpsertInput } from "@/features/service-requests/validations";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
@@ -27,6 +30,19 @@ export function getServiceRequestScopeWhere(session: Session): Prisma.ServiceReq
 export async function listServiceRequests(session: Session, input: ListServiceRequestsInput) {
   return measurePerf("service_requests.list", async () => {
     const pagination = getPagination(input);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        clientId: input.clientId?.trim() || null,
+        branchId: input.branchId?.trim() || null,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+    ].join(":");
     const where: Prisma.ServiceRequestWhereInput = {
       ...getServiceRequestScopeWhere(session),
       deletedAt: null,
@@ -57,52 +73,63 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
       ];
     }
 
-    const [serviceRequests, total] = await Promise.all([
-      prisma.serviceRequest.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.take,
-        orderBy: [{ createdAt: "desc" }],
-        select: {
-          id: true,
-          serviceNumber: true,
-          title: true,
-          serviceType: true,
-          status: true,
-          requestedAt: true,
-          targetDate: true,
-          createdAt: true,
-          client: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
+    const loadServiceRequests = async () => {
+      const [serviceRequests, total] = await Promise.all([
+        prisma.serviceRequest.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.take,
+          orderBy: [{ createdAt: "desc" }],
+          select: {
+            id: true,
+            serviceNumber: true,
+            title: true,
+            serviceType: true,
+            status: true,
+            requestedAt: true,
+            targetDate: true,
+            createdAt: true,
+            client: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+            branch: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+            _count: {
+              select: {
+                statusHistory: true,
+              },
             },
           },
-          branch: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              statusHistory: true,
-            },
-          },
-        },
-      }),
-      prisma.serviceRequest.count({ where }),
-    ]);
+        }),
+        prisma.serviceRequest.count({ where }),
+      ]);
 
-    return {
-      serviceRequests,
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: getTotalPages(total, pagination.pageSize),
+      return {
+        serviceRequests,
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: getTotalPages(total, pagination.pageSize),
+      };
     };
+
+    if (pagination.page === 1) {
+      return getOrSetServerCache("service_requests.list", cacheKey, loadServiceRequests, {
+        ttlSeconds: 20,
+        prefixes: [cachePrefixes.serviceRequests, `${cachePrefixes.serviceRequests}:tenant:${session.user.servicePartnerId}`],
+      });
+    }
+
+    return loadServiceRequests();
   });
 }
 
@@ -193,20 +220,29 @@ export async function listServiceRequestServicePartnersForForm(session: Session)
 
 export async function listClientsForServiceRequestForm(session: Session, servicePartnerId?: string) {
   const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
-  return prisma.client.findMany({
-    where: {
-      deletedAt: null,
-      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
-      ...scopeByTenant(session, {}),
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      servicePartnerId: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.service_request_clients",
+    `${session.user.id}:${resolvedServicePartnerId ?? "all"}`,
+    () =>
+      prisma.client.findMany({
+        where: {
+          deletedAt: null,
+          ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+          ...scopeByTenant(session, {}),
+        },
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          servicePartnerId: true,
+        },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export async function listBranchesForServiceRequestForm(
@@ -216,22 +252,31 @@ export async function listBranchesForServiceRequestForm(
 ) {
   const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
 
-  return prisma.branch.findMany({
-    where: {
-      deletedAt: null,
-      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
-      ...(clientId ? { clientId } : {}),
-      ...scopeByTenant(session, {}),
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      clientId: true,
-      servicePartnerId: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.service_request_branches",
+    `${session.user.id}:${resolvedServicePartnerId ?? "all"}:${clientId ?? "all"}`,
+    () =>
+      prisma.branch.findMany({
+        where: {
+          deletedAt: null,
+          ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+          ...(clientId ? { clientId } : {}),
+          ...scopeByTenant(session, {}),
+        },
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          clientId: true,
+          servicePartnerId: true,
+        },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export function getServicePartnerIdForServiceRequestWrite(session: Session, inputServicePartnerId?: string) {
@@ -343,7 +388,7 @@ export async function createServiceRequest(session: Session, input: ServiceReque
     const serviceNumber = requestedNumber || (await generateServiceNumber(servicePartnerId));
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx) => {
         const created = await tx.serviceRequest.create({
           data: {
             servicePartnerId,
@@ -372,6 +417,8 @@ export async function createServiceRequest(session: Session, input: ServiceReque
 
         return created;
       });
+      await invalidateTenantDataCaches(servicePartnerId);
+      return created;
     } catch (error) {
       lastError = error;
       const isUniqueError =
@@ -405,7 +452,7 @@ export async function updateServiceRequest(session: Session, id: string, input: 
 
   await assertServiceRequestTenantConsistency(input.clientId, input.branchId, servicePartnerId);
 
-  return prisma.serviceRequest.update({
+  const updated = await prisma.serviceRequest.update({
     where: { id },
     data: {
       servicePartnerId,
@@ -418,6 +465,9 @@ export async function updateServiceRequest(session: Session, id: string, input: 
       targetDate: input.targetDate ?? null,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return updated;
 }
 
 export async function updateServiceRequestStatus(
@@ -430,7 +480,7 @@ export async function updateServiceRequestStatus(
     throw new Error("Service request not found.");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const nextCompletedAt =
       input.status === "COMPLETED" || input.status === "CLOSED"
         ? existing.completedAt ?? new Date()
@@ -458,13 +508,19 @@ export async function updateServiceRequestStatus(
 
     return updated;
   });
+
+  await invalidateTenantDataCaches(existing.servicePartnerId);
+  return updated;
 }
 
 export async function softDeleteServiceRequest(id: string) {
-  return prisma.serviceRequest.update({
+  const deleted = await prisma.serviceRequest.update({
     where: { id },
     data: {
       deletedAt: new Date(),
     },
   });
+
+  await invalidateTenantDataCaches(deleted.servicePartnerId);
+  return deleted;
 }

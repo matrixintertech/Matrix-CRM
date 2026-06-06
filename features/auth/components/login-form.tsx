@@ -78,7 +78,7 @@ export function LoginForm() {
 
     setIsSending(true);
     setError(null);
-    setMessage(null);
+    setMessage("Sending OTP...");
 
     try {
       const response = await fetch("/api/auth/otp/send", {
@@ -97,7 +97,7 @@ export function LoginForm() {
       setDevOtpPreview(payload.data.devOtpPreview ?? null);
       setCode("");
       setResendAfter(payload.data.resendAfterSeconds);
-      setMessage(payload.message);
+      setMessage(payload.message || "Email sent. Check your inbox.");
     } catch {
       setError("Unable to send OTP right now.");
     } finally {

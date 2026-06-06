@@ -1,9 +1,9 @@
 import { InvoiceStatus } from "@prisma/client";
-import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
 import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import { InvoicesTable } from "@/features/invoices/components/invoices-table";
 import { listInvoices, listVendorsForInvoiceForm } from "@/features/invoices/services/invoice.service";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -125,14 +125,14 @@ export default async function InvoicesPage({ searchParams }: InvoicesPageProps) 
             </p>
             <div className="flex items-center gap-2">
               {result.page > 1 ? (
-                <Link href={buildPageHref(result.page - 1)} className="rounded-md border border-slate-200 px-3 py-2">
+                <PrefetchLink href={buildPageHref(result.page - 1)} className="rounded-md border border-slate-200 px-3 py-2">
                   Previous
-                </Link>
+                </PrefetchLink>
               ) : null}
               {result.page < result.totalPages ? (
-                <Link href={buildPageHref(result.page + 1)} className="rounded-md border border-slate-200 px-3 py-2">
+                <PrefetchLink href={buildPageHref(result.page + 1)} className="rounded-md border border-slate-200 px-3 py-2">
                   Next
-                </Link>
+                </PrefetchLink>
               ) : null}
             </div>
           </div>

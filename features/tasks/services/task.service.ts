@@ -7,7 +7,10 @@ import type {
   UpdateTaskInput,
   UpdateTaskStatusInput,
 } from "@/features/tasks/validations";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
 import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { env } from "@/lib/config/env";
@@ -1377,92 +1380,111 @@ export async function listTaskResponsibilityUsers(session: Session, servicePartn
     parentTaskServicePartnerId = parentTask.servicePartnerId;
   }
 
-  const users = await prisma.user.findMany({
-    where: {
-      servicePartnerId: parentTaskServicePartnerId,
-      status: "ACTIVE",
-      deletedAt: null,
-    },
-    orderBy: [{ name: "asc" }, { email: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      roles: {
+  return getOrSetServerCache(
+    "options.task_responsibility_users",
+    `${session.user.id}:${parentTaskServicePartnerId}:${parentTaskId ?? "root"}`,
+    async () => {
+      const users = await prisma.user.findMany({
         where: {
-          role: {
-            deletedAt: null,
-          },
+          servicePartnerId: parentTaskServicePartnerId,
+          status: "ACTIVE",
+          deletedAt: null,
         },
+        orderBy: [{ name: "asc" }, { email: "asc" }, { createdAt: "asc" }],
         select: {
-          role: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          roles: {
+            where: {
+              role: {
+                deletedAt: null,
+              },
+            },
             select: {
-              key: true,
-              name: true,
-              level: true,
+              role: {
+                select: {
+                  key: true,
+                  name: true,
+                  level: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-  });
+      });
 
-  return users
-    .filter((user) => {
-      if (context.isSuperAdmin || context.canAssignAny || context.isCompanyWide) {
-        return true;
-      }
-      if (user.id === context.userId) {
-        return true;
-      }
-      if (!context.canAssignDownline) {
-        return false;
-      }
-      return context.maxRoleLevel > getHighestRoleLevel(user.roles);
-    })
-    .map((user) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      highestRoleLevel: getHighestRoleLevel(user.roles),
-      roles: user.roles,
-      roleLabel: getUserRoleLabel(user.roles),
-    }));
+      return users
+        .filter((user) => {
+          if (context.isSuperAdmin || context.canAssignAny || context.isCompanyWide) {
+            return true;
+          }
+          if (user.id === context.userId) {
+            return true;
+          }
+          if (!context.canAssignDownline) {
+            return false;
+          }
+          return context.maxRoleLevel > getHighestRoleLevel(user.roles);
+        })
+        .map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          highestRoleLevel: getHighestRoleLevel(user.roles),
+          roles: user.roles,
+          roleLabel: getUserRoleLabel(user.roles),
+        }));
+    },
+    {
+      ttlSeconds: 45,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export async function listTaskFilterUsers(session: Session) {
-  return prisma.user.findMany({
-    where: {
-      status: "ACTIVE",
-      deletedAt: null,
-      ...scopeByTenant(session, {}),
-    },
-    orderBy: [{ name: "asc" }, { email: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      roles: {
+  return getOrSetServerCache(
+    "options.task_filter_users",
+    `${session.user.id}:${session.user.servicePartnerId}:${buildRoleSignature(session.user.roleKeys)}`,
+    () =>
+      prisma.user.findMany({
         where: {
-          role: {
-            deletedAt: null,
-          },
+          status: "ACTIVE",
+          deletedAt: null,
+          ...scopeByTenant(session, {}),
         },
+        orderBy: [{ name: "asc" }, { email: "asc" }, { createdAt: "asc" }],
         select: {
-          role: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          roles: {
+            where: {
+              role: {
+                deletedAt: null,
+              },
+            },
             select: {
-              key: true,
-              name: true,
-              level: true,
+              role: {
+                select: {
+                  key: true,
+                  name: true,
+                  level: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-  });
+      }),
+    {
+      ttlSeconds: 45,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export async function listTaskServiceRequestOptions(session: Session) {
@@ -1484,15 +1506,24 @@ export async function listTaskServiceRequestOptions(session: Session) {
     };
   }
 
-  return prisma.serviceRequest.findMany({
-    where,
-    orderBy: [{ createdAt: "desc" }],
-    select: {
-      id: true,
-      serviceNumber: true,
-      title: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.task_service_requests",
+    `${session.user.id}:${session.user.servicePartnerId}:${buildRoleSignature(session.user.roleKeys)}`,
+    () =>
+      prisma.serviceRequest.findMany({
+        where,
+        orderBy: [{ createdAt: "desc" }],
+        select: {
+          id: true,
+          serviceNumber: true,
+          title: true,
+        },
+      }),
+    {
+      ttlSeconds: 45,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export async function listTasks(session: Session, input: ListTasksInput = {}) {
@@ -1521,21 +1552,48 @@ export async function listTasks(session: Session, input: ListTasksInput = {}) {
 
     applyTaskFilters(where, input, context, snapshot);
 
-    const tasks = await measurePerf("tasks.list.query", () =>
-      prisma.task.findMany({
-        where,
-        take: input.take,
-        orderBy: [{ createdAt: "asc" }],
-        select: getTaskListSelect(),
-      })
-    );
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        assigneeUserId: input.assigneeUserId?.trim() || null,
+        assignedByUserId: input.assignedByUserId?.trim() || null,
+        serviceRequestId: input.serviceRequestId?.trim() || null,
+        scope: input.scope ?? "all",
+        requestedFrom: input.requestedFrom?.toISOString() ?? null,
+        requestedTo: input.requestedTo?.toISOString() ?? null,
+        dueFrom: input.dueFrom?.toISOString() ?? null,
+        dueTo: input.dueTo?.toISOString() ?? null,
+        overdue: input.overdue ?? false,
+        take: input.take ?? null,
+      }),
+    ].join(":");
 
-    return {
-      tasks: await measurePerf("tasks.list.decorate", () => decorateListedTasks(tasks)),
-      visibility: {
-        canSeeCompanyScope: context.isCompanyWide,
-      },
+    const loadTasks = async () => {
+      const tasks = await measurePerf("tasks.list.query", () =>
+        prisma.task.findMany({
+          where,
+          take: input.take,
+          orderBy: [{ createdAt: "asc" }],
+          select: getTaskListSelect(),
+        })
+      );
+
+      return {
+        tasks: await measurePerf("tasks.list.decorate", () => decorateListedTasks(tasks)),
+        visibility: {
+          canSeeCompanyScope: context.isCompanyWide,
+        },
+      };
     };
+
+    return getOrSetServerCache("tasks.list", cacheKey, loadTasks, {
+      ttlSeconds: 20,
+      prefixes: [cachePrefixes.tasks, `${cachePrefixes.tasks}:tenant:${session.user.servicePartnerId}`],
+    });
   });
 }
 
@@ -1607,7 +1665,7 @@ export async function createTask(session: Session, input: CreateTaskInput) {
   await assertAssignableUser(context, serviceRequest.servicePartnerId, input.assigneeUserId);
 
   const taskNumber = await generateTaskNumber(serviceRequest.servicePartnerId);
-  return prisma.task.create({
+  const created = await prisma.task.create({
     data: {
       servicePartnerId: serviceRequest.servicePartnerId,
       serviceRequestId: serviceRequest.id,
@@ -1626,6 +1684,9 @@ export async function createTask(session: Session, input: CreateTaskInput) {
     },
     include: getTaskSummaryInclude(),
   });
+
+  await invalidateTenantDataCaches(serviceRequest.servicePartnerId);
+  return created;
 }
 
 export async function getTaskById(session: Session, taskId: string) {
@@ -1783,7 +1844,7 @@ export async function updateTask(session: Session, taskId: string, input: Update
 
   const completedAt = nextCompletedAt(task.completedAt, input.status);
 
-  return prisma.task.update({
+  const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
       title: input.title.trim(),
@@ -1799,13 +1860,16 @@ export async function updateTask(session: Session, taskId: string, input: Update
     },
     include: getTaskSummaryInclude(),
   });
+
+  await invalidateTenantDataCaches(task.servicePartnerId);
+  return updated;
 }
 
 export async function updateTaskStatus(session: Session, taskId: string, input: UpdateTaskStatusInput) {
   const { task } = await assertTaskMutationAccess(session, taskId, "status");
   const completedAt = nextCompletedAt(task.completedAt, input.status);
 
-  return prisma.task.update({
+  const updated = await prisma.task.update({
     where: { id: taskId },
     data: {
       status: input.status,
@@ -1813,6 +1877,9 @@ export async function updateTaskStatus(session: Session, taskId: string, input: 
     },
     include: getTaskSummaryInclude(),
   });
+
+  await invalidateTenantDataCaches(task.servicePartnerId);
+  return updated;
 }
 
 export async function softDeleteTask(session: Session, taskId: string) {
@@ -1829,11 +1896,14 @@ export async function softDeleteTask(session: Session, taskId: string) {
     throw new Error("Cannot delete a task that still has child tasks.");
   }
 
-  return prisma.task.update({
+  const deleted = await prisma.task.update({
     where: { id: taskId },
     data: {
       deletedAt: new Date(),
     },
     include: getTaskSummaryInclude(),
   });
+
+  await invalidateTenantDataCaches(task.servicePartnerId);
+  return deleted;
 }

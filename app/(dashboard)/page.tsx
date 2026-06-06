@@ -1,11 +1,12 @@
 import { ServiceRequestStatus } from "@prisma/client";
-import Link from "next/link";
-
 import { EmptyState } from "@/components/admin/empty-state";
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
 import { formatDateTime } from "@/lib/utils/format";
@@ -116,63 +117,97 @@ export default async function DashboardPage() {
 
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = !isSuperAdmin && session.user.roleKeys.includes("company_admin");
+  const dashboardCacheKey = [
+    session.user.id,
+    session.user.servicePartnerId,
+    buildRoleSignature(session.user.roleKeys),
+    isSuperAdmin ? "super_admin" : "tenant_user",
+  ].join(":");
 
-  const [companies, users, roles, permissions, clients, branches, categories, items, vendors, rateCards, serviceRequests, openServiceRequests, rfqs, invoices, vendorPayments, ledgerEntries, recentRequests, companyProfile, companyDirectory] =
-    await measurePerf("dashboard.page_data", () => Promise.all([
-      can("service_partners.read")
-        ? isSuperAdmin
-          ? prisma.servicePartner.count({ where: { deletedAt: null } })
-          : prisma.servicePartner.count({ where: { id: session.user.servicePartnerId, deletedAt: null } })
-        : Promise.resolve(0),
-      can("users.read") ? prisma.user.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("roles.read") ? prisma.role.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("permissions.read") ? prisma.permission.count() : Promise.resolve(0),
-      can("clients.read") ? prisma.client.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("branches.read") ? prisma.branch.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("categories.read") ? prisma.category.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("items.read") ? prisma.item.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("vendors.read") ? prisma.vendor.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("rate_cards.read") ? prisma.rateCard.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("service_requests.read") ? prisma.serviceRequest.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("service_requests.read")
-        ? prisma.serviceRequest.count({
-            where: {
-              ...scopeByTenant(session, { deletedAt: null }),
-              status: { in: openServiceStatuses },
-            },
-          })
-        : Promise.resolve(0),
-      can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-      can("vendor_payments.read") ? prisma.vendorPayment.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
-      can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
-      can("service_requests.read")
-        ? prisma.serviceRequest.findMany({
-            where: scopeByTenant(session, { deletedAt: null }),
-            orderBy: [{ createdAt: "desc" }],
-            take: 10,
-            include: {
-              client: { select: { name: true } },
-              branch: { select: { name: true } },
-              servicePartner: { select: { name: true, code: true } },
-            },
-          })
-        : Promise.resolve([]),
-      !isSuperAdmin
-        ? prisma.servicePartner.findFirst({
-            where: { id: session.user.servicePartnerId, deletedAt: null },
-            select: { name: true, code: true, status: true, email: true, phone: true },
-          })
-        : Promise.resolve(null),
-      isSuperAdmin && can("service_partners.read")
-        ? prisma.servicePartner.findMany({
-            where: { deletedAt: null },
-            orderBy: [{ name: "asc" }],
-            take: 18,
-            select: { id: true, name: true },
-          })
-        : Promise.resolve([]),
-    ]));
+  const [
+    companies,
+    users,
+    roles,
+    permissions,
+    clients,
+    branches,
+    categories,
+    items,
+    vendors,
+    rateCards,
+    serviceRequests,
+    openServiceRequests,
+    rfqs,
+    invoices,
+    vendorPayments,
+    ledgerEntries,
+    recentRequests,
+    companyProfile,
+    companyDirectory,
+  ] = await getOrSetServerCache(
+    "dashboard.summary",
+    dashboardCacheKey,
+    () =>
+      measurePerf("dashboard.page_data", () => Promise.all([
+        can("service_partners.read")
+          ? isSuperAdmin
+            ? prisma.servicePartner.count({ where: { deletedAt: null } })
+            : prisma.servicePartner.count({ where: { id: session.user.servicePartnerId, deletedAt: null } })
+          : Promise.resolve(0),
+        can("users.read") ? prisma.user.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("roles.read") ? prisma.role.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("permissions.read") ? prisma.permission.count() : Promise.resolve(0),
+        can("clients.read") ? prisma.client.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("branches.read") ? prisma.branch.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("categories.read") ? prisma.category.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("items.read") ? prisma.item.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("vendors.read") ? prisma.vendor.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("rate_cards.read") ? prisma.rateCard.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("service_requests.read") ? prisma.serviceRequest.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("service_requests.read")
+          ? prisma.serviceRequest.count({
+              where: {
+                ...scopeByTenant(session, { deletedAt: null }),
+                status: { in: openServiceStatuses },
+              },
+            })
+          : Promise.resolve(0),
+        can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
+        can("vendor_payments.read") ? prisma.vendorPayment.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
+        can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
+        can("service_requests.read")
+          ? prisma.serviceRequest.findMany({
+              where: scopeByTenant(session, { deletedAt: null }),
+              orderBy: [{ createdAt: "desc" }],
+              take: 10,
+              include: {
+                client: { select: { name: true } },
+                branch: { select: { name: true } },
+                servicePartner: { select: { name: true, code: true } },
+              },
+            })
+          : Promise.resolve([]),
+        !isSuperAdmin
+          ? prisma.servicePartner.findFirst({
+              where: { id: session.user.servicePartnerId, deletedAt: null },
+              select: { name: true, code: true, status: true, email: true, phone: true },
+            })
+          : Promise.resolve(null),
+        isSuperAdmin && can("service_partners.read")
+          ? prisma.servicePartner.findMany({
+              where: { deletedAt: null },
+              orderBy: [{ name: "asc" }],
+              take: 18,
+              select: { id: true, name: true },
+            })
+          : Promise.resolve([]),
+      ])),
+    {
+      ttlSeconds: 30,
+      prefixes: [cachePrefixes.dashboard, `${cachePrefixes.dashboard}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 
   const countsByKey = {
     companies,
@@ -253,11 +288,11 @@ export default async function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
-          <Link key={card.title} href={card.href} className="crm-stat-card transition hover:border-[#bfd0f2] hover:bg-[#f8fbff]">
+          <PrefetchLink key={card.title} href={card.href} className="crm-stat-card transition hover:border-[#bfd0f2] hover:bg-[#f8fbff]">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#7d8eaf]">{card.title}</p>
             <p className="mt-1 text-3xl font-bold text-[#123064]">{card.value}</p>
             <p className="mt-1 text-sm text-[#6f84a9]">{card.note}</p>
-          </Link>
+          </PrefetchLink>
         ))}
       </div>
 
@@ -266,9 +301,9 @@ export default async function DashboardPage() {
           <div className="flex items-center justify-between border-b border-[#edf2fb] px-5 py-4">
             <h2 className="text-xl font-semibold text-[#122447]">Recent Service Requests</h2>
             {can("service_requests.read") ? (
-              <Link href="/service-requests" className="text-sm font-semibold text-[#2d5fff]">
+              <PrefetchLink href="/service-requests" className="text-sm font-semibold text-[#2d5fff]">
                 View all
-              </Link>
+              </PrefetchLink>
             ) : null}
           </div>
           {!can("service_requests.read") ? (
@@ -307,9 +342,9 @@ export default async function DashboardPage() {
                       </td>
                       <td className="px-5 py-3">{formatDateTime(request.requestedAt ?? request.createdAt)}</td>
                       <td className="px-5 py-3">
-                        <Link href={`/service-requests/${request.id}`} className="text-[#2454e6]">
+                        <PrefetchLink href={`/service-requests/${request.id}`} className="text-[#2454e6]">
                           Open
-                        </Link>
+                        </PrefetchLink>
                       </td>
                     </tr>
                   ))}
@@ -334,10 +369,10 @@ export default async function DashboardPage() {
                     <p className="px-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#7d8eaf]">{group}</p>
                     <div className="space-y-2">
                       {actions.map((action) => (
-                        <Link key={action.title} href={action.href} className="block rounded-xl border border-[#edf2fb] px-3 py-3 transition hover:border-[#cedcf5] hover:bg-[#f7faff]">
+                        <PrefetchLink key={action.title} href={action.href} className="block rounded-xl border border-[#edf2fb] px-3 py-3 transition hover:border-[#cedcf5] hover:bg-[#f7faff]">
                           <p className="text-sm font-semibold text-[#132445]">{action.title}</p>
                           <p className="mt-1 text-sm text-[#6f84a9]">{action.subtitle}</p>
-                        </Link>
+                        </PrefetchLink>
                       ))}
                     </div>
                   </div>
@@ -373,13 +408,13 @@ export default async function DashboardPage() {
           <p className="mt-1 text-sm text-[#6f84a9]">Open a company to view admins, users, clients, branches, requests, and financial summaries.</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {companyDirectory.map((company) => (
-              <Link
+              <PrefetchLink
                 key={company.id}
                 href={`/service-partners/${company.id}`}
                 className="rounded-xl border border-[#e5ebf6] bg-[#fbfcff] p-4 text-sm font-medium text-[#10254b] transition hover:border-[#bfd0f2] hover:bg-[#f8fbff]"
               >
                 {company.name}
-              </Link>
+              </PrefetchLink>
             ))}
           </div>
         </section>

@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { TaskStatus } from "@prisma/client";
 
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import { StatusBadge } from "@/components/admin/status-badge";
 import { deleteTaskAction, updateTaskAction } from "@/features/tasks/actions/task.actions";
 import { TaskForm } from "@/features/tasks/components/task-form";
@@ -126,9 +126,9 @@ export function TasksTable({
                 <td className="px-3 py-2">
                   <div style={{ paddingLeft: `${task.hierarchyDepth * 16}px` }}>
                     <p className="font-medium">
-                      <Link href={`/tasks/${task.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                      <PrefetchLink href={`/tasks/${task.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
                         {task.title}
-                      </Link>
+                      </PrefetchLink>
                     </p>
                     <p className="text-xs text-[var(--muted)]">
                       {task.taskNumber}
@@ -139,9 +139,9 @@ export function TasksTable({
                 </td>
                 {showServiceRequest ? (
                   <td className="px-3 py-2">
-                    <Link href={`/service-requests/${task.serviceRequestSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                    <PrefetchLink href={`/service-requests/${task.serviceRequestSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
                       {task.serviceRequestSummary.serviceNumber}
-                    </Link>
+                    </PrefetchLink>
                   </td>
                 ) : null}
                 <td className="px-3 py-2">
@@ -162,9 +162,9 @@ export function TasksTable({
                     {task.parentTaskSummary ? (
                       <p>
                         Parent:{" "}
-                        <Link href={`/tasks/${task.parentTaskSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                        <PrefetchLink href={`/tasks/${task.parentTaskSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
                           {task.parentTaskSummary.taskNumber}
-                        </Link>
+                        </PrefetchLink>
                       </p>
                     ) : null}
                     {task.assignmentChain.length > 0 ? <p>{task.assignmentChain.join(" | ")}</p> : null}
@@ -173,9 +173,9 @@ export function TasksTable({
                 <td className="px-3 py-2">{formatDateTime(task.updatedAt)}</td>
                 <td className="px-3 py-2">
                   <div className="space-y-2">
-                    <Link href={`/tasks/${task.id}`} className="block rounded-md border border-[var(--border)] px-2 py-1 text-center text-xs">
+                    <PrefetchLink href={`/tasks/${task.id}`} className="block rounded-md border border-[var(--border)] px-2 py-1 text-center text-xs">
                       View
-                    </Link>
+                    </PrefetchLink>
                     {canUpdateStatus ? (
                       <TaskStatusActions taskId={task.id} currentStatus={task.status} redirectTo={redirectTo} />
                     ) : null}

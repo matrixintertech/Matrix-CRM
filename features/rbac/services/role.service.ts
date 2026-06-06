@@ -262,7 +262,7 @@ export async function assignPermissionToRole(session: Session, roleId: string, p
     },
   });
 
-  invalidateAuthorizationCaches();
+  await invalidateAuthorizationCaches();
 
   return { role, permission };
 }
@@ -297,7 +297,7 @@ export async function removePermissionFromRole(session: Session, roleId: string,
     },
   });
 
-  invalidateAuthorizationCaches();
+  await invalidateAuthorizationCaches();
 
   return { role, permission };
 }
@@ -375,7 +375,7 @@ export async function replaceRolePermissions(session: Session, roleId: string, p
     }
   });
 
-  invalidateAuthorizationCaches();
+  await invalidateAuthorizationCaches();
 
   return role;
 }

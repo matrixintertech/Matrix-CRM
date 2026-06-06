@@ -1,6 +1,8 @@
 import type { Session } from "next-auth";
 
+import { buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
 import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
@@ -34,6 +36,8 @@ type NavigationRow = {
 const NAVIGATION_ROW_CACHE_TTL_MS = 10 * 60_000;
 const PLATFORM_PARTNER_CACHE_TTL_MS = 30 * 60_000;
 const NAVIGATION_TREE_CACHE_TTL_MS = 60_000;
+const NAVIGATION_ROW_CACHE_TTL_SECONDS = 10 * 60;
+const USER_NAVIGATION_CACHE_TTL_SECONDS = 60;
 
 const fallbackHrefByKey: Record<string, string> = {
   dashboard: "/",
@@ -153,70 +157,88 @@ export async function getNavigationForSession(session: Session): Promise<Sidebar
       );
       const permissions = session.user.isSuperAdmin ? [] : await getUserPermissions(session.user.id, session.user.roleKeys);
       const treeCacheKey = [
+        session.user.id,
         session.user.servicePartnerId,
         platformPartnerId ?? "none",
-        session.user.isSuperAdmin ? "super_admin" : [...permissions].sort().join("|"),
+        session.user.isSuperAdmin ? "super_admin" : buildRoleSignature(permissions),
       ].join(":");
 
-      return getOrLoadRuntimeCache("navigation.tree", treeCacheKey, NAVIGATION_TREE_CACHE_TTL_MS, async () => {
-        const rowsByServicePartnerId = new Map<string, NavigationRow[]>();
-        await Promise.all(
-          candidateServicePartnerIds.map(async (servicePartnerId) => {
-            const rows = await getOrLoadRuntimeCache(
-              "navigation.rows",
-              servicePartnerId,
-              NAVIGATION_ROW_CACHE_TTL_MS,
-              () =>
-                prisma.navigationItem.findMany({
-                  where: {
-                    servicePartnerId,
-                    isActive: true,
-                  },
-                  orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
-                  select: {
-                    id: true,
-                    key: true,
-                    label: true,
-                    href: true,
-                    icon: true,
-                    parentId: true,
-                    sortOrder: true,
-                    permissions: {
-                      select: {
-                        permission: {
-                          select: { key: true },
+      const tree = await getOrSetServerCache(
+        "navigation.tree",
+        treeCacheKey,
+        async () => {
+          const rowsByServicePartnerId = new Map<string, NavigationRow[]>();
+          await Promise.all(
+            candidateServicePartnerIds.map(async (servicePartnerId) => {
+              const rows = await getOrSetServerCache(
+                "navigation.rows",
+                servicePartnerId,
+                () =>
+                  prisma.navigationItem.findMany({
+                    where: {
+                      servicePartnerId,
+                      isActive: true,
+                    },
+                    orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+                    select: {
+                      id: true,
+                      key: true,
+                      label: true,
+                      href: true,
+                      icon: true,
+                      parentId: true,
+                      sortOrder: true,
+                      permissions: {
+                        select: {
+                          permission: {
+                            select: { key: true },
+                          },
                         },
                       },
                     },
-                  },
-                })
-            );
+                  }),
+                {
+                  ttlSeconds: NAVIGATION_ROW_CACHE_TTL_SECONDS,
+                  prefixes: [cachePrefixes.navigation, `${cachePrefixes.navigation}:rows:${servicePartnerId}`],
+                }
+              );
 
-            rowsByServicePartnerId.set(servicePartnerId, rows);
-          })
-        );
+              rowsByServicePartnerId.set(servicePartnerId, rows);
+            })
+          );
 
-        const rows =
-          rowsByServicePartnerId.get(session.user.servicePartnerId) ??
-          (platformPartnerId ? rowsByServicePartnerId.get(platformPartnerId) : undefined) ??
-          [];
+          const rows =
+            rowsByServicePartnerId.get(session.user.servicePartnerId) ??
+            (platformPartnerId ? rowsByServicePartnerId.get(platformPartnerId) : undefined) ??
+            [];
 
-        if (rows.length === 0) {
-          return [
-            {
-              id: "dev-fallback-dashboard",
-              key: "dashboard",
-              label: "Dashboard",
-              href: "/",
-              icon: null,
-              children: [],
-              isDevelopmentFallback: true,
-            },
-          ];
+          if (rows.length === 0) {
+            return [
+              {
+                id: "dev-fallback-dashboard",
+                key: "dashboard",
+                label: "Dashboard",
+                href: "/",
+                icon: null,
+                children: [],
+                isDevelopmentFallback: true,
+              },
+            ];
+          }
+
+          return buildTree(rows, new Set(permissions), session.user.isSuperAdmin);
+        },
+        {
+          ttlSeconds: USER_NAVIGATION_CACHE_TTL_SECONDS,
+          prefixes: [
+            cachePrefixes.navigation,
+            `${cachePrefixes.navigation}:tenant:${session.user.servicePartnerId}`,
+            `${cachePrefixes.navigation}:user:${session.user.id}`,
+          ],
         }
+      );
 
-        return buildTree(rows, new Set(permissions), session.user.isSuperAdmin);
-      });
+      return getOrLoadRuntimeCache("navigation.tree", treeCacheKey, NAVIGATION_TREE_CACHE_TTL_MS, async () => tree);
     },
     { userId: session.user.id, servicePartnerId: session.user.servicePartnerId }
   );

@@ -3,6 +3,9 @@ import type { Session } from "next-auth";
 
 import type { ClientUpsertInput } from "@/features/clients/validations";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
@@ -30,6 +33,18 @@ export function getClientScopeWhere(session: Session): Prisma.ClientWhereInput {
 export async function listClients(session: Session, input: ListClientsInput) {
   return measurePerf("clients.list", async () => {
     const pagination = getPagination(input);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        servicePartnerId: input.servicePartnerId?.trim() || null,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+    ].join(":");
     const where: Prisma.ClientWhereInput = {
       ...getClientScopeWhere(session),
       deletedAt: null,
@@ -53,35 +68,46 @@ export async function listClients(session: Session, input: ListClientsInput) {
       ];
     }
 
-    const [clients, total] = await Promise.all([
-      prisma.client.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.take,
-        orderBy: [{ createdAt: "desc" }],
-        include: {
-          servicePartner: { select: { id: true, name: true, code: true } },
-          _count: {
-            select: {
-              branches: {
-                where: {
-                  deletedAt: null,
+    const loadClients = async () => {
+      const [clients, total] = await Promise.all([
+        prisma.client.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.take,
+          orderBy: [{ createdAt: "desc" }],
+          include: {
+            servicePartner: { select: { id: true, name: true, code: true } },
+            _count: {
+              select: {
+                branches: {
+                  where: {
+                    deletedAt: null,
+                  },
                 },
               },
             },
           },
-        },
-      }),
-      prisma.client.count({ where }),
-    ]);
+        }),
+        prisma.client.count({ where }),
+      ]);
 
-    return {
-      clients,
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: getTotalPages(total, pagination.pageSize),
+      return {
+        clients,
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: getTotalPages(total, pagination.pageSize),
+      };
     };
+
+    if (pagination.page === 1) {
+      return getOrSetServerCache("clients.list", cacheKey, loadClients, {
+        ttlSeconds: 20,
+        prefixes: [cachePrefixes.clients, `${cachePrefixes.clients}:tenant:${session.user.servicePartnerId}`],
+      });
+    }
+
+    return loadClients();
   });
 }
 
@@ -150,20 +176,29 @@ export async function listClientServicePartnersForForm(session: Session) {
 export async function listClientsForBranchForm(session: Session, servicePartnerId?: string) {
   const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
 
-  return prisma.client.findMany({
-    where: {
-      deletedAt: null,
-      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
-      ...getClientScopeWhere(session),
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      name: true,
-      servicePartnerId: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.clients_for_branch_form",
+    `${session.user.id}:${resolvedServicePartnerId ?? "all"}`,
+    () =>
+      prisma.client.findMany({
+        where: {
+          deletedAt: null,
+          ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+          ...getClientScopeWhere(session),
+        },
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          servicePartnerId: true,
+        },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+    }
+  );
 }
 
 export function getServicePartnerIdForClientWrite(session: Session, inputServicePartnerId?: string) {
@@ -180,7 +215,7 @@ export async function createClient(session: Session, input: ClientUpsertInput) {
     throw new Error("Service partner is required.");
   }
 
-  return prisma.client.create({
+  const client = await prisma.client.create({
     data: {
       servicePartnerId,
       code: input.code.trim().toUpperCase(),
@@ -196,6 +231,9 @@ export async function createClient(session: Session, input: ClientUpsertInput) {
       status: input.status,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return client;
 }
 
 export async function updateClient(session: Session, id: string, input: ClientUpsertInput) {
@@ -209,7 +247,7 @@ export async function updateClient(session: Session, id: string, input: ClientUp
     throw new Error("Service partner is required.");
   }
 
-  return prisma.client.update({
+  const client = await prisma.client.update({
     where: { id },
     data: {
       servicePartnerId,
@@ -226,21 +264,30 @@ export async function updateClient(session: Session, id: string, input: ClientUp
       status: input.status,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return client;
 }
 
 export async function updateClientStatus(id: string, status: ClientStatus) {
-  return prisma.client.update({
+  const client = await prisma.client.update({
     where: { id },
     data: { status },
   });
+
+  await invalidateTenantDataCaches(client.servicePartnerId);
+  return client;
 }
 
 export async function softDeleteClient(id: string) {
-  return prisma.client.update({
+  const client = await prisma.client.update({
     where: { id },
     data: {
       status: ClientStatus.INACTIVE,
       deletedAt: new Date(),
     },
   });
+
+  await invalidateTenantDataCaches(client.servicePartnerId);
+  return client;
 }

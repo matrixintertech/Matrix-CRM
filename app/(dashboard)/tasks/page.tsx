@@ -1,9 +1,9 @@
 import { TaskStatus } from "@prisma/client";
-import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
 import { ExportActions } from "@/components/admin/export-actions";
 import { PageHeader } from "@/components/admin/page-header";
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import { TasksTable } from "@/features/tasks/components/tasks-table";
 import {
   listTaskFilterUsers,
@@ -175,13 +175,13 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
             next.set("scope", option.value);
 
             return (
-              <Link
+              <PrefetchLink
                 key={option.value}
                 href={`/tasks?${next.toString()}`}
                 className={`rounded-md border px-3 py-2 text-sm ${scope === option.value ? "border-[var(--primary)] text-[var(--primary)]" : "border-[var(--border)]"}`}
               >
                 {option.label}
-              </Link>
+              </PrefetchLink>
             );
           })}
       </div>

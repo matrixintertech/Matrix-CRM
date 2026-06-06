@@ -1,8 +1,11 @@
+import { cachePrefixes } from "@/lib/cache/cache-keys";
 import { getOrLoadRuntimeCache } from "@/lib/cache/runtime-cache";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import { measurePerf } from "@/lib/observability/perf";
 
 const LOCATION_CACHE_TTL_MS = 12 * 60 * 60_000;
+const LOCATION_CACHE_TTL_SECONDS = 12 * 60 * 60;
 
 function normalizeLocationValue(value?: string | null) {
   return value?.trim() || null;
@@ -24,16 +27,11 @@ export async function listActiveStatesWithCities() {
     "locations.list_active_states_with_cities",
     () =>
       getOrLoadRuntimeCache("locations.active_states", "default", LOCATION_CACHE_TTL_MS, () =>
-        prisma.state.findMany({
-          where: {
-            isActive: true,
-          },
-          orderBy: [{ name: "asc" }],
-          select: {
-            id: true,
-            name: true,
-            code: true,
-            cities: {
+        getOrSetServerCache(
+          "locations.active_states",
+          "default",
+          () =>
+            prisma.state.findMany({
               where: {
                 isActive: true,
               },
@@ -41,10 +39,24 @@ export async function listActiveStatesWithCities() {
               select: {
                 id: true,
                 name: true,
+                code: true,
+                cities: {
+                  where: {
+                    isActive: true,
+                  },
+                  orderBy: [{ name: "asc" }],
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
-            },
-          },
-        })
+            }),
+          {
+            ttlSeconds: LOCATION_CACHE_TTL_SECONDS,
+            prefixes: [cachePrefixes.locations],
+          }
+        )
       )
   );
 }
@@ -72,26 +84,10 @@ export async function resolveStateCitySelection(
     };
   }
 
-  const matchedState = await prisma.state.findFirst({
-    where: {
-      isActive: true,
-      name: {
-        equals: state,
-        mode: "insensitive",
-      },
-    },
-    select: {
-      name: true,
-      cities: {
-        where: {
-          isActive: true,
-        },
-        select: {
-          name: true,
-        },
-      },
-    },
-  });
+  const states = await listActiveStatesWithCities();
+  const matchedState =
+    states.find((entry) => matchesLocationName(entry.name, state)) ??
+    states.find((entry) => entry.code?.localeCompare(state, undefined, { sensitivity: "accent" }) === 0);
 
   if (!matchedState) {
     if (options?.allowLegacyPair) {

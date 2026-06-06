@@ -1,5 +1,6 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
+
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 
 type Column<T> = {
   header: string;
@@ -45,10 +46,10 @@ export function DataTable<T>({ rows, columns, getRowHref, getRowKey }: DataTable
                     <>
                       {columns.map((column, index) => (
                         <td key={column.header} className={`px-5 py-4 align-top text-[#10254b] ${column.className ?? ""}`}>
-                          <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff]">
+                          <PrefetchLink href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff]">
                             {column.cell(row)}
                             {index === 0 ? <span className="sr-only">Open details</span> : null}
-                          </Link>
+                          </PrefetchLink>
                         </td>
                       ))}
                     </>

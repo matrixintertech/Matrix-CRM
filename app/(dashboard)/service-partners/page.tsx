@@ -1,8 +1,8 @@
 import { ServicePartnerStatus } from "@prisma/client";
-import Link from "next/link";
 
 import { EmptyState } from "@/components/admin/empty-state";
 import { PageHeader } from "@/components/admin/page-header";
+import { PrefetchLink } from "@/components/admin/prefetch-link";
 import { SearchFilter } from "@/components/admin/search-filter";
 import { ServicePartnersTable } from "@/features/service-partners/components/service-partners-table";
 import { canManageServicePartners, listServicePartners } from "@/features/service-partners/services/service-partner.service";
@@ -90,14 +90,14 @@ export default async function ServicePartnersPage({ searchParams }: ServicePartn
             </p>
             <div className="flex items-center gap-2">
               {result.page > 1 ? (
-                <Link href={buildPageHref(result.page - 1)} className="rounded-md border border-slate-200 px-3 py-2">
+                <PrefetchLink href={buildPageHref(result.page - 1)} className="rounded-md border border-slate-200 px-3 py-2">
                   Previous
-                </Link>
+                </PrefetchLink>
               ) : null}
               {result.page < result.totalPages ? (
-                <Link href={buildPageHref(result.page + 1)} className="rounded-md border border-slate-200 px-3 py-2">
+                <PrefetchLink href={buildPageHref(result.page + 1)} className="rounded-md border border-slate-200 px-3 py-2">
                   Next
-                </Link>
+                </PrefetchLink>
               ) : null}
             </div>
           </div>

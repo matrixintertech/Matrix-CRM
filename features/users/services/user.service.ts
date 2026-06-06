@@ -4,6 +4,9 @@ import type { Session } from "next-auth";
 import { getUserPermissions, invalidateAuthorizationCaches, isPlatformOnlyPermissionKey } from "@/lib/auth/permissions";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { scopeByTenant } from "@/lib/auth/tenant";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import type { UserUpsertInput } from "@/features/users/validations";
 import { measurePerf } from "@/lib/observability/perf";
@@ -38,6 +41,17 @@ export function getUserTenantWhere(session: Session): Prisma.UserWhereInput {
 export async function listUsers(session: Session, input: ListUsersInput) {
   return measurePerf("users.list", async () => {
     const pagination = getPagination(input);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+    ].join(":");
     const where: Prisma.UserWhereInput = {
       ...getUserTenantWhere(session),
       deletedAt: null,
@@ -56,95 +70,106 @@ export async function listUsers(session: Session, input: ListUsersInput) {
       ];
     }
 
-    const [users, total] = await Promise.all([
-      prisma.user.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          status: true,
-          createdAt: true,
-          servicePartnerId: true,
-        },
-      }),
-      prisma.user.count({ where }),
-    ]);
+    const loadUsers = async () => {
+      const [users, total] = await Promise.all([
+        prisma.user.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.take,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            status: true,
+            createdAt: true,
+            servicePartnerId: true,
+          },
+        }),
+        prisma.user.count({ where }),
+      ]);
 
-    const servicePartnerIds = Array.from(
-      new Set(users.map((user) => user.servicePartnerId).filter((servicePartnerId): servicePartnerId is string => Boolean(servicePartnerId)))
-    );
-    const userIds = users.map((user) => user.id);
+      const servicePartnerIds = Array.from(
+        new Set(users.map((user) => user.servicePartnerId).filter((servicePartnerId): servicePartnerId is string => Boolean(servicePartnerId)))
+      );
+      const userIds = users.map((user) => user.id);
 
-    const [servicePartners, userRoles] = await Promise.all([
-      servicePartnerIds.length > 0
-        ? prisma.servicePartner.findMany({
-            where: {
-              id: {
-                in: servicePartnerIds,
-              },
-            },
-            select: {
-              id: true,
-              name: true,
-              code: true,
-            },
-          })
-        : Promise.resolve([]),
-      userIds.length > 0
-        ? prisma.userRole.findMany({
-            where: {
-              userId: {
-                in: userIds,
-              },
-              role: {
-                deletedAt: null,
-              },
-            },
-            select: {
-              userId: true,
-              role: {
-                select: {
-                  key: true,
-                  name: true,
+      const [servicePartners, userRoles] = await Promise.all([
+        servicePartnerIds.length > 0
+          ? prisma.servicePartner.findMany({
+              where: {
+                id: {
+                  in: servicePartnerIds,
                 },
               },
-            },
-          })
-        : Promise.resolve([]),
-    ]);
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            })
+          : Promise.resolve([]),
+        userIds.length > 0
+          ? prisma.userRole.findMany({
+              where: {
+                userId: {
+                  in: userIds,
+                },
+                role: {
+                  deletedAt: null,
+                },
+              },
+              select: {
+                userId: true,
+                role: {
+                  select: {
+                    key: true,
+                    name: true,
+                  },
+                },
+              },
+            })
+          : Promise.resolve([]),
+      ]);
 
-    const servicePartnerMap = new Map(servicePartners.map((servicePartner) => [servicePartner.id, servicePartner]));
-    const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string } }>>>((map, entry) => {
-      const roles = map.get(entry.userId);
-      if (roles) {
-        roles.push({ role: entry.role });
-      } else {
-        map.set(entry.userId, [{ role: entry.role }]);
-      }
-      return map;
-    }, new Map());
+      const servicePartnerMap = new Map(servicePartners.map((servicePartner) => [servicePartner.id, servicePartner]));
+      const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string } }>>>((map, entry) => {
+        const roles = map.get(entry.userId);
+        if (roles) {
+          roles.push({ role: entry.role });
+        } else {
+          map.set(entry.userId, [{ role: entry.role }]);
+        }
+        return map;
+      }, new Map());
 
-    return {
-      users: users.map((user) => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        status: user.status,
-        createdAt: user.createdAt,
-        servicePartner: servicePartnerMap.get(user.servicePartnerId) ?? { name: "-", code: "-" },
-        roles: userRolesMap.get(user.id) ?? [],
-      })),
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: getTotalPages(total, pagination.pageSize),
+      return {
+        users: users.map((user) => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          status: user.status,
+          createdAt: user.createdAt,
+          servicePartner: servicePartnerMap.get(user.servicePartnerId) ?? { name: "-", code: "-" },
+          roles: userRolesMap.get(user.id) ?? [],
+        })),
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: getTotalPages(total, pagination.pageSize),
+      };
     };
+
+    if (pagination.page === 1) {
+      return getOrSetServerCache("users.list", cacheKey, loadUsers, {
+        ttlSeconds: 20,
+        prefixes: [cachePrefixes.users, `${cachePrefixes.users}:tenant:${session.user.servicePartnerId}`],
+      });
+    }
+
+    return loadUsers();
   });
 }
 
@@ -193,18 +218,36 @@ export async function listAssignableRoles(session: Session) {
 
 export async function listServicePartnersForUserForm(session: Session) {
   if (!session.user.isSuperAdmin) {
-    return prisma.servicePartner.findMany({
-      where: { id: session.user.servicePartnerId },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, legalName: true, code: true },
-    });
+    return getOrSetServerCache(
+      "options.service_partners",
+      `${session.user.servicePartnerId}:self`,
+      () =>
+        prisma.servicePartner.findMany({
+          where: { id: session.user.servicePartnerId },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true, legalName: true, code: true },
+        }),
+      {
+        ttlSeconds: 60,
+        prefixes: [cachePrefixes.options, `${cachePrefixes.options}:tenant:${session.user.servicePartnerId}`],
+      }
+    );
   }
 
-  return prisma.servicePartner.findMany({
-    where: { deletedAt: null },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, legalName: true, code: true },
-  });
+  return getOrSetServerCache(
+    "options.service_partners",
+    "super_admin",
+    () =>
+      prisma.servicePartner.findMany({
+        where: { deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, legalName: true, code: true },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, cachePrefixes.servicePartners],
+    }
+  );
 }
 
 export async function listAssignablePermissions(session: Session): Promise<AssignablePermission[]> {
@@ -335,7 +378,8 @@ export async function syncUserRoles(session: Session, input: {
     }
   });
 
-  invalidateAuthorizationCaches();
+  await invalidateAuthorizationCaches();
+  await invalidateTenantDataCaches(input.servicePartnerId);
 
   return roles;
 }
@@ -354,7 +398,7 @@ export async function createUser(session: Session, input: UserUpsertInput) {
     throw new Error("Service partner is required.");
   }
 
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       servicePartnerId,
       name: input.name?.trim() || null,
@@ -363,6 +407,9 @@ export async function createUser(session: Session, input: UserUpsertInput) {
       status: input.status,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return user;
 }
 
 export async function updateUser(session: Session, id: string, input: UserUpsertInput) {
@@ -376,7 +423,7 @@ export async function updateUser(session: Session, id: string, input: UserUpsert
     throw new Error("Service partner is required.");
   }
 
-  return prisma.user.update({
+  const user = await prisma.user.update({
     where: { id },
     data: {
       servicePartnerId,
@@ -386,6 +433,9 @@ export async function updateUser(session: Session, id: string, input: UserUpsert
       status: input.status,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartnerId);
+  return user;
 }
 
 export async function countActiveSuperAdmins() {

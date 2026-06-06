@@ -3,6 +3,9 @@ import type { Session } from "next-auth";
 
 import type { ServicePartnerUpsertInput } from "@/features/service-partners/validations";
 import { resolveStateCitySelection } from "@/features/locations/services/location.service";
+import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
+import { invalidateAuthorizationCaches, invalidateLocationCaches, invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
+import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
@@ -41,6 +44,17 @@ export function canManageServicePartners(session: Session) {
 export async function listServicePartners(session: Session, input: ListServicePartnersInput) {
   return measurePerf("service_partners.list", async () => {
     const pagination = getPagination(input);
+    const cacheKey = [
+      session.user.id,
+      session.user.servicePartnerId,
+      buildRoleSignature(session.user.roleKeys),
+      buildFilterSignature({
+        q: input.q?.trim() || null,
+        status: input.status ?? null,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      }),
+    ].join(":");
     const where: Prisma.ServicePartnerWhereInput = {
       ...getServicePartnerScopeWhere(session),
       deletedAt: null,
@@ -60,32 +74,43 @@ export async function listServicePartners(session: Session, input: ListServicePa
       ];
     }
 
-    const [servicePartners, total] = await Promise.all([
-      prisma.servicePartner.findMany({
-        where,
-        skip: pagination.skip,
-        take: pagination.take,
-        orderBy: [{ createdAt: "desc" }],
-        include: {
-          _count: {
-            select: {
-              users: true,
-              clients: true,
-              branches: true,
+    const loadServicePartners = async () => {
+      const [servicePartners, total] = await Promise.all([
+        prisma.servicePartner.findMany({
+          where,
+          skip: pagination.skip,
+          take: pagination.take,
+          orderBy: [{ createdAt: "desc" }],
+          include: {
+            _count: {
+              select: {
+                users: true,
+                clients: true,
+                branches: true,
+              },
             },
           },
-        },
-      }),
-      prisma.servicePartner.count({ where }),
-    ]);
+        }),
+        prisma.servicePartner.count({ where }),
+      ]);
 
-    return {
-      servicePartners,
-      total,
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      totalPages: getTotalPages(total, pagination.pageSize),
+      return {
+        servicePartners,
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: getTotalPages(total, pagination.pageSize),
+      };
     };
+
+    if (pagination.page === 1) {
+      return getOrSetServerCache("service_partners.list", cacheKey, loadServicePartners, {
+        ttlSeconds: 20,
+        prefixes: [cachePrefixes.servicePartners],
+      });
+    }
+
+    return loadServicePartners();
   });
 }
 
@@ -109,20 +134,29 @@ export async function getServicePartnerById(session: Session, id: string) {
 }
 
 export async function listServicePartnersForForm(session: Session) {
-  return prisma.servicePartner.findMany({
-    where: {
-      ...getServicePartnerScopeWhere(session),
-      deletedAt: null,
-    },
-    orderBy: [{ name: "asc" }],
-    select: {
-      id: true,
-      code: true,
-      legalName: true,
-      name: true,
-      status: true,
-    },
-  });
+  return getOrSetServerCache(
+    "options.service_partners_for_form",
+    `${session.user.id}:${session.user.isSuperAdmin ? "super_admin" : session.user.servicePartnerId}`,
+    () =>
+      prisma.servicePartner.findMany({
+        where: {
+          ...getServicePartnerScopeWhere(session),
+          deletedAt: null,
+        },
+        orderBy: [{ name: "asc" }],
+        select: {
+          id: true,
+          code: true,
+          legalName: true,
+          name: true,
+          status: true,
+        },
+      }),
+    {
+      ttlSeconds: 60,
+      prefixes: [cachePrefixes.options, cachePrefixes.servicePartners],
+    }
+  );
 }
 
 export function isPlatformServicePartnerCode(code: string) {
@@ -133,7 +167,7 @@ export async function createServicePartner(input: ServicePartnerUpsertInput) {
   const permissionIdsByKey = await ensureBaselinePermissions(prisma);
   const location = await resolveStateCitySelection(input);
 
-  return prisma.$transaction(async (tx) => {
+  const servicePartner = await prisma.$transaction(async (tx) => {
     const servicePartner = await tx.servicePartner.create({
       data: {
         code: input.code.trim().toUpperCase(),
@@ -161,6 +195,10 @@ export async function createServicePartner(input: ServicePartnerUpsertInput) {
     maxWait: 10_000,
     timeout: 30_000,
   });
+
+  await invalidateAuthorizationCaches();
+  await invalidateLocationCaches();
+  return servicePartner;
 }
 
 export async function updateServicePartner(id: string, input: ServicePartnerUpsertInput) {
@@ -180,7 +218,7 @@ export async function updateServicePartner(id: string, input: ServicePartnerUpse
     allowLegacyPair,
   });
 
-  return prisma.servicePartner.update({
+  const servicePartner = await prisma.servicePartner.update({
     where: { id },
     data: {
       code: input.code.trim().toUpperCase(),
@@ -196,21 +234,32 @@ export async function updateServicePartner(id: string, input: ServicePartnerUpse
       status: input.status,
     },
   });
+
+  await invalidateTenantDataCaches(servicePartner.id);
+  await invalidateLocationCaches();
+  return servicePartner;
 }
 
 export async function updateServicePartnerStatus(id: string, status: ServicePartnerStatus) {
-  return prisma.servicePartner.update({
+  const servicePartner = await prisma.servicePartner.update({
     where: { id },
     data: { status },
   });
+
+  await invalidateTenantDataCaches(servicePartner.id);
+  return servicePartner;
 }
 
 export async function softDeleteServicePartner(id: string) {
-  return prisma.servicePartner.update({
+  const servicePartner = await prisma.servicePartner.update({
     where: { id },
     data: {
       status: ServicePartnerStatus.INACTIVE,
       deletedAt: new Date(),
     },
   });
+
+  await invalidateTenantDataCaches(servicePartner.id);
+  await invalidateAuthorizationCaches();
+  return servicePartner;
 }
