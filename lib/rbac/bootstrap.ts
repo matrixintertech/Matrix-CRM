@@ -22,7 +22,9 @@ const RBAC_BATCH_SIZE = 12;
 async function runInBatches<T>(items: readonly T[], worker: (item: T) => Promise<unknown>, batchSize = RBAC_BATCH_SIZE) {
   for (let index = 0; index < items.length; index += batchSize) {
     const batch = items.slice(index, index + batchSize);
-    await Promise.all(batch.map((item) => worker(item)));
+    for (const item of batch) {
+      await worker(item);
+    }
   }
 }
 
@@ -229,18 +231,24 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
     });
   }
 
-  for (const roleId of roleIds) {
+  const staleRolePermissionFilters: Prisma.RolePermissionWhereInput[] = roleIds.map((roleId) => {
     const allowedPermissionIds = desiredPermissionIdsByRoleId.get(roleId) ?? [];
+    return {
+      roleId,
+      ...(allowedPermissionIds.length > 0
+        ? {
+            permissionId: {
+              notIn: allowedPermissionIds,
+            },
+          }
+        : {}),
+    };
+  });
+
+  if (staleRolePermissionFilters.length > 0) {
     await db.rolePermission.deleteMany({
       where: {
-        roleId,
-        ...(allowedPermissionIds.length > 0
-          ? {
-              permissionId: {
-                notIn: allowedPermissionIds,
-              },
-            }
-          : {}),
+        OR: staleRolePermissionFilters,
       },
     });
   }
@@ -321,6 +329,7 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
   });
   const navigationIdByKey = new Map(navigationItems.map((item) => [item.key, item.id]));
   const navigationItemIds = navigationItems.map((item) => item.id);
+  const desiredPermissionIdsByNavigationItemId = new Map<string, string[]>();
   const desiredNavigationEdges = baselineNavigation
     .map((item) => {
       const navigationItemId = navigationIdByKey.get(item.key);
@@ -334,6 +343,12 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
       };
     })
     .filter((edge): edge is { navigationItemId: string; permissionId: string } => Boolean(edge));
+
+  for (const edge of desiredNavigationEdges) {
+    const permissions = desiredPermissionIdsByNavigationItemId.get(edge.navigationItemId) ?? [];
+    permissions.push(edge.permissionId);
+    desiredPermissionIdsByNavigationItemId.set(edge.navigationItemId, permissions);
+  }
 
   const existingNavigationPermissions = navigationItemIds.length
     ? await db.navigationItemPermission.findMany({
@@ -363,13 +378,10 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
     });
   }
 
-  for (const navigationItemId of navigationItemIds) {
-    const allowedPermissionIds = desiredNavigationEdges
-      .filter((edge) => edge.navigationItemId === navigationItemId)
-      .map((edge) => edge.permissionId);
-
-    await db.navigationItemPermission.deleteMany({
-      where: {
+  const staleNavigationPermissionFilters: Prisma.NavigationItemPermissionWhereInput[] = navigationItemIds.map(
+    (navigationItemId) => {
+      const allowedPermissionIds = desiredPermissionIdsByNavigationItemId.get(navigationItemId) ?? [];
+      return {
         navigationItemId,
         ...(allowedPermissionIds.length > 0
           ? {
@@ -378,6 +390,14 @@ export async function ensureTenantRbac(db: DbLike, input: EnsureTenantRbacInput)
               },
             }
           : {}),
+      };
+    }
+  );
+
+  if (staleNavigationPermissionFilters.length > 0) {
+    await db.navigationItemPermission.deleteMany({
+      where: {
+        OR: staleNavigationPermissionFilters,
       },
     });
   }

@@ -6,7 +6,12 @@ import ws from "ws";
 type PrismaClientOptions = ConstructorParameters<typeof PrismaClient>[0];
 
 function shouldUseNeonAdapter(connectionString: string | undefined): connectionString is string {
-  return typeof connectionString === "string" && connectionString.includes(".neon.tech");
+  return typeof connectionString === "string" && connectionString.includes(".neon.tech") && isNeonAdapterEnabled();
+}
+
+function isNeonAdapterEnabled() {
+  const flag = process.env.PRISMA_USE_NEON_ADAPTER?.trim().toLowerCase();
+  return flag === "true" || flag === "1" || flag === "yes" || flag === "on";
 }
 
 function getSchemaName(connectionString: string) {

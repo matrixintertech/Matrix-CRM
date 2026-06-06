@@ -82,6 +82,7 @@ Seed/bootstrap:
 - Use a pooled Neon connection in `DATABASE_URL` for the running app.
 - Use the non-pooler Neon connection in `DIRECT_URL` for migrations and other direct schema operations.
 - Keep SSL enabled in both URLs.
+- Leave `PRISMA_USE_NEON_ADAPTER` unset or `false` in the default Node.js deployment path. Only enable it if you intentionally want Prisma to use the Neon WebSocket adapter.
 
 ## OTP authentication
 
