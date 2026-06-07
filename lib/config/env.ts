@@ -22,6 +22,7 @@ const booleanFromEnv = z.preprocess((value) => {
 const otpDeliveryChannelSchema = z.enum(["email", "sms"]);
 const rateLimitDriverSchema = z.enum(["memory", "upstash"]);
 const cacheDriverSchema = z.enum(["memory", "upstash"]);
+const storageDriverSchema = z.enum(["disabled", "local", "s3"]);
 
 const rawEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -74,6 +75,15 @@ const rawEnvSchema = z.object({
   PERF_LOGGING: booleanFromEnv.optional(),
   PERFORMANCE_DIAGNOSTICS_ENABLED: booleanFromEnv.optional(),
   ACTIVITY_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).optional(),
+  TASK_LOCATION_REQUIRED: booleanFromEnv.optional(),
+  TASK_ATTACHMENT_MAX_MB: z.coerce.number().int().min(1).max(25).optional(),
+  STORAGE_DRIVER: storageDriverSchema.optional(),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_PUBLIC_BASE_URL: z.string().url().optional(),
 });
 
 const normalizedEnvSchema = z.object({
@@ -119,6 +129,16 @@ const normalizedEnvSchema = z.object({
   PERF_LOGGING: z.boolean(),
   PERFORMANCE_DIAGNOSTICS_ENABLED: z.boolean(),
   ACTIVITY_LOG_RETENTION_DAYS: z.number().int().min(1).max(3650),
+  TASK_LOCATION_REQUIRED: z.boolean(),
+  TASK_ATTACHMENT_MAX_MB: z.number().int().min(1).max(25),
+  STORAGE_DRIVER: storageDriverSchema,
+  STORAGE_CONFIGURED: z.boolean(),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_PUBLIC_BASE_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof normalizedEnvSchema>;
@@ -183,6 +203,9 @@ export function env(): Env {
   const perfLogging = data.PERF_LOGGING ?? false;
   const performanceDiagnosticsEnabled = data.PERFORMANCE_DIAGNOSTICS_ENABLED ?? false;
   const cacheDebug = data.CACHE_DEBUG ?? false;
+  const taskLocationRequired = data.TASK_LOCATION_REQUIRED ?? false;
+  const taskAttachmentMaxMb = data.TASK_ATTACHMENT_MAX_MB ?? 5;
+  const storageDriver = data.STORAGE_DRIVER ?? (isProduction ? "disabled" : "local");
   const legacyEmailRequested = Boolean(
     data.EMAIL_USER || data.EMAIL_PASS || data.EMAIL_HOST || data.EMAIL_PORT || data.EMAIL_SECURE !== undefined || data.EMAIL_FROM
   );
@@ -220,6 +243,21 @@ export function env(): Env {
   if (cacheDriver === "upstash" && (!data.UPSTASH_REDIS_REST_URL || !data.UPSTASH_REDIS_REST_TOKEN)) {
     throw new Error(
       "Invalid environment variables: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required when CACHE_DRIVER=upstash"
+    );
+  }
+
+  const storageConfigured =
+    storageDriver === "local" ||
+    (storageDriver === "s3" &&
+      Boolean(data.S3_ENDPOINT) &&
+      Boolean(data.S3_REGION) &&
+      Boolean(data.S3_BUCKET) &&
+      Boolean(data.S3_ACCESS_KEY_ID) &&
+      Boolean(data.S3_SECRET_ACCESS_KEY));
+
+  if (storageDriver === "s3" && !storageConfigured) {
+    throw new Error(
+      "Invalid environment variables: S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3"
     );
   }
 
@@ -272,6 +310,16 @@ export function env(): Env {
     PERF_LOGGING: perfLogging,
     PERFORMANCE_DIAGNOSTICS_ENABLED: performanceDiagnosticsEnabled,
     ACTIVITY_LOG_RETENTION_DAYS: data.ACTIVITY_LOG_RETENTION_DAYS ?? 90,
+    TASK_LOCATION_REQUIRED: taskLocationRequired,
+    TASK_ATTACHMENT_MAX_MB: taskAttachmentMaxMb,
+    STORAGE_DRIVER: storageDriver,
+    STORAGE_CONFIGURED: storageConfigured,
+    S3_ENDPOINT: data.S3_ENDPOINT,
+    S3_REGION: data.S3_REGION,
+    S3_BUCKET: data.S3_BUCKET,
+    S3_ACCESS_KEY_ID: data.S3_ACCESS_KEY_ID,
+    S3_SECRET_ACCESS_KEY: data.S3_SECRET_ACCESS_KEY,
+    S3_PUBLIC_BASE_URL: data.S3_PUBLIC_BASE_URL,
   });
 
   if (!normalized.success) {

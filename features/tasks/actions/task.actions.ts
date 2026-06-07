@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import {
   createTaskRemarkSchema,
   createTaskSchema,
+  taskWorkSessionSchema,
   updateTaskSchema,
   updateTaskStatusSchema,
 } from "@/features/tasks/validations";
@@ -17,6 +18,12 @@ import {
   updateTask,
   updateTaskStatus,
 } from "@/features/tasks/services/task.service";
+import {
+  checkInToTask,
+  checkOutOfTask,
+  deleteTaskAttachment,
+  uploadTaskAttachment,
+} from "@/features/tasks/services/task-work-session.service";
 import { logActivity } from "@/lib/activity/activity-log";
 import { requireAnyPermission, requirePermission } from "@/lib/auth/rbac";
 import { notifyTaskAssigned, notifyTaskStatusChanged, notifyTaskUpdated } from "@/lib/notifications/notification.service";
@@ -27,9 +34,21 @@ function getFormString(formData: FormData, key: string) {
   return typeof value === "string" ? value : undefined;
 }
 
+function getFormFile(formData: FormData, key: string) {
+  const value = formData.get(key);
+  return value instanceof File ? value : null;
+}
+
 function withErrorCode(path: string, code: string) {
   const separator = path.includes("?") ? "&" : "?";
   return `${path}${separator}error=${encodeURIComponent(code)}`;
+}
+
+function requireId(value: string | null | undefined, message: string) {
+  if (!value) {
+    throw new Error(message);
+  }
+  return value;
 }
 
 function revalidateServiceRequestTaskPaths(serviceRequestId: string) {
@@ -308,6 +327,223 @@ export async function createTaskRemarkAction(taskId: string, formData: FormData)
   } catch (error) {
     if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
       redirect(withErrorCode(redirectTo, "task-not-found"));
+    }
+    throw error;
+  }
+}
+
+export async function checkInToTaskAction(taskId: string, formData: FormData) {
+  const session = await requirePermission("tasks.check_in");
+  const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), `/tasks/${taskId}`);
+  const parsed = taskWorkSessionSchema.safeParse({
+    note: getFormString(formData, "note"),
+    latitude: getFormString(formData, "latitude"),
+    longitude: getFormString(formData, "longitude"),
+    address: getFormString(formData, "address"),
+  });
+
+  if (!parsed.success) {
+    redirect(withErrorCode(redirectTo, "task-checkin-validation"));
+  }
+
+  try {
+    const result = await checkInToTask(session, taskId, parsed.data);
+    const resolvedTaskId = requireId(result.task.id, "Task id missing after check-in.");
+    const resolvedServiceRequestId = requireId(result.task.serviceRequestId, "Service request id missing after check-in.");
+    await logActivity({
+      action: "task.check_in",
+      module: "tasks",
+      entityType: "TASK",
+      entityId: result.task.id,
+      message: "Task check-in recorded",
+      metadata: {
+        userId: result.session.userId,
+        checkInAt: result.session.checkInAt.toISOString(),
+        locationCaptured: result.locationCaptured,
+      },
+      servicePartnerId: result.task.servicePartnerId,
+    });
+    if (result.locationCaptured) {
+      await logActivity({
+        action: "task.location_captured",
+        module: "tasks",
+        entityType: "TASK",
+        entityId: result.task.id,
+        message: "Task check-in location captured",
+        metadata: {
+          stage: "check_in",
+          userId: result.session.userId,
+        },
+        servicePartnerId: result.task.servicePartnerId,
+      });
+    }
+    revalidateServiceRequestTaskPaths(resolvedServiceRequestId);
+    revalidateTaskDetailPath(resolvedTaskId);
+    redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-checked-in`);
+  } catch (error) {
+    if (error instanceof Error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("active check-in")) {
+        redirect(withErrorCode(redirectTo, "task-checkin-active"));
+      }
+      if (lower.includes("location")) {
+        redirect(withErrorCode(redirectTo, "task-location-required"));
+      }
+      if (lower.includes("assigned task user")) {
+        redirect(withErrorCode(redirectTo, "task-checkin-assignee-only"));
+      }
+      if (lower.includes("not found")) {
+        redirect(withErrorCode(redirectTo, "task-not-found"));
+      }
+    }
+    throw error;
+  }
+}
+
+export async function checkOutOfTaskAction(taskId: string, formData: FormData) {
+  const session = await requirePermission("tasks.check_out");
+  const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), `/tasks/${taskId}`);
+  const parsed = taskWorkSessionSchema.safeParse({
+    note: getFormString(formData, "note"),
+    latitude: getFormString(formData, "latitude"),
+    longitude: getFormString(formData, "longitude"),
+    address: getFormString(formData, "address"),
+  });
+
+  if (!parsed.success) {
+    redirect(withErrorCode(redirectTo, "task-checkout-validation"));
+  }
+
+  try {
+    const result = await checkOutOfTask(session, taskId, parsed.data);
+    const resolvedTaskId = requireId(result.task.id, "Task id missing after check-out.");
+    const resolvedServiceRequestId = requireId(result.task.serviceRequestId, "Service request id missing after check-out.");
+    await logActivity({
+      action: "task.check_out",
+      module: "tasks",
+      entityType: "TASK",
+      entityId: result.task.id,
+      message: "Task check-out recorded",
+      metadata: {
+        userId: result.session.userId,
+        checkOutAt: result.session.checkOutAt?.toISOString() ?? null,
+        durationMinutes: result.session.durationMinutes,
+        locationCaptured: result.locationCaptured,
+      },
+      servicePartnerId: result.task.servicePartnerId,
+    });
+    if (result.locationCaptured) {
+      await logActivity({
+        action: "task.location_captured",
+        module: "tasks",
+        entityType: "TASK",
+        entityId: result.task.id,
+        message: "Task check-out location captured",
+        metadata: {
+          stage: "check_out",
+          userId: result.session.userId,
+        },
+        servicePartnerId: result.task.servicePartnerId,
+      });
+    }
+    revalidateServiceRequestTaskPaths(resolvedServiceRequestId);
+    revalidateTaskDetailPath(resolvedTaskId);
+    redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-checked-out`);
+  } catch (error) {
+    if (error instanceof Error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("no active check-in")) {
+        redirect(withErrorCode(redirectTo, "task-checkout-missing"));
+      }
+      if (lower.includes("location")) {
+        redirect(withErrorCode(redirectTo, "task-location-required"));
+      }
+      if (lower.includes("assigned task user")) {
+        redirect(withErrorCode(redirectTo, "task-checkout-assignee-only"));
+      }
+      if (lower.includes("not found")) {
+        redirect(withErrorCode(redirectTo, "task-not-found"));
+      }
+    }
+    throw error;
+  }
+}
+
+export async function uploadTaskAttachmentAction(taskId: string, formData: FormData) {
+  const session = await requirePermission("tasks.attachments.upload");
+  const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), `/tasks/${taskId}`);
+  const file = getFormFile(formData, "file");
+
+  if (!file) {
+    redirect(withErrorCode(redirectTo, "task-attachment-validation"));
+  }
+
+  try {
+    const result = await uploadTaskAttachment(session, taskId, {
+      file,
+      note: getFormString(formData, "note"),
+    });
+    const resolvedTaskId = requireId(result.task.id, "Task id missing after attachment upload.");
+    const resolvedServiceRequestId = requireId(result.task.serviceRequestId, "Service request id missing after attachment upload.");
+    await logActivity({
+      action: "task.attachment_upload",
+      module: "tasks",
+      entityType: "TASK",
+      entityId: result.task.id,
+      message: "Task proof uploaded",
+      metadata: {
+        attachmentId: result.attachment.id,
+        attachmentType: result.attachment.attachmentType,
+        fileName: result.attachment.fileName,
+      },
+      servicePartnerId: result.task.servicePartnerId,
+    });
+    revalidateServiceRequestTaskPaths(resolvedServiceRequestId);
+    revalidateTaskDetailPath(resolvedTaskId);
+    redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-attachment-uploaded`);
+  } catch (error) {
+    if (error instanceof Error) {
+      const lower = error.message.toLowerCase();
+      if (lower.includes("allowed") || lower.includes("valid proof") || lower.includes("upload limit")) {
+        redirect(withErrorCode(redirectTo, "task-attachment-validation"));
+      }
+      if (lower.includes("configured") || lower.includes("require s3")) {
+        redirect(withErrorCode(redirectTo, "task-attachment-storage"));
+      }
+      if (lower.includes("not found")) {
+        redirect(withErrorCode(redirectTo, "task-not-found"));
+      }
+    }
+    throw error;
+  }
+}
+
+export async function deleteTaskAttachmentAction(taskId: string, attachmentId: string, formData: FormData) {
+  const session = await requirePermission("tasks.attachments.delete");
+  const redirectTo = getSafeRedirectPath(formData.get("redirectTo"), `/tasks/${taskId}`);
+
+  try {
+    const result = await deleteTaskAttachment(session, attachmentId);
+    const resolvedTaskId = requireId(result.task.id, "Task id missing after attachment delete.");
+    const resolvedServiceRequestId = requireId(result.task.serviceRequestId, "Service request id missing after attachment delete.");
+    await logActivity({
+      action: "task.attachment_delete",
+      module: "tasks",
+      entityType: "TASK",
+      entityId: result.task.id,
+      message: "Task proof deleted",
+      metadata: {
+        attachmentId: result.attachment.id,
+        fileName: result.attachment.fileName,
+      },
+      servicePartnerId: result.task.servicePartnerId,
+    });
+    revalidateServiceRequestTaskPaths(resolvedServiceRequestId);
+    revalidateTaskDetailPath(resolvedTaskId);
+    redirect(`${redirectTo}${redirectTo.includes("?") ? "&" : "?"}success=task-attachment-deleted`);
+  } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+      redirect(withErrorCode(redirectTo, "task-attachment-not-found"));
     }
     throw error;
   }

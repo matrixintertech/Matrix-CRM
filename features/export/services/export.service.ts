@@ -10,6 +10,7 @@ import type { Session } from "next-auth";
 
 import { getFinanceReportData } from "@/features/finance-reports/services/finance-report.service";
 import { listTasks } from "@/features/tasks/services/task.service";
+import { getTaskExportMetricsMap } from "@/features/tasks/services/task-work-session.service";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { prisma } from "@/lib/db/prisma";
 import type { ExportRow } from "@/lib/export/csv";
@@ -319,6 +320,7 @@ async function getTaskRows(session: Session, searchParams: SearchParamsLike) {
     scope,
     take: MAX_EXPORT_ROWS,
   });
+  const metricsMap = await getTaskExportMetricsMap(result.tasks.map((row) => row.id));
 
   return result.tasks.map((row) => ({
     taskNumber: row.taskNumber,
@@ -333,6 +335,11 @@ async function getTaskRows(session: Session, searchParams: SearchParamsLike) {
     createdBy: row.createdBy?.name || row.createdBy?.email || "",
     requestedAt: toRowDate(row.requestedAt),
     dueDate: toRowDate(row.dueDate),
+    checkInAt: toRowDate(metricsMap.get(row.id)?.latestCheckInAt),
+    checkOutAt: toRowDate(metricsMap.get(row.id)?.latestCheckOutAt),
+    durationMinutes: metricsMap.get(row.id)?.latestDurationMinutes ?? "",
+    locationPresent: metricsMap.get(row.id)?.hasLocation ?? false,
+    proofCount: metricsMap.get(row.id)?.proofCount ?? 0,
     createdAt: toRowDate(row.createdAt),
     assignmentChain: row.assignmentChain.join(" | "),
   }));

@@ -32,6 +32,7 @@
     "qa:performance": "tsx scripts/performance-qa.ts",
     "qa:responsive": "tsx scripts/responsive-qa.ts",
     "qa:task-hierarchy": "tsx scripts/task-hierarchy-qa.ts",
+    "qa:task-work-session": "tsx scripts/task-work-session-qa.ts",
     "qa:rbac": "tsx scripts/role-permission-qa.ts",
     "qa:quotations": "tsx scripts/quotation-qa.ts",
     "qa:procurement": "tsx scripts/procurement-qa.ts",
@@ -43,6 +44,7 @@
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1063.0",
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^6.8.0",

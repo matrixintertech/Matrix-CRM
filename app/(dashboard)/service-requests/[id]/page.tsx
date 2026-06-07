@@ -24,6 +24,7 @@ import { createTaskAction } from "@/features/tasks/actions/task.actions";
 import { TaskForm } from "@/features/tasks/components/task-form";
 import { TasksTable } from "@/features/tasks/components/tasks-table";
 import { listTaskResponsibilityUsers, listTasksForServiceRequest } from "@/features/tasks/services/task.service";
+import { getTaskExecutionSummaryMap } from "@/features/tasks/services/task-work-session.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
@@ -185,6 +186,17 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
   const responsibilityCandidates = canResponsibilityUpdate
     ? await listResponsibilityCandidates(session, serviceRequest.servicePartnerId)
     : [];
+  const taskExecutionSummaryMap = taskBundle
+    ? await getTaskExecutionSummaryMap(taskBundle.tasks.map((task) => task.id))
+    : null;
+  const enrichedTaskRows =
+    taskBundle?.tasks.map((task) => ({
+      ...task,
+      ...(taskExecutionSummaryMap?.get(task.id) ?? {
+        activeSessionCount: 0,
+        proofCount: 0,
+      }),
+    })) ?? [];
   const mappedQuotations =
     quotationBundle?.quotations.map((quotation) => ({
       ...quotation,
@@ -247,7 +259,7 @@ export default async function ServiceRequestDetailPage({ params, searchParams }:
               <TasksTable
                 serviceRequestId={serviceRequest.id}
                 redirectTo={`/service-requests/${serviceRequest.id}`}
-                tasks={taskBundle.tasks}
+                tasks={enrichedTaskRows}
                 users={taskUsers}
                 canUpdate={canTaskUpdate}
                 canDelete={canTaskDelete}

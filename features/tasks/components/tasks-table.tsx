@@ -52,6 +52,8 @@ type TaskRow = {
     serviceNumber: string;
     title: string;
   };
+  activeSessionCount?: number;
+  proofCount?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -158,6 +160,11 @@ export function TasksTable({
                   {task.assignmentChain.length > 0 ? <p className="break-words text-[var(--muted)]">{task.assignmentChain.join(" | ")}</p> : null}
                 </div>
               </div>
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Execution</p>
+                <p className="text-sm text-slate-900">{task.activeSessionCount && task.activeSessionCount > 0 ? "Checked in" : "No active session"}</p>
+                <p className="text-xs text-[var(--muted)]">{task.proofCount ?? 0} proof file(s)</p>
+              </div>
             </div>
 
             <div className="mt-4 flex flex-col gap-2">
@@ -190,6 +197,7 @@ export function TasksTable({
               <th className="px-3 py-2">Created At</th>
               <th className="px-3 py-2">Requested At</th>
               <th className="px-3 py-2">Due Date</th>
+              <th className="px-3 py-2">Execution</th>
               <th className="px-3 py-2">Hierarchy</th>
               <th className="px-3 py-2">Updated</th>
               <th className="px-3 py-2">Actions</th>
@@ -230,6 +238,12 @@ export function TasksTable({
                 <td className="px-3 py-2">{formatDateTime(task.createdAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.requestedAt)}</td>
                 <td className="px-3 py-2">{formatDateTime(task.dueDate)}</td>
+                <td className="px-3 py-2">
+                  <div className="space-y-1 text-xs text-[var(--muted)]">
+                    <p>{task.activeSessionCount && task.activeSessionCount > 0 ? "Checked in" : "No active session"}</p>
+                    <p>{task.proofCount ?? 0} proof file(s)</p>
+                  </div>
+                </td>
                 <td className="px-3 py-2">
                   <div className="space-y-1 text-xs text-[var(--muted)]">
                     <p>Level {task.hierarchyDepth}{task.parentTaskSummary ? "" : " (top-level)"}</p>

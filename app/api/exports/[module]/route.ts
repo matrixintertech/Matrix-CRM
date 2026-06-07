@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getExportPermissionKey, getExportRows, type ExportModuleKey } from "@/features/export/services/export.service";
+import { logActivity } from "@/lib/activity/activity-log";
 import { getCurrentSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { buildCsv } from "@/lib/export/csv";
@@ -49,11 +50,25 @@ export async function GET(
   const rows = timedRows.result;
   metrics.push(timedRows.metric);
   const filenameBase = `${moduleKey}-${new Date().toISOString().slice(0, 10)}`;
+  const logExport = async (format: string) =>
+    logActivity({
+      action: moduleKey === "tasks" ? "task.export" : `${moduleKey.replaceAll("-", "_")}.export`,
+      module: "exports",
+      entityType: "OTHER",
+      message: `${moduleKey} exported as ${format}`,
+      metadata: {
+        moduleKey,
+        format,
+        rowCount: rows.length,
+      },
+      servicePartnerId: session.user.servicePartnerId,
+    });
 
   if (format === "excel") {
     const timedWorkbook = await measureServerTiming("export-excel", async () => buildExcelWorkbook(rows, moduleKey), "excel build");
     const workbook = timedWorkbook.result;
     metrics.push(timedWorkbook.metric);
+    await logExport("excel");
     return new NextResponse(workbook, {
       headers: withServerTimingHeaders({
         "Content-Type": "application/vnd.ms-excel; charset=utf-8",
@@ -66,6 +81,7 @@ export async function GET(
     const timedPdf = await measureServerTiming("export-pdf", async () => buildPdfDocument(moduleKey, rows), "pdf build");
     const pdf = timedPdf.result;
     metrics.push(timedPdf.metric);
+    await logExport("pdf");
     return new NextResponse(pdf, {
       headers: withServerTimingHeaders({
         "Content-Type": "application/pdf",
@@ -76,6 +92,7 @@ export async function GET(
 
   const timedCsv = await measureServerTiming("export-csv", async () => buildCsv(rows), "csv build");
   metrics.push(timedCsv.metric);
+  await logExport("csv");
 
   return new NextResponse(timedCsv.result, {
     headers: withServerTimingHeaders({

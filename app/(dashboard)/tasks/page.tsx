@@ -11,6 +11,7 @@ import {
   listTasks,
   listTaskServiceRequestOptions,
 } from "@/features/tasks/services/task.service";
+import { getTaskExecutionSummaryMap } from "@/features/tasks/services/task-work-session.service";
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
@@ -125,6 +126,14 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
     email: user.email,
     phone: user.phone,
     roles: user.roles,
+  }));
+  const executionSummaryMap = await getTaskExecutionSummaryMap(result.tasks.map((task) => task.id));
+  const enrichedTasks = result.tasks.map((task) => ({
+    ...task,
+    ...(executionSummaryMap.get(task.id) ?? {
+      activeSessionCount: 0,
+      proofCount: 0,
+    }),
   }));
 
   return (
@@ -296,7 +305,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
         <TasksTable
           serviceRequestId=""
           redirectTo="/tasks"
-          tasks={result.tasks}
+          tasks={enrichedTasks}
           users={taskUsers}
           canUpdate={canUpdate}
           canDelete={canDelete}

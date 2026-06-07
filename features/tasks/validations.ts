@@ -25,6 +25,11 @@ const optionalDate = z.preprocess((value) => {
   return value;
 }, z.date().optional());
 
+const optionalCoordinate = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.coerce.number().min(-180).max(180).optional()
+);
+
 export const createTaskSchema = z.object({
   serviceRequestId: z.string().uuid(),
   parentTaskId: optionalUuid,
@@ -55,7 +60,15 @@ export const createTaskRemarkSchema = z.object({
   remark: z.string().trim().min(2).max(1000),
 });
 
+export const taskWorkSessionSchema = z.object({
+  note: optionalString(1000),
+  latitude: optionalCoordinate,
+  longitude: optionalCoordinate,
+  address: optionalString(240),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export type UpdateTaskStatusInput = z.infer<typeof updateTaskStatusSchema>;
 export type CreateTaskRemarkInput = z.infer<typeof createTaskRemarkSchema>;
+export type TaskWorkSessionInput = z.infer<typeof taskWorkSessionSchema>;

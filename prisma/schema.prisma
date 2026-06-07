@@ -196,6 +196,18 @@ enum MessageType {
   SYSTEM
 }
 
+enum AttachmentType {
+  IMAGE
+  PDF
+  OTHER
+}
+
+enum TimeLogStatus {
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
 enum ActivityEntityType {
   USER
   CLIENT
@@ -983,7 +995,11 @@ model TimeLog {
   punchInLng       Decimal? @db.Decimal(10, 7)
   punchOutLat      Decimal? @db.Decimal(10, 7)
   punchOutLng      Decimal? @db.Decimal(10, 7)
-  notes            String?
+  punchInAddress   String?
+  punchOutAddress  String?
+  punchInNote      String?
+  punchOutNote     String?
+  status           TimeLogStatus @default(CHECKED_IN)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -995,6 +1011,8 @@ model TimeLog {
   @@index([taskId])
   @@index([userId])
   @@index([createdAt])
+  @@index([servicePartnerId, taskId, userId, status])
+  @@index([servicePartnerId, userId, punchOutAt])
 }
 
 model ActivityLog {
@@ -1532,8 +1550,11 @@ model Attachment {
   uploadedByUserId String?
   fileName         String
   fileUrl          String
+  storageKey       String?
   mimeType         String
   fileSize         Int
+  attachmentType   AttachmentType @default(OTHER)
+  note             String?
   createdAt        DateTime @default(now())
   deletedAt        DateTime?
 
@@ -1563,6 +1584,7 @@ model Attachment {
   @@index([invoiceId])
   @@index([expenseId])
   @@index([messageId])
+  @@index([servicePartnerId, taskId, deletedAt])
 }
 
 model Conversation {
