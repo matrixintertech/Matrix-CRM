@@ -56,7 +56,7 @@ export function getStorageDriver() {
   return env().STORAGE_DRIVER;
 }
 
-export function canUploadTaskAttachments() {
+export function canUploadAttachments() {
   const config = env();
   if (config.STORAGE_DRIVER === "disabled") {
     return false;
@@ -67,12 +67,16 @@ export function canUploadTaskAttachments() {
   return true;
 }
 
+export function canUploadTaskAttachments() {
+  return canUploadAttachments();
+}
+
 export async function uploadStorageObject(input: UploadObjectInput) {
   const config = env();
   const key = sanitizeKeySegment(input.key);
 
   if (config.STORAGE_DRIVER === "disabled") {
-    throw new Error("Task proof uploads are disabled.");
+    throw new Error("File uploads are disabled.");
   }
 
   if (config.STORAGE_DRIVER === "local") {
@@ -83,7 +87,7 @@ export async function uploadStorageObject(input: UploadObjectInput) {
   }
 
   if (!config.STORAGE_CONFIGURED) {
-    throw new Error("Task proof storage is not configured.");
+    throw new Error("File storage is not configured.");
   }
 
   const client = getS3Client();
@@ -113,7 +117,7 @@ export async function readStorageObject(key: string, contentType: string): Promi
   }
 
   if (config.STORAGE_DRIVER !== "s3" || !config.STORAGE_CONFIGURED) {
-    throw new Error("Task proof storage is not configured.");
+    throw new Error("File storage is not configured.");
   }
 
   const client = getS3Client();

@@ -1,8 +1,11 @@
-import { Prisma, ServicePartnerStatus } from "@prisma/client";
+import path from "node:path";
+
+import { AttachmentType, Prisma, ServicePartnerStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { ServicePartnerUpsertInput } from "@/features/service-partners/validations";
 import { resolveStateCitySelection } from "@/features/locations/services/location.service";
+import { hasPermission } from "@/lib/auth/permissions";
 import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
 import { invalidateAuthorizationCaches, invalidateLocationCaches, invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
 import { getOrSetServerCache } from "@/lib/cache/server-cache";
@@ -11,6 +14,13 @@ import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
 import { ensureBaselinePermissions, ensureTenantRbac } from "@/lib/rbac/bootstrap";
+import {
+  canUploadAttachments,
+  deleteStorageObject,
+  getStorageDriver,
+  readStorageObject,
+  uploadStorageObject,
+} from "@/lib/storage/storage.service";
 
 type ListServicePartnersInput = {
   q?: string;
@@ -19,12 +29,111 @@ type ListServicePartnersInput = {
   pageSize?: number;
 };
 
+type RawServicePartnerDocument = Prisma.AttachmentGetPayload<{
+  include: {
+    uploadedBy: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+        phone: true;
+      };
+    };
+  };
+}>;
+
+export type ServicePartnerDocumentView = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  attachmentType: AttachmentType;
+  documentLabel: string | null;
+  note: string | null;
+  createdAt: Date;
+  fileUrl: string;
+  uploadedBy: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+};
+
+const ALLOWED_DOCUMENT_TYPES: Record<
+  string,
+  {
+    mimeTypes: string[];
+    attachmentType: AttachmentType;
+  }
+> = {
+  ".jpg": { mimeTypes: ["image/jpeg"], attachmentType: AttachmentType.IMAGE },
+  ".jpeg": { mimeTypes: ["image/jpeg"], attachmentType: AttachmentType.IMAGE },
+  ".png": { mimeTypes: ["image/png"], attachmentType: AttachmentType.IMAGE },
+  ".webp": { mimeTypes: ["image/webp"], attachmentType: AttachmentType.IMAGE },
+  ".pdf": { mimeTypes: ["application/pdf"], attachmentType: AttachmentType.PDF },
+};
+
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
 }
 
 function normalizeEmail(value?: string | null) {
   return value?.trim().toLowerCase() || null;
+}
+
+function normalizeUppercaseOptionalString(value?: string | null) {
+  const normalized = value?.trim();
+  return normalized ? normalized.toUpperCase() : null;
+}
+
+function normalizeAccountNumber(value?: string | null) {
+  const normalized = value?.replace(/\s+/g, "").trim();
+  return normalized || null;
+}
+
+function sanitizeFileName(fileName: string) {
+  const extension = path.extname(fileName).toLowerCase();
+  const baseName = path.basename(fileName, extension).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 80);
+  return {
+    extension,
+    safeFileName: `${baseName || "service-partner-document"}${extension}`,
+  };
+}
+
+function buildServicePartnerDocumentUrl(attachmentId: string) {
+  return `/api/service-partner-attachments/${attachmentId}`;
+}
+
+function mapServicePartnerDocument(row: RawServicePartnerDocument): ServicePartnerDocumentView {
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    mimeType: row.mimeType,
+    fileSize: row.fileSize,
+    attachmentType: row.attachmentType,
+    documentLabel: row.documentLabel,
+    note: row.note,
+    createdAt: row.createdAt,
+    fileUrl: buildServicePartnerDocumentUrl(row.id),
+    uploadedBy: row.uploadedBy,
+  };
+}
+
+async function requireVisibleServicePartner(session: Session, id: string) {
+  const servicePartner = await getServicePartnerById(session, id);
+  if (!servicePartner) {
+    throw new Error("Service partner not found.");
+  }
+  return servicePartner;
+}
+
+async function canReadServicePartnerDocuments(session: Session) {
+  return session.user.isSuperAdmin || (await hasPermission(session, "service_partners.read"));
+}
+
+async function canManageServicePartnerDocuments(session: Session) {
+  return session.user.isSuperAdmin || (await hasPermission(session, "service_partners.update"));
 }
 
 export function getServicePartnerScopeWhere(session: Session): Prisma.ServicePartnerWhereInput {
@@ -175,6 +284,12 @@ export async function createServicePartner(input: ServicePartnerUpsertInput) {
         legalName: normalizeOptionalString(input.legalName),
         email: normalizeEmail(input.email),
         phone: normalizeOptionalString(input.phone),
+        gstNumber: normalizeUppercaseOptionalString(input.gstNumber),
+        shortProfile: normalizeOptionalString(input.shortProfile),
+        bankName: normalizeOptionalString(input.bankName),
+        bankBranch: normalizeOptionalString(input.bankBranch),
+        bankIfscCode: normalizeUppercaseOptionalString(input.bankIfscCode),
+        bankAccountNumber: normalizeAccountNumber(input.bankAccountNumber),
         address: normalizeOptionalString(input.address),
         city: location.city,
         state: location.state,
@@ -226,6 +341,12 @@ export async function updateServicePartner(id: string, input: ServicePartnerUpse
       legalName: normalizeOptionalString(input.legalName),
       email: normalizeEmail(input.email),
       phone: normalizeOptionalString(input.phone),
+      gstNumber: normalizeUppercaseOptionalString(input.gstNumber),
+      shortProfile: normalizeOptionalString(input.shortProfile),
+      bankName: normalizeOptionalString(input.bankName),
+      bankBranch: normalizeOptionalString(input.bankBranch),
+      bankIfscCode: normalizeUppercaseOptionalString(input.bankIfscCode),
+      bankAccountNumber: normalizeAccountNumber(input.bankAccountNumber),
       address: normalizeOptionalString(input.address),
       city: location.city,
       state: location.state,
@@ -262,4 +383,213 @@ export async function softDeleteServicePartner(id: string) {
   await invalidateTenantDataCaches(servicePartner.id);
   await invalidateAuthorizationCaches();
   return servicePartner;
+}
+
+export async function listServicePartnerDocuments(session: Session, servicePartnerId: string) {
+  if (!(await canReadServicePartnerDocuments(session))) {
+    throw new Error("You do not have permission to read service partner documents.");
+  }
+
+  await requireVisibleServicePartner(session, servicePartnerId);
+
+  const attachments = await prisma.attachment.findMany({
+    where: {
+      servicePartnerId,
+      deletedAt: null,
+      serviceRequestId: null,
+      taskId: null,
+      quotationId: null,
+      invoiceId: null,
+      expenseId: null,
+      messageId: null,
+    },
+    include: {
+      uploadedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }],
+  });
+
+  return attachments.map(mapServicePartnerDocument);
+}
+
+export async function uploadServicePartnerDocument(
+  session: Session,
+  servicePartnerId: string,
+  input: { file: File; documentLabel?: string | null; note?: string | null }
+) {
+  return measurePerf("service_partners.document_upload", async () => {
+    if (!(await canManageServicePartnerDocuments(session))) {
+      throw new Error("You do not have permission to manage service partner documents.");
+    }
+
+    if (!canUploadAttachments()) {
+      const driver = getStorageDriver();
+      if (env().IS_PRODUCTION && driver !== "s3") {
+        throw new Error("Service partner document uploads require S3 or R2 storage in production.");
+      }
+      throw new Error("Service partner document uploads are not configured.");
+    }
+
+    const servicePartner = await requireVisibleServicePartner(session, servicePartnerId);
+    const file = input.file;
+    if (!(file instanceof File) || file.size <= 0) {
+      throw new Error("Select a valid document file to upload.");
+    }
+
+    const { extension, safeFileName } = sanitizeFileName(file.name);
+    const allowedType = ALLOWED_DOCUMENT_TYPES[extension];
+    if (!allowedType || !allowedType.mimeTypes.includes(file.type)) {
+      throw new Error("Only JPG, JPEG, PNG, WEBP, and PDF documents are allowed.");
+    }
+
+    const maxBytes = env().TASK_ATTACHMENT_MAX_MB * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error(`Service partner document exceeds the ${env().TASK_ATTACHMENT_MAX_MB}MB upload limit.`);
+    }
+
+    const attachmentId = crypto.randomUUID();
+    const storageKey = `service-partner-documents/${servicePartner.id}/${attachmentId}-${safeFileName}`;
+    const body = new Uint8Array(await file.arrayBuffer());
+
+    await uploadStorageObject({
+      key: storageKey,
+      body,
+      contentType: file.type,
+    });
+
+    try {
+      const created = (await prisma.attachment.create({
+        data: {
+          id: attachmentId,
+          servicePartnerId: servicePartner.id,
+          uploadedByUserId: session.user.id,
+          fileName: safeFileName,
+          fileUrl: buildServicePartnerDocumentUrl(attachmentId),
+          storageKey,
+          mimeType: file.type,
+          fileSize: file.size,
+          attachmentType: allowedType.attachmentType,
+          documentLabel: normalizeOptionalString(input.documentLabel),
+          note: normalizeOptionalString(input.note),
+        },
+        include: {
+          uploadedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      })) as RawServicePartnerDocument;
+
+      await invalidateTenantDataCaches(servicePartner.id);
+      return {
+        servicePartner,
+        document: mapServicePartnerDocument(created),
+      };
+    } catch (error) {
+      await deleteStorageObject(storageKey);
+      throw error;
+    }
+  });
+}
+
+export async function deleteServicePartnerDocument(session: Session, attachmentId: string) {
+  return measurePerf("service_partners.document_delete", async () => {
+    if (!(await canManageServicePartnerDocuments(session))) {
+      throw new Error("You do not have permission to manage service partner documents.");
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: {
+        id: attachmentId,
+        deletedAt: null,
+        serviceRequestId: null,
+        taskId: null,
+        quotationId: null,
+        invoiceId: null,
+        expenseId: null,
+        messageId: null,
+      },
+      include: {
+        uploadedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    if (!attachment) {
+      throw new Error("Service partner document not found.");
+    }
+
+    const servicePartner = await requireVisibleServicePartner(session, attachment.servicePartnerId);
+
+    await prisma.attachment.update({
+      where: { id: attachment.id },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    if (attachment.storageKey) {
+      await deleteStorageObject(attachment.storageKey);
+    }
+
+    await invalidateTenantDataCaches(servicePartner.id);
+    return {
+      servicePartner,
+      document: mapServicePartnerDocument(attachment as RawServicePartnerDocument),
+    };
+  });
+}
+
+export async function getServicePartnerDocumentDownload(session: Session, attachmentId: string) {
+  return measurePerf("service_partners.document_download", async () => {
+    if (!(await canReadServicePartnerDocuments(session))) {
+      throw new Error("You do not have permission to read service partner documents.");
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: {
+        id: attachmentId,
+        deletedAt: null,
+        serviceRequestId: null,
+        taskId: null,
+        quotationId: null,
+        invoiceId: null,
+        expenseId: null,
+        messageId: null,
+      },
+    });
+
+    if (!attachment) {
+      throw new Error("Service partner document not found.");
+    }
+
+    await requireVisibleServicePartner(session, attachment.servicePartnerId);
+    if (!attachment.storageKey) {
+      throw new Error("Stored document is missing its storage key.");
+    }
+
+    const storedObject = await readStorageObject(attachment.storageKey, attachment.mimeType);
+    return {
+      fileName: attachment.fileName,
+      mimeType: storedObject.contentType,
+      body: storedObject.body,
+    };
+  });
 }

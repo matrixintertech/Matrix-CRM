@@ -242,6 +242,12 @@ model ServicePartner {
   status      ServicePartnerStatus @default(ACTIVE)
   email       String?
   phone       String?
+  gstNumber   String?
+  shortProfile String?
+  bankName    String?
+  bankBranch  String?
+  bankIfscCode String?
+  bankAccountNumber String?
   address     String?
   city        String?
   state       String?
@@ -1554,6 +1560,7 @@ model Attachment {
   mimeType         String
   fileSize         Int
   attachmentType   AttachmentType @default(OTHER)
+  documentLabel    String?
   note             String?
   createdAt        DateTime @default(now())
   deletedAt        DateTime?
@@ -1584,6 +1591,7 @@ model Attachment {
   @@index([invoiceId])
   @@index([expenseId])
   @@index([messageId])
+  @@index([servicePartnerId, deletedAt])
   @@index([servicePartnerId, taskId, deletedAt])
 }
 

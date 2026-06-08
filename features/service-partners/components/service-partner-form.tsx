@@ -30,6 +30,12 @@ type ServicePartnerFormProps = {
     legalName: string | null;
     email: string | null;
     phone: string | null;
+    gstNumber: string | null;
+    shortProfile: string | null;
+    bankName: string | null;
+    bankBranch: string | null;
+    bankIfscCode: string | null;
+    bankAccountNumber: string | null;
     address: string | null;
     city: string | null;
     state: string | null;
@@ -200,6 +206,64 @@ export function ServicePartnerForm({ action, cancelHref, errorMessage, states, s
             defaultValue={servicePartner?.phone ?? ""}
             className="h-9 w-full rounded-md border border-[var(--border)] px-3"
             maxLength={30}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">GST No.</span>
+          <input
+            name="gstNumber"
+            defaultValue={servicePartner?.gstNumber ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3 uppercase"
+            maxLength={20}
+            placeholder="29ABCDE1234F1Z5"
+          />
+        </label>
+        <label className="space-y-1 text-sm md:col-span-2">
+          <span className="font-medium">Short profile</span>
+          <textarea
+            name="shortProfile"
+            defaultValue={servicePartner?.shortProfile ?? ""}
+            className="min-h-24 w-full rounded-md border border-[var(--border)] px-3 py-2"
+            maxLength={600}
+            placeholder="Brief company profile, capabilities, and service coverage."
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Bank name</span>
+          <input
+            name="bankName"
+            defaultValue={servicePartner?.bankName ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            maxLength={160}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Bank branch</span>
+          <input
+            name="bankBranch"
+            defaultValue={servicePartner?.bankBranch ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            maxLength={160}
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">IFSC No.</span>
+          <input
+            name="bankIfscCode"
+            defaultValue={servicePartner?.bankIfscCode ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3 uppercase"
+            maxLength={20}
+            placeholder="HDFC0001234"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">A/C No.</span>
+          <input
+            name="bankAccountNumber"
+            defaultValue={servicePartner?.bankAccountNumber ?? ""}
+            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            maxLength={34}
+            inputMode="numeric"
           />
         </label>
         <label className="space-y-1 text-sm md:col-span-2">
