@@ -79,6 +79,8 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
     .toUpperCase();
   const workspaceLabel = session.user.isSuperAdmin ? "Platform workspace" : "Tenant workspace";
   const breadcrumbs = useMemo(() => buildBreadcrumbs(pathname, navigationItems), [navigationItems, pathname]);
+  const quickActionHref = pathname === "/" ? "#dashboard-quick-actions" : "/#dashboard-quick-actions";
+  const alertsHref = pathname === "/" ? "#dashboard-alerts" : "/#dashboard-alerts";
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -100,15 +102,15 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-[#e3eaf6] bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-[#e5ebf6] bg-white/90 backdrop-blur">
       <div className="flex flex-col gap-4 px-3 py-3 sm:px-5 sm:py-4 lg:px-6 xl:px-8">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-start gap-3">
             <button
               type="button"
               aria-label="Toggle sidebar"
               onClick={onToggleSidebar}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#dde6f6] text-[#3f5378] transition hover:bg-[#f6f9ff] xl:hidden"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#dde6f6] text-[#3f5378] transition hover:bg-[#f6f9ff] xl:hidden"
             >
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 7h16M4 12h16M4 17h16" />
@@ -128,21 +130,46 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
             </div>
           </div>
 
-          <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:gap-3 md:w-auto md:justify-end">
+          <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:gap-3 xl:w-auto xl:justify-end">
+            <label className="hidden h-12 w-[340px] items-center gap-3 rounded-2xl border border-[#e2e8f4] bg-[#fbfcff] px-4 xl:flex">
+              <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-[#7b8faf]" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="search"
+                readOnly
+                aria-label="Search across Matrix CRM"
+                value=""
+                placeholder="Search across Matrix CRM..."
+                className="min-w-0 flex-1 border-0 bg-transparent text-sm leading-none text-[#17315d] outline-none placeholder:text-[#9aacc6]"
+              />
+              <span className="rounded-lg border border-[#e1e7f2] bg-white px-2 py-1 text-[11px] font-semibold leading-none text-[#8295b6]">
+                Ctrl K
+              </span>
+            </label>
+
             <Link
-              href="/notifications"
-              aria-label="Notifications"
-              className="grid h-10 w-10 place-items-center rounded-xl border border-[#dde6f6] text-[#213a64] transition hover:bg-[#f6f9ff]"
+              href={alertsHref}
+              aria-label="Alerts"
+              className="relative grid h-10 w-10 place-items-center rounded-2xl border border-[#dde6f6] text-[#213a64] transition hover:bg-[#f6f9ff]"
             >
+              <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-[#ff4d4f]" />
               <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M6 8a6 6 0 0 1 12 0v4.4l1.3 2.4a1 1 0 0 1-.9 1.5H5.6a1 1 0 0 1-.9-1.5L6 12.4V8Z" />
                 <path d="M9.7 18a2.3 2.3 0 0 0 4.6 0" />
               </svg>
             </Link>
+            <Link
+              href={quickActionHref}
+              className="hidden h-11 items-center justify-center rounded-2xl bg-gradient-to-r from-[#4c58ff] to-[#2f66ff] px-5 text-sm font-semibold text-white shadow-[0_14px_28px_rgba(47,102,255,0.28)] transition hover:brightness-105 lg:inline-flex"
+            >
+              + Quick Action
+            </Link>
             <button
               type="button"
               onClick={handleLogout}
-              className="hidden h-10 items-center justify-center rounded-xl border border-[#dbe5f4] bg-[#f7faff] px-4 text-sm font-semibold text-[#214077] transition hover:bg-[#eef4ff] lg:inline-flex"
+              className="hidden h-10 items-center justify-center rounded-2xl border border-[#dbe5f4] bg-[#f7faff] px-4 text-sm font-semibold text-[#214077] transition hover:bg-[#eef4ff] 2xl:inline-flex"
             >
               Logout
             </button>
@@ -150,7 +177,7 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
             <div ref={profileRef} className="relative">
               <button
                 type="button"
-                className="flex items-center gap-3 rounded-2xl border border-[#dbe5f4] bg-white px-2.5 py-2 transition hover:bg-[#f8fbff]"
+                className="flex items-center gap-3 rounded-[22px] border border-[#dbe5f4] bg-white px-2.5 py-2 transition hover:bg-[#f8fbff]"
                 onClick={() => setIsProfileOpen((value) => !value)}
               >
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-[#0b2a67] text-sm font-semibold text-white">
@@ -158,7 +185,11 @@ export function Header({ session, navigationItems, onToggleSidebar }: HeaderProp
                 </div>
                 <div className="hidden max-w-[12rem] text-left lg:block xl:max-w-none">
                   <p className="text-sm font-semibold text-[#102341]">{displayName}</p>
-                  <p className="text-xs text-[#6d82a9]">{roleLabel}</p>
+                  <p className="text-xs text-[#6d82a9]">
+                    {roleLabel}
+                    <span className="mx-1">|</span>
+                    {workspaceLabel}
+                  </p>
                 </div>
                 <svg viewBox="0 0 24 24" className="hidden h-4 w-4 text-[#7a8fb5] lg:block" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="m7 10 5 5 5-5" />

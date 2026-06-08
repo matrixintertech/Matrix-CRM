@@ -42,19 +42,19 @@ const SECTION_MATCHERS: Record<(typeof NAV_SECTION_ORDER)[number], string[]> = {
 function MatrixLogo() {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#3f64ff] to-[#5d86ff]">
+      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#5c63ff] via-[#435bff] to-[#2f66ff] shadow-[0_10px_24px_rgba(64,93,255,0.32)]">
         <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M3 18V6l5.5 6L14 6v12" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M14 18V6l7 12V6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <span className="text-[22px] font-semibold leading-none text-white">Matrix CRM</span>
+      <span className="text-[20px] font-semibold leading-none tracking-tight text-white">Matrix CRM</span>
     </div>
   );
 }
 
 function iconClass(level: number) {
-  return level === 0 ? "h-4.5 w-4.5" : "h-4 w-4";
+  return level === 0 ? "h-[18px] w-[18px]" : "h-4 w-4";
 }
 
 function IconForKey({ keyName, level }: { keyName: string; level: number }) {
@@ -400,7 +400,7 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
       <div className="flex items-start justify-between gap-3 xl:block">
         <div className="min-w-0">
           <MatrixLogo />
-          <p className="mt-3 text-sm leading-6 text-[#a8bee8]">Operations, procurement, finance, and access control in one workspace.</p>
+          <p className="mt-3 text-sm leading-6 text-[#a8bee8]">Platform operations, procurement, finance, and access control in one workspace.</p>
         </div>
         <button
           type="button"
@@ -440,9 +440,20 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
           Development navigation fallback is active.
         </p>
       ) : null}
-      <div className="mt-4 rounded-2xl border border-[#24457d] bg-white/5 px-4 py-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9db6e8]">Navigation</p>
-        <p className="mt-2 text-sm text-[#dbe8ff]">Use the header menu on smaller screens. Long module lists stay scrollable here.</p>
+      <div className="mt-4 rounded-[22px] border border-[#2a477d] bg-gradient-to-br from-[#101f56] to-[#0d1b48] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-[#dbe8ff]">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M12 17v.01" />
+              <path d="M9.1 9a3 3 0 1 1 5.8 1c-.4 1.4-1.8 2-2.3 3" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">Need help?</p>
+            <p className="mt-1 text-xs leading-5 text-[#a8bee8]">Use the header quick actions on smaller screens. Long module lists stay scrollable here.</p>
+          </div>
+        </div>
       </div>
     </aside>
   );

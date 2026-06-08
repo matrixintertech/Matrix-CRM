@@ -37,7 +37,7 @@ export function AppShell({ children, navigationItems, session }: AppShellProps) 
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f4f7fb] text-[#0f2447]">
+    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top,_rgba(227,236,255,0.7),_transparent_28%),linear-gradient(180deg,#f5f7fc_0%,#f3f6fb_100%)] text-[#0f2447]">
       {!isDesktopViewport && isSidebarOpen ? (
         <button
           type="button"
