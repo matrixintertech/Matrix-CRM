@@ -25,6 +25,9 @@ function getErrorMessage(code?: string) {
   if (code === "location") {
     return "Select a valid state and city combination.";
   }
+  if (code === "schema-outdated") {
+    return "This form needs a newer database schema. Apply the latest Prisma migration, then try again.";
+  }
   return undefined;
 }
 

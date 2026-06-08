@@ -29,18 +29,22 @@ type ListServicePartnersInput = {
   pageSize?: number;
 };
 
-type RawServicePartnerDocument = Prisma.AttachmentGetPayload<{
-  include: {
-    uploadedBy: {
-      select: {
-        id: true;
-        name: true;
-        email: true;
-        phone: true;
-      };
-    };
-  };
-}>;
+type ServicePartnerDocumentRecord = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  attachmentType: AttachmentType;
+  documentLabel: string | null;
+  note: string | null;
+  createdAt: Date;
+  uploadedBy: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+};
 
 export type ServicePartnerDocumentView = {
   id: string;
@@ -74,6 +78,115 @@ const ALLOWED_DOCUMENT_TYPES: Record<
   ".pdf": { mimeTypes: ["application/pdf"], attachmentType: AttachmentType.PDF },
 };
 
+const servicePartnerListSelect = {
+  id: true,
+  code: true,
+  name: true,
+  legalName: true,
+  email: true,
+  phone: true,
+  status: true,
+  createdAt: true,
+  _count: {
+    select: {
+      users: true,
+      clients: true,
+      branches: true,
+    },
+  },
+} satisfies Prisma.ServicePartnerSelect;
+
+const servicePartnerDetailSelect = {
+  id: true,
+  code: true,
+  name: true,
+  legalName: true,
+  status: true,
+  email: true,
+  phone: true,
+  gstNumber: true,
+  shortProfile: true,
+  bankName: true,
+  bankBranch: true,
+  bankIfscCode: true,
+  bankAccountNumber: true,
+  address: true,
+  city: true,
+  state: true,
+  country: true,
+  postalCode: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      users: true,
+      clients: true,
+      branches: true,
+    },
+  },
+} satisfies Prisma.ServicePartnerSelect;
+
+const servicePartnerDetailLegacySelect = {
+  id: true,
+  code: true,
+  name: true,
+  legalName: true,
+  status: true,
+  email: true,
+  phone: true,
+  address: true,
+  city: true,
+  state: true,
+  country: true,
+  postalCode: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      users: true,
+      clients: true,
+      branches: true,
+    },
+  },
+} satisfies Prisma.ServicePartnerSelect;
+
+const servicePartnerDocumentSelect = {
+  id: true,
+  fileName: true,
+  mimeType: true,
+  fileSize: true,
+  attachmentType: true,
+  documentLabel: true,
+  note: true,
+  createdAt: true,
+  uploadedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  },
+} satisfies Prisma.AttachmentSelect;
+
+const servicePartnerDocumentLegacySelect = {
+  id: true,
+  fileName: true,
+  mimeType: true,
+  fileSize: true,
+  attachmentType: true,
+  note: true,
+  createdAt: true,
+  uploadedBy: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  },
+} satisfies Prisma.AttachmentSelect;
+
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
 }
@@ -105,7 +218,20 @@ function buildServicePartnerDocumentUrl(attachmentId: string) {
   return `/api/service-partner-attachments/${attachmentId}`;
 }
 
-function mapServicePartnerDocument(row: RawServicePartnerDocument): ServicePartnerDocumentView {
+function isMissingServicePartnerProfileColumnError(error: unknown) {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    ["gstNumber", "shortProfile", "bankName", "bankBranch", "bankIfscCode", "bankAccountNumber"].some((column) =>
+      error.message.includes(`ServicePartner.${column}`)
+    )
+  );
+}
+
+function isMissingServicePartnerDocumentLabelError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.message.includes("Attachment.documentLabel");
+}
+
+function mapServicePartnerDocument(row: ServicePartnerDocumentRecord): ServicePartnerDocumentView {
   return {
     id: row.id,
     fileName: row.fileName,
@@ -190,15 +316,7 @@ export async function listServicePartners(session: Session, input: ListServicePa
           skip: pagination.skip,
           take: pagination.take,
           orderBy: [{ createdAt: "desc" }],
-          include: {
-            _count: {
-              select: {
-                users: true,
-                clients: true,
-                branches: true,
-              },
-            },
-          },
+          select: servicePartnerListSelect,
         }),
         prisma.servicePartner.count({ where }),
       ]);
@@ -224,22 +342,41 @@ export async function listServicePartners(session: Session, input: ListServicePa
 }
 
 export async function getServicePartnerById(session: Session, id: string) {
-  return prisma.servicePartner.findFirst({
-    where: {
-      id,
-      deletedAt: null,
-      ...getServicePartnerScopeWhere(session),
-    },
-    include: {
-      _count: {
-        select: {
-          users: true,
-          clients: true,
-          branches: true,
-        },
-      },
-    },
-  });
+  const where = {
+    id,
+    deletedAt: null,
+    ...getServicePartnerScopeWhere(session),
+  };
+
+  try {
+    return await prisma.servicePartner.findFirst({
+      where,
+      select: servicePartnerDetailSelect,
+    });
+  } catch (error) {
+    if (!isMissingServicePartnerProfileColumnError(error)) {
+      throw error;
+    }
+
+    const servicePartner = await prisma.servicePartner.findFirst({
+      where,
+      select: servicePartnerDetailLegacySelect,
+    });
+
+    if (!servicePartner) {
+      return null;
+    }
+
+    return {
+      ...servicePartner,
+      gstNumber: null,
+      shortProfile: null,
+      bankName: null,
+      bankBranch: null,
+      bankIfscCode: null,
+      bankAccountNumber: null,
+    };
+  }
 }
 
 export async function listServicePartnersForForm(session: Session) {
@@ -392,31 +529,43 @@ export async function listServicePartnerDocuments(session: Session, servicePartn
 
   await requireVisibleServicePartner(session, servicePartnerId);
 
-  const attachments = await prisma.attachment.findMany({
-    where: {
-      servicePartnerId,
-      deletedAt: null,
-      serviceRequestId: null,
-      taskId: null,
-      quotationId: null,
-      invoiceId: null,
-      expenseId: null,
-      messageId: null,
-    },
-    include: {
-      uploadedBy: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-        },
-      },
-    },
-    orderBy: [{ createdAt: "desc" }],
-  });
+  const where = {
+    servicePartnerId,
+    deletedAt: null,
+    serviceRequestId: null,
+    taskId: null,
+    quotationId: null,
+    invoiceId: null,
+    expenseId: null,
+    messageId: null,
+  } satisfies Prisma.AttachmentWhereInput;
 
-  return attachments.map(mapServicePartnerDocument);
+  try {
+    const attachments = await prisma.attachment.findMany({
+      where,
+      select: servicePartnerDocumentSelect,
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    return attachments.map((attachment) => mapServicePartnerDocument(attachment as ServicePartnerDocumentRecord));
+  } catch (error) {
+    if (!isMissingServicePartnerDocumentLabelError(error)) {
+      throw error;
+    }
+
+    const attachments = await prisma.attachment.findMany({
+      where,
+      select: servicePartnerDocumentLegacySelect,
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    return attachments.map((attachment) =>
+      mapServicePartnerDocument({
+        ...(attachment as Omit<ServicePartnerDocumentRecord, "documentLabel">),
+        documentLabel: null,
+      })
+    );
+  }
 }
 
 export async function uploadServicePartnerDocument(
@@ -465,31 +614,50 @@ export async function uploadServicePartnerDocument(
     });
 
     try {
-      const created = (await prisma.attachment.create({
-        data: {
-          id: attachmentId,
-          servicePartnerId: servicePartner.id,
-          uploadedByUserId: session.user.id,
-          fileName: safeFileName,
-          fileUrl: buildServicePartnerDocumentUrl(attachmentId),
-          storageKey,
-          mimeType: file.type,
-          fileSize: file.size,
-          attachmentType: allowedType.attachmentType,
-          documentLabel: normalizeOptionalString(input.documentLabel),
-          note: normalizeOptionalString(input.note),
-        },
-        include: {
-          uploadedBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
+      let created: ServicePartnerDocumentRecord;
+      try {
+        created = (await prisma.attachment.create({
+          data: {
+            id: attachmentId,
+            servicePartnerId: servicePartner.id,
+            uploadedByUserId: session.user.id,
+            fileName: safeFileName,
+            fileUrl: buildServicePartnerDocumentUrl(attachmentId),
+            storageKey,
+            mimeType: file.type,
+            fileSize: file.size,
+            attachmentType: allowedType.attachmentType,
+            documentLabel: normalizeOptionalString(input.documentLabel),
+            note: normalizeOptionalString(input.note),
           },
-        },
-      })) as RawServicePartnerDocument;
+          select: servicePartnerDocumentSelect,
+        })) as ServicePartnerDocumentRecord;
+      } catch (error) {
+        if (!isMissingServicePartnerDocumentLabelError(error)) {
+          throw error;
+        }
+
+        const legacyCreated = await prisma.attachment.create({
+          data: {
+            id: attachmentId,
+            servicePartnerId: servicePartner.id,
+            uploadedByUserId: session.user.id,
+            fileName: safeFileName,
+            fileUrl: buildServicePartnerDocumentUrl(attachmentId),
+            storageKey,
+            mimeType: file.type,
+            fileSize: file.size,
+            attachmentType: allowedType.attachmentType,
+            note: normalizeOptionalString(input.note),
+          },
+          select: servicePartnerDocumentLegacySelect,
+        });
+
+        created = {
+          ...(legacyCreated as Omit<ServicePartnerDocumentRecord, "documentLabel">),
+          documentLabel: null,
+        };
+      }
 
       await invalidateTenantDataCaches(servicePartner.id);
       return {
@@ -509,28 +677,51 @@ export async function deleteServicePartnerDocument(session: Session, attachmentI
       throw new Error("You do not have permission to manage service partner documents.");
     }
 
-    const attachment = await prisma.attachment.findFirst({
-      where: {
-        id: attachmentId,
-        deletedAt: null,
-        serviceRequestId: null,
-        taskId: null,
-        quotationId: null,
-        invoiceId: null,
-        expenseId: null,
-        messageId: null,
-      },
-      include: {
-        uploadedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-          },
+    const where = {
+      id: attachmentId,
+      deletedAt: null,
+      serviceRequestId: null,
+      taskId: null,
+      quotationId: null,
+      invoiceId: null,
+      expenseId: null,
+      messageId: null,
+    } satisfies Prisma.AttachmentWhereInput;
+
+    let attachment: (ServicePartnerDocumentRecord & { servicePartnerId: string; storageKey: string | null }) | null;
+    try {
+      attachment = (await prisma.attachment.findFirst({
+        where,
+        select: {
+          ...servicePartnerDocumentSelect,
+          servicePartnerId: true,
+          storageKey: true,
         },
-      },
-    });
+      })) as (ServicePartnerDocumentRecord & { servicePartnerId: string; storageKey: string | null }) | null;
+    } catch (error) {
+      if (!isMissingServicePartnerDocumentLabelError(error)) {
+        throw error;
+      }
+
+      const legacyAttachment = await prisma.attachment.findFirst({
+        where,
+        select: {
+          ...servicePartnerDocumentLegacySelect,
+          servicePartnerId: true,
+          storageKey: true,
+        },
+      });
+
+      attachment = legacyAttachment
+        ? {
+            ...(legacyAttachment as Omit<ServicePartnerDocumentRecord, "documentLabel"> & {
+              servicePartnerId: string;
+              storageKey: string | null;
+            }),
+            documentLabel: null,
+          }
+        : null;
+    }
 
     if (!attachment) {
       throw new Error("Service partner document not found.");
@@ -552,7 +743,7 @@ export async function deleteServicePartnerDocument(session: Session, attachmentI
     await invalidateTenantDataCaches(servicePartner.id);
     return {
       servicePartner,
-      document: mapServicePartnerDocument(attachment as RawServicePartnerDocument),
+      document: mapServicePartnerDocument(attachment),
     };
   });
 }
@@ -573,6 +764,12 @@ export async function getServicePartnerDocumentDownload(session: Session, attach
         invoiceId: null,
         expenseId: null,
         messageId: null,
+      },
+      select: {
+        servicePartnerId: true,
+        storageKey: true,
+        mimeType: true,
+        fileName: true,
       },
     });
 

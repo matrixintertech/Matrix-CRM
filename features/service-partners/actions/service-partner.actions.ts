@@ -58,6 +58,22 @@ function isUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+function isSchemaBehindCodeError(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  return [
+    "ServicePartner.gstNumber",
+    "ServicePartner.shortProfile",
+    "ServicePartner.bankName",
+    "ServicePartner.bankBranch",
+    "ServicePartner.bankIfscCode",
+    "ServicePartner.bankAccountNumber",
+    "Attachment.documentLabel",
+  ].some((column) => error.message.includes(column));
+}
+
 function assertCanManageServicePartners(isAllowed: boolean) {
   if (!isAllowed) {
     redirectForbidden("/service-partners");
@@ -94,6 +110,9 @@ export async function createServicePartnerAction(formData: FormData) {
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       redirect("/service-partners/new?error=duplicate");
+    }
+    if (isSchemaBehindCodeError(error)) {
+      redirect("/service-partners/new?error=schema-outdated");
     }
     if (error instanceof LocationSelectionError) {
       redirect("/service-partners/new?error=location");
@@ -135,6 +154,9 @@ export async function updateServicePartnerAction(id: string, formData: FormData)
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       redirect(`/service-partners/${id}/edit?error=duplicate`);
+    }
+    if (isSchemaBehindCodeError(error)) {
+      redirect(`/service-partners/${id}/edit?error=schema-outdated`);
     }
     if (error instanceof LocationSelectionError) {
       redirect(`/service-partners/${id}/edit?error=location`);

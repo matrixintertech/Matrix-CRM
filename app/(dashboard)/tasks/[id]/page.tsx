@@ -453,7 +453,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
             </div>
 
             {canAttachmentUpload ? (
-              <form action={uploadTaskAttachmentAction.bind(null, taskId)} className="space-y-3 rounded-2xl border border-[var(--border)] p-4" encType="multipart/form-data">
+              <form action={uploadTaskAttachmentAction.bind(null, taskId)} className="space-y-3 rounded-2xl border border-[var(--border)] p-4">
                 <input type="hidden" name="redirectTo" value={`/tasks/${taskId}`} />
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Proof file</span>
