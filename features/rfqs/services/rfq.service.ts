@@ -9,10 +9,17 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListRfqsInput = {
   q?: string;
   status?: RfqStatus;
+  statusGroup?: RfqStatusGroup;
   vendorId?: string;
+  categoryId?: string;
+  servicePartnerId?: string;
+  dateRange?: RfqDateRange;
   page?: number;
   pageSize?: number;
 };
+
+export type RfqStatusGroup = "open" | "in_progress" | "completed" | "cancelled";
+export type RfqDateRange = "today" | "this_week" | "this_month" | "overdue";
 
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
@@ -81,15 +88,38 @@ export function getRfqScopeWhere(session: Session): Prisma.RfqWhereInput {
   return scopeByTenant(session, {});
 }
 
-export async function listRfqs(session: Session, input: ListRfqsInput) {
-  const pagination = getPagination(input);
+function getStatusesForGroup(group: RfqStatusGroup) {
+  if (group === "open") {
+    return [RfqStatus.DRAFT, RfqStatus.PUBLISHED];
+  }
+  if (group === "in_progress") {
+    return [RfqStatus.QUOTING];
+  }
+  if (group === "completed") {
+    return [RfqStatus.CLOSED];
+  }
+  return [RfqStatus.CANCELLED];
+}
+
+function buildRfqWhere(
+  session: Session,
+  input: Pick<ListRfqsInput, "q" | "status" | "statusGroup" | "vendorId" | "categoryId" | "servicePartnerId" | "dateRange">
+): Prisma.RfqWhereInput {
   const where: Prisma.RfqWhereInput = {
     ...getRfqScopeWhere(session),
     deletedAt: null,
   };
 
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
+  }
+
   if (input.status) {
     where.status = input.status;
+  } else if (input.statusGroup) {
+    where.status = {
+      in: getStatusesForGroup(input.statusGroup),
+    };
   }
 
   if (input.vendorId?.trim()) {
@@ -100,11 +130,85 @@ export async function listRfqs(session: Session, input: ListRfqsInput) {
     };
   }
 
+  if (input.categoryId?.trim()) {
+    where.items = {
+      some: {
+        OR: [
+          { categoryId: input.categoryId.trim() },
+          {
+            item: {
+              categoryId: input.categoryId.trim(),
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  if (input.dateRange) {
+    const now = new Date();
+    const startToday = new Date(now);
+    startToday.setHours(0, 0, 0, 0);
+    const endToday = new Date(startToday);
+    endToday.setHours(23, 59, 59, 999);
+
+    if (input.dateRange === "today") {
+      where.dueDate = {
+        gte: startToday,
+        lte: endToday,
+      };
+    } else if (input.dateRange === "this_week") {
+      const endWeek = new Date(startToday);
+      endWeek.setDate(endWeek.getDate() + 7);
+      endWeek.setHours(23, 59, 59, 999);
+      where.dueDate = {
+        gte: startToday,
+        lte: endWeek,
+      };
+    } else if (input.dateRange === "this_month") {
+      const endMonth = new Date(startToday.getFullYear(), startToday.getMonth() + 1, 0, 23, 59, 59, 999);
+      where.dueDate = {
+        gte: startToday,
+        lte: endMonth,
+      };
+    } else if (input.dateRange === "overdue") {
+      where.dueDate = {
+        lt: now,
+      };
+      where.status = {
+        notIn: [RfqStatus.CLOSED, RfqStatus.CANCELLED],
+      };
+    }
+  }
+
   if (input.q?.trim()) {
     const q = input.q.trim();
     where.OR = [
       { rfqNumber: { contains: q, mode: "insensitive" } },
       { title: { contains: q, mode: "insensitive" } },
+      {
+        servicePartner: {
+          name: { contains: q, mode: "insensitive" },
+        },
+      },
+      {
+        items: {
+          some: {
+            OR: [
+              {
+                category: {
+                  name: { contains: q, mode: "insensitive" },
+                },
+              },
+              {
+                item: {
+                  name: { contains: q, mode: "insensitive" },
+                },
+              },
+            ],
+          },
+        },
+      },
       {
         vendorQuotes: {
           some: {
@@ -116,6 +220,13 @@ export async function listRfqs(session: Session, input: ListRfqsInput) {
       },
     ];
   }
+
+  return where;
+}
+
+export async function listRfqs(session: Session, input: ListRfqsInput) {
+  const pagination = getPagination(input);
+  const where = buildRfqWhere(session, input);
 
   const [rfqs, total] = await Promise.all([
     prisma.rfq.findMany({
@@ -138,6 +249,30 @@ export async function listRfqs(session: Session, input: ListRfqsInput) {
             title: true,
           },
         },
+        items: {
+          take: 3,
+          orderBy: [{ id: "asc" }],
+          select: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            item: {
+              select: {
+                id: true,
+                name: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         _count: {
           select: {
             items: true,
@@ -155,6 +290,145 @@ export async function listRfqs(session: Session, input: ListRfqsInput) {
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalPages: getTotalPages(total, pagination.pageSize),
+  };
+}
+
+export async function listRfqCategoryOptions(session: Session, servicePartnerId?: string) {
+  const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
+
+  return prisma.category.findMany({
+    where: {
+      deletedAt: null,
+      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+      ...scopeByTenant(session, {}),
+    },
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+}
+
+export async function getRfqOverview(
+  session: Session,
+  input: Pick<ListRfqsInput, "q" | "vendorId" | "categoryId" | "servicePartnerId" | "dateRange"> = {}
+) {
+  const where = buildRfqWhere(session, input);
+  const rfqs = await prisma.rfq.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      rfqNumber: true,
+      title: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      dueDate: true,
+      _count: {
+        select: {
+          vendorQuotes: true,
+        },
+      },
+      items: {
+        select: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          item: {
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const totalRfqs = rfqs.length;
+  let openRfqs = 0;
+  let inProgressRfqs = 0;
+  let completedRfqs = 0;
+  let cancelledRfqs = 0;
+  let latestUpdatedAt: Date | null = null;
+
+  const categoryMap = new Map<string, { id: string; name: string; count: number }>();
+
+  for (const rfq of rfqs) {
+    if (!latestUpdatedAt || rfq.updatedAt > latestUpdatedAt) {
+      latestUpdatedAt = rfq.updatedAt;
+    }
+
+    if (rfq.status === RfqStatus.DRAFT || rfq.status === RfqStatus.PUBLISHED) {
+      openRfqs += 1;
+    } else if (rfq.status === RfqStatus.QUOTING) {
+      inProgressRfqs += 1;
+    } else if (rfq.status === RfqStatus.CLOSED) {
+      completedRfqs += 1;
+    } else if (rfq.status === RfqStatus.CANCELLED) {
+      cancelledRfqs += 1;
+    }
+
+    const firstCategory =
+      rfq.items.find((item) => item.category)?.category ??
+      rfq.items.find((item) => item.item.category)?.item.category ??
+      null;
+
+    const categoryId = firstCategory?.id ?? "others";
+    const categoryName = firstCategory?.name ?? "Others";
+    const existing = categoryMap.get(categoryId);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      categoryMap.set(categoryId, {
+        id: categoryId,
+        name: categoryName,
+        count: 1,
+      });
+    }
+  }
+
+  const statusBreakdown = [
+    { key: "open", label: "Open", count: openRfqs, color: "#315cff" },
+    { key: "in_progress", label: "In Progress", count: inProgressRfqs, color: "#ff9a1a" },
+    { key: "completed", label: "Completed", count: completedRfqs, color: "#21c16b" },
+    { key: "cancelled", label: "Cancelled", count: cancelledRfqs, color: "#8d98b6" },
+  ] as const;
+
+  const categoryBreakdown = Array.from(categoryMap.values())
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .map((entry, index) => ({
+      ...entry,
+      color: ["#315cff", "#ff9a1a", "#21c16b", "#8d5bff", "#12a3ff", "#ff6d5a", "#5d76ff", "#8d98b6"][index % 8],
+    }))
+    .slice(0, 6);
+
+  const recentRfqs = rfqs.slice(0, 5).map((rfq) => ({
+    id: rfq.id,
+    rfqNumber: rfq.rfqNumber,
+    title: rfq.title,
+    status: rfq.status,
+  }));
+
+  return {
+    totalRfqs,
+    openRfqs,
+    inProgressRfqs,
+    completedRfqs,
+    cancelledRfqs,
+    latestUpdatedAt,
+    statusBreakdown,
+    categoryBreakdown,
+    recentRfqs,
   };
 }
 

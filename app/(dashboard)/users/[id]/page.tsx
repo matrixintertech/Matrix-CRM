@@ -120,38 +120,43 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
           <div className="crm-panel">
-            <h2 className="mb-4 text-base font-semibold">User details</h2>
-            <dl className="grid gap-3 text-sm md:grid-cols-2">
+            <div className="crm-panel-heading">
               <div>
-                <dt className="text-[var(--muted)]">Name</dt>
+                <h2>User Details</h2>
+                <p>Identity, current company scope, and account status for this client user.</p>
+              </div>
+            </div>
+            <dl className="crm-detail-grid crm-detail-grid--two">
+              <div className="crm-detail-item">
+                <dt>Name</dt>
                 <dd>{formatOptional(user.name)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Email</dt>
+              <div className="crm-detail-item">
+                <dt>Email</dt>
                 <dd>{formatOptional(user.email)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Phone</dt>
+              <div className="crm-detail-item">
+                <dt>Phone</dt>
                 <dd>{formatOptional(user.phone)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Status</dt>
+              <div className="crm-detail-item">
+                <dt>Status</dt>
                 <dd>
                   <StatusBadge value={user.status} />
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Service partner</dt>
+              <div className="crm-detail-item">
+                <dt>Service partner</dt>
                 <dd>
                   {user.servicePartner.name} ({user.servicePartner.code})
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Created</dt>
+              <div className="crm-detail-item">
+                <dt>Created</dt>
                 <dd>{formatDateTime(user.createdAt)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Updated</dt>
+              <div className="crm-detail-item">
+                <dt>Updated</dt>
                 <dd>{formatDateTime(user.updatedAt)}</dd>
               </div>
             </dl>
@@ -165,10 +170,12 @@ export default async function UserDetailPage({ params, searchParams }: UserDetai
           ) : null}
 
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Effective Access</h2>
-            <p className="mb-3 text-sm text-[var(--muted)]">
-              Access is derived from assigned roles. Changing role permissions updates this user automatically.
-            </p>
+            <div className="crm-panel-heading">
+              <div>
+                <h2>Effective Access</h2>
+                <p>Access is derived from assigned roles. Changing role permissions updates this user automatically.</p>
+              </div>
+            </div>
             <div className="mb-4 rounded-md border border-slate-200">
               <div className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 Module Access Summary

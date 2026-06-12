@@ -36,43 +36,39 @@ function toDateInput(value: Date | null | undefined) {
 
 export function PaymentForm({ action, invoiceId, redirectTo, submitLabel, payment, compact = false }: PaymentFormProps) {
   return (
-    <form action={action} className={compact ? "space-y-2" : "space-y-3 rounded-md border border-[var(--border)] p-3"}>
+    <form action={action} className={compact ? "space-y-2" : "crm-form-shell space-y-3"}>
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Amount Paid</span>
+      <div className="crm-form-grid md:grid-cols-2">
+        <label className="crm-field">
+          <span className="crm-field-label">Amount Paid</span>
           <input
             name="amount"
             type="number"
             step="0.01"
             min="0.01"
             defaultValue={payment?.amount ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
             required
           />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Paid Date</span>
+        <label className="crm-field">
+          <span className="crm-field-label">Paid Date</span>
           <input
             name="paymentDate"
             type="date"
             defaultValue={toDateInput(payment?.paymentDate)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
             required
           />
         </label>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Mode</span>
-          <select
-            name="mode"
-            defaultValue={payment?.mode ?? "BANK_TRANSFER"}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-          >
+      <div className="crm-form-grid md:grid-cols-2">
+        <label className="crm-field">
+          <span className="crm-field-label">Mode</span>
+          <select name="mode" defaultValue={payment?.mode ?? "BANK_TRANSFER"} className="crm-select">
             {paymentModeValues.map((mode) => (
               <option key={mode} value={mode}>
                 {mode}
@@ -80,13 +76,9 @@ export function PaymentForm({ action, invoiceId, redirectTo, submitLabel, paymen
             ))}
           </select>
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Status</span>
-          <select
-            name="status"
-            defaultValue={payment?.status ?? PaymentStatus.PAID}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-          >
+        <label className="crm-field">
+          <span className="crm-field-label">Status</span>
+          <select name="status" defaultValue={payment?.status ?? PaymentStatus.PAID} className="crm-select">
             {statusOptions.map((status) => (
               <option key={status} value={status}>
                 {status}
@@ -96,27 +88,27 @@ export function PaymentForm({ action, invoiceId, redirectTo, submitLabel, paymen
         </label>
       </div>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Reference Number</span>
+      <label className="crm-field">
+        <span className="crm-field-label">Reference Number</span>
         <input
           name="referenceNumber"
           defaultValue={payment?.referenceNumber ?? ""}
           maxLength={120}
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+          className="crm-input"
         />
       </label>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Notes</span>
+      <label className="crm-field">
+        <span className="crm-field-label">Notes</span>
         <textarea
           name="notes"
           defaultValue={payment?.notes ?? ""}
           maxLength={1200}
-          className="min-h-20 w-full rounded-md border border-[var(--border)] px-3 py-2"
+          className="crm-textarea"
         />
       </label>
 
-      <button type="submit" className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium">
+      <button type="submit" className="crm-button w-full sm:w-auto">
         {submitLabel}
       </button>
     </form>

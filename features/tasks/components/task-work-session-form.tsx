@@ -139,12 +139,12 @@ export function TaskWorkSessionForm({
       <input type="hidden" name="longitude" />
       <input type="hidden" name="address" />
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">{noteLabel}</span>
+      <label className="crm-field">
+        <span className="crm-field-label">{noteLabel}</span>
         <textarea
           name="note"
           maxLength={1000}
-          className="min-h-24 w-full rounded-xl border border-[var(--border)] px-3 py-2"
+          className="crm-textarea"
           placeholder={notePlaceholder}
         />
       </label>
@@ -154,11 +154,11 @@ export function TaskWorkSessionForm({
           ref={submitRef}
           type="submit"
           disabled={disabled || isLocating}
-          className="min-h-11 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium"
+          className="crm-button w-full"
         >
           {isLocating ? "Capturing location..." : buttonLabel}
         </button>
-        <p className="text-xs text-[var(--muted)]">
+        <p className="crm-field-note">
           {locationRequired
             ? "Location permission is required when you submit this action."
             : "Location is requested only when you submit this action. If permission is denied, the action still continues."}

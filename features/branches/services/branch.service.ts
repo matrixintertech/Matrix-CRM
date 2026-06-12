@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { ClientStatus, Prisma } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { BranchUpsertInput } from "@/features/branches/validations";
@@ -9,9 +9,15 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListBranchesInput = {
   q?: string;
   clientId?: string;
+  servicePartnerId?: string;
+  status?: ClientStatus;
+  state?: string;
+  city?: string;
   page?: number;
   pageSize?: number;
 };
+
+type BranchFilterInput = Omit<ListBranchesInput, "page" | "pageSize">;
 
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
@@ -21,15 +27,32 @@ export function getBranchScopeWhere(session: Session): Prisma.BranchWhereInput {
   return scopeByTenant(session, {});
 }
 
-export async function listBranches(session: Session, input: ListBranchesInput) {
-  const pagination = getPagination(input);
+function buildBranchWhere(session: Session, input: BranchFilterInput): Prisma.BranchWhereInput {
   const where: Prisma.BranchWhereInput = {
     ...getBranchScopeWhere(session),
     deletedAt: null,
   };
 
   if (input.clientId?.trim()) {
-    where.clientId = input.clientId;
+    where.clientId = input.clientId.trim();
+  }
+
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
+  }
+
+  if (input.status) {
+    where.client = {
+      status: input.status,
+    };
+  }
+
+  if (input.state?.trim()) {
+    where.state = input.state.trim();
+  }
+
+  if (input.city?.trim()) {
+    where.city = input.city.trim();
   }
 
   if (input.q?.trim()) {
@@ -39,8 +62,87 @@ export async function listBranches(session: Session, input: ListBranchesInput) {
       { name: { contains: q, mode: "insensitive" } },
       { city: { contains: q, mode: "insensitive" } },
       { state: { contains: q, mode: "insensitive" } },
+      { client: { code: { contains: q, mode: "insensitive" } } },
+      { client: { name: { contains: q, mode: "insensitive" } } },
+      { servicePartner: { code: { contains: q, mode: "insensitive" } } },
+      { servicePartner: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
+
+  return where;
+}
+
+async function listPrimaryContactsByClientIds(clientIds: string[]) {
+  if (clientIds.length === 0) {
+    return new Map<
+      string,
+      {
+        id: string;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        designation: string | null;
+      } | null
+    >();
+  }
+
+  const contacts = await prisma.clientUser.findMany({
+    where: {
+      clientId: {
+        in: clientIds,
+      },
+      deletedAt: null,
+    },
+    select: {
+      clientId: true,
+      designation: true,
+      createdAt: true,
+      reportingToId: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: [{ reportingToId: "asc" }, { createdAt: "asc" }],
+  });
+
+  const map = new Map<
+    string,
+    {
+      id: string;
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      designation: string | null;
+    } | null
+  >();
+
+  for (const clientId of clientIds) {
+    map.set(clientId, null);
+  }
+
+  for (const contact of contacts) {
+    if (!map.get(contact.clientId)) {
+      map.set(contact.clientId, {
+        id: contact.user.id,
+        name: contact.user.name,
+        email: contact.user.email,
+        phone: contact.user.phone,
+        designation: contact.designation,
+      });
+    }
+  }
+
+  return map;
+}
+
+export async function listBranches(session: Session, input: ListBranchesInput) {
+  const pagination = getPagination(input);
+  const where = buildBranchWhere(session, input);
 
   const [branches, total] = await Promise.all([
     prisma.branch.findMany({
@@ -54,6 +156,16 @@ export async function listBranches(session: Session, input: ListBranchesInput) {
             id: true,
             code: true,
             name: true,
+            status: true,
+            _count: {
+              select: {
+                clientUsers: {
+                  where: {
+                    deletedAt: null,
+                  },
+                },
+              },
+            },
           },
         },
         servicePartner: {
@@ -63,18 +175,158 @@ export async function listBranches(session: Session, input: ListBranchesInput) {
             name: true,
           },
         },
+        _count: {
+          select: {
+            serviceRequests: true,
+          },
+        },
       },
     }),
     prisma.branch.count({ where }),
   ]);
+  const contactMap = await listPrimaryContactsByClientIds(
+    Array.from(new Set(branches.map((branch) => branch.clientId)))
+  );
 
   return {
-    branches,
+    branches: branches.map((branch) => ({
+      ...branch,
+      primaryContact: contactMap.get(branch.clientId) ?? null,
+    })),
     total,
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalPages: getTotalPages(total, pagination.pageSize),
   };
+}
+
+export async function getBranchOverview(session: Session, input: Omit<BranchFilterInput, "q" | "clientId">) {
+  const where = buildBranchWhere(session, input);
+  const branches = await prisma.branch.findMany({
+    where,
+    select: {
+      id: true,
+      clientId: true,
+      city: true,
+      createdAt: true,
+      client: {
+        select: {
+          status: true,
+        },
+      },
+    },
+  });
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const totalBranches = branches.length;
+  const activeBranches = branches.filter((branch) => branch.client.status === ClientStatus.ACTIVE).length;
+  const inactiveBranches = totalBranches - activeBranches;
+  const companiesCovered = new Set(branches.map((branch) => branch.clientId)).size;
+  const citiesCovered = new Set(branches.map((branch) => branch.city?.trim()).filter(Boolean)).size;
+  const addedThisMonth = branches.filter((branch) => branch.createdAt >= monthStart).length;
+
+  return {
+    totalBranches,
+    activeBranches,
+    inactiveBranches,
+    companiesCovered,
+    citiesCovered,
+    addedThisMonth,
+  };
+}
+
+export async function listBranchFilterOptions(session: Session, input: Omit<BranchFilterInput, "q" | "city" | "state" | "clientId"> = {}) {
+  const where = buildBranchWhere(session, input);
+  const rows = await prisma.branch.findMany({
+    where,
+    select: {
+      city: true,
+      state: true,
+    },
+    orderBy: [{ state: "asc" }, { city: "asc" }],
+  });
+
+  const states = Array.from(new Set(rows.map((row) => row.state?.trim()).filter(Boolean) as string[]));
+  const cities = Array.from(new Set(rows.map((row) => row.city?.trim()).filter(Boolean) as string[]));
+
+  return { states, cities };
+}
+
+export async function listRecentBranches(session: Session, input: Omit<BranchFilterInput, "q" | "clientId">) {
+  const where = buildBranchWhere(session, input);
+  return prisma.branch.findMany({
+    where,
+    take: 5,
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      client: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          status: true,
+        },
+      },
+      servicePartner: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+    },
+  });
+}
+
+export async function listTopBranchCompanies(session: Session, input: Omit<BranchFilterInput, "q" | "clientId">) {
+  const where = buildBranchWhere(session, input);
+  const branches = await prisma.branch.findMany({
+    where,
+    select: {
+      clientId: true,
+      client: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  return Array.from(
+    branches.reduce<
+      Map<
+        string,
+        {
+          id: string;
+          code: string;
+          name: string;
+          count: number;
+        }
+      >
+    >((map, branch) => {
+      const current = map.get(branch.clientId);
+      if (current) {
+        current.count += 1;
+        return map;
+      }
+
+      map.set(branch.clientId, {
+        id: branch.client.id,
+        code: branch.client.code,
+        name: branch.client.name,
+        count: 1,
+      });
+      return map;
+    }, new Map())
+  )
+    .map(([, value]) => value)
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .slice(0, 5);
 }
 
 export async function getBranchById(session: Session, id: string) {

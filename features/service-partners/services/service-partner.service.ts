@@ -11,6 +11,7 @@ import { invalidateAuthorizationCaches, invalidateLocationCaches, invalidateTena
 import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { env } from "@/lib/config/env";
 import { prisma } from "@/lib/db/prisma";
+import type { ExportRow } from "@/lib/export/csv";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
 import { ensureBaselinePermissions, ensureTenantRbac } from "@/lib/rbac/bootstrap";
@@ -25,9 +26,22 @@ import {
 type ListServicePartnersInput = {
   q?: string;
   status?: ServicePartnerStatus;
+  state?: string;
+  city?: string;
+  onboardingStage?: ServicePartnerOnboardingStage;
   page?: number;
   pageSize?: number;
 };
+
+export const SERVICE_PARTNER_ONBOARDING_STAGES = [
+  "completed",
+  "verification",
+  "documents",
+  "review",
+  "not_started",
+] as const;
+
+export type ServicePartnerOnboardingStage = (typeof SERVICE_PARTNER_ONBOARDING_STAGES)[number];
 
 type ServicePartnerDocumentRecord = {
   id: string;
@@ -86,7 +100,10 @@ const servicePartnerListSelect = {
   email: true,
   phone: true,
   status: true,
+  city: true,
+  state: true,
   createdAt: true,
+  updatedAt: true,
   _count: {
     select: {
       users: true,
@@ -191,6 +208,16 @@ function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
 }
 
+function normalizeOnboardingStage(value?: string | null): ServicePartnerOnboardingStage | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return SERVICE_PARTNER_ONBOARDING_STAGES.includes(value as ServicePartnerOnboardingStage)
+    ? (value as ServicePartnerOnboardingStage)
+    : undefined;
+}
+
 function normalizeEmail(value?: string | null) {
   return value?.trim().toLowerCase() || null;
 }
@@ -276,6 +303,177 @@ export function canManageServicePartners(session: Session) {
   return session.user.isSuperAdmin;
 }
 
+function buildServicePartnerWhere(session: Session, input: Omit<ListServicePartnersInput, "page" | "pageSize">): Prisma.ServicePartnerWhereInput {
+  const where: Prisma.ServicePartnerWhereInput = {
+    ...getServicePartnerScopeWhere(session),
+    deletedAt: null,
+  };
+
+  if (input.status) {
+    where.status = input.status;
+  }
+
+  if (input.state?.trim()) {
+    where.state = input.state.trim();
+  }
+
+  if (input.city?.trim()) {
+    where.city = input.city.trim();
+  }
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    where.OR = [
+      { code: { contains: q, mode: "insensitive" } },
+      { name: { contains: q, mode: "insensitive" } },
+      { legalName: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q, mode: "insensitive" } },
+      { state: { contains: q, mode: "insensitive" } },
+      { city: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  return where;
+}
+
+type ServicePartnerListRow = Prisma.ServicePartnerGetPayload<{ select: typeof servicePartnerListSelect }>;
+
+type ServicePartnerAdminSummary = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  lastLoginAt: Date | null;
+};
+
+function hasOnboardingProfile(row: Pick<ServicePartnerListRow, "legalName" | "email" | "phone" | "state" | "city">) {
+  return Boolean(row.legalName || row.email || row.phone || row.state || row.city);
+}
+
+function deriveOnboardingStage(
+  row: Pick<ServicePartnerListRow, "status" | "legalName" | "email" | "phone" | "state" | "city" | "_count">,
+  adminCount: number
+) {
+  if (row.status === ServicePartnerStatus.ACTIVE) {
+    return {
+      key: "completed" as const,
+      label: "Completed",
+      hint: "Onboarded",
+      progress: 100,
+    };
+  }
+
+  if (row.status === ServicePartnerStatus.REJECTED) {
+    return {
+      key: "review" as const,
+      label: "Review",
+      hint: "Awaiting review",
+      progress: 40,
+    };
+  }
+
+  if (row.status === ServicePartnerStatus.PENDING && adminCount > 0) {
+    return {
+      key: "verification" as const,
+      label: "Verification",
+      hint: "75% complete",
+      progress: 75,
+    };
+  }
+
+  if (row.status === ServicePartnerStatus.PENDING && hasOnboardingProfile(row)) {
+    return {
+      key: "documents" as const,
+      label: "Documents",
+      hint: `${Math.min(row._count.clients + row._count.branches, 4)}/4 completed`,
+      progress: 50,
+    };
+  }
+
+  return {
+    key: "not_started" as const,
+    label: "Not Started",
+    hint: row.status === ServicePartnerStatus.INACTIVE ? "Pending invite" : "Setup pending",
+    progress: 10,
+  };
+}
+
+async function listCompanyAdminsByServicePartnerIds(servicePartnerIds: string[]) {
+  if (servicePartnerIds.length === 0) {
+    return new Map<string, { primaryAdmin: ServicePartnerAdminSummary | null; adminCount: number }>();
+  }
+
+  const admins = await prisma.user.findMany({
+    where: {
+      servicePartnerId: {
+        in: servicePartnerIds,
+      },
+      deletedAt: null,
+      roles: {
+        some: {
+          role: {
+            key: "company_admin",
+            deletedAt: null,
+          },
+        },
+      },
+    },
+    select: {
+      id: true,
+      servicePartnerId: true,
+      name: true,
+      email: true,
+      phone: true,
+      status: true,
+      lastLoginAt: true,
+      createdAt: true,
+    },
+    orderBy: [{ createdAt: "desc" }],
+  });
+
+  const map = new Map<string, { primaryAdmin: ServicePartnerAdminSummary | null; adminCount: number }>();
+
+  for (const servicePartnerId of servicePartnerIds) {
+    map.set(servicePartnerId, { primaryAdmin: null, adminCount: 0 });
+  }
+
+  for (const admin of admins) {
+    const current = map.get(admin.servicePartnerId) ?? { primaryAdmin: null, adminCount: 0 };
+    current.adminCount += 1;
+    if (!current.primaryAdmin) {
+      current.primaryAdmin = {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        phone: admin.phone,
+        status: admin.status,
+        lastLoginAt: admin.lastLoginAt,
+      };
+    }
+    map.set(admin.servicePartnerId, current);
+  }
+
+  return map;
+}
+
+async function buildServicePartnerRows(rows: ServicePartnerListRow[]) {
+  const adminMap = await listCompanyAdminsByServicePartnerIds(rows.map((row) => row.id));
+
+  return rows.map((row) => {
+    const adminInfo = adminMap.get(row.id) ?? { primaryAdmin: null, adminCount: 0 };
+    const onboardingStage = deriveOnboardingStage(row, adminInfo.adminCount);
+
+    return {
+      ...row,
+      companyAdmin: adminInfo.primaryAdmin,
+      companyAdminCount: adminInfo.adminCount,
+      onboardingStage,
+    };
+  });
+}
+
 export async function listServicePartners(session: Session, input: ListServicePartnersInput) {
   return measurePerf("service_partners.list", async () => {
     const pagination = getPagination(input);
@@ -286,30 +484,37 @@ export async function listServicePartners(session: Session, input: ListServicePa
       buildFilterSignature({
         q: input.q?.trim() || null,
         status: input.status ?? null,
+        state: input.state?.trim() || null,
+        city: input.city?.trim() || null,
+        onboardingStage: input.onboardingStage ?? null,
         page: pagination.page,
         pageSize: pagination.pageSize,
       }),
     ].join(":");
-    const where: Prisma.ServicePartnerWhereInput = {
-      ...getServicePartnerScopeWhere(session),
-      deletedAt: null,
-    };
-
-    if (input.status) {
-      where.status = input.status;
-    }
-
-    if (input.q?.trim()) {
-      const q = input.q.trim();
-      where.OR = [
-        { code: { contains: q, mode: "insensitive" } },
-        { name: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-        { phone: { contains: q, mode: "insensitive" } },
-      ];
-    }
+    const where = buildServicePartnerWhere(session, input);
 
     const loadServicePartners = async () => {
+      if (input.onboardingStage) {
+        const servicePartners = await prisma.servicePartner.findMany({
+          where,
+          orderBy: [{ createdAt: "desc" }],
+          select: servicePartnerListSelect,
+        });
+
+        const rows = await buildServicePartnerRows(servicePartners);
+        const filteredRows = rows.filter((row) => row.onboardingStage.key === input.onboardingStage);
+        const start = (pagination.page - 1) * pagination.pageSize;
+        const pagedRows = filteredRows.slice(start, start + pagination.pageSize);
+
+        return {
+          servicePartners: pagedRows,
+          total: filteredRows.length,
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+          totalPages: getTotalPages(filteredRows.length, pagination.pageSize),
+        };
+      }
+
       const [servicePartners, total] = await Promise.all([
         prisma.servicePartner.findMany({
           where,
@@ -321,8 +526,10 @@ export async function listServicePartners(session: Session, input: ListServicePa
         prisma.servicePartner.count({ where }),
       ]);
 
+      const rows = await buildServicePartnerRows(servicePartners);
+
       return {
-        servicePartners,
+        servicePartners: rows,
         total,
         page: pagination.page,
         pageSize: pagination.pageSize,
@@ -339,6 +546,125 @@ export async function listServicePartners(session: Session, input: ListServicePa
 
     return loadServicePartners();
   });
+}
+
+export async function getServicePartnerOverview(
+  session: Session,
+  input: Omit<ListServicePartnersInput, "page" | "pageSize" | "q">
+) {
+  const where = buildServicePartnerWhere(session, input);
+  const servicePartners = await prisma.servicePartner.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+    select: servicePartnerListSelect,
+  });
+  const rows = await buildServicePartnerRows(servicePartners);
+  const filteredRows = input.onboardingStage ? rows.filter((row) => row.onboardingStage.key === input.onboardingStage) : rows;
+
+  const totalCompanies = filteredRows.length;
+  const activeCompanies = filteredRows.filter((row) => row.status === ServicePartnerStatus.ACTIVE).length;
+  const onboardingCompanies = filteredRows.filter((row) => row.onboardingStage.key !== "completed").length;
+  const inactiveCompanies = filteredRows.filter((row) => row.status === ServicePartnerStatus.INACTIVE).length;
+  const companyAdmins = filteredRows.reduce((sum, row) => sum + row.companyAdminCount, 0);
+  const totalBranches = filteredRows.reduce((sum, row) => sum + row._count.branches, 0);
+  const totalClients = filteredRows.reduce((sum, row) => sum + row._count.clients, 0);
+
+  const stageCounts = SERVICE_PARTNER_ONBOARDING_STAGES.map((stage) => ({
+    key: stage,
+    count: filteredRows.filter((row) => row.onboardingStage.key === stage).length,
+  }));
+
+  return {
+    totalCompanies,
+    activeCompanies,
+    onboardingCompanies,
+    inactiveCompanies,
+    companyAdmins,
+    totalBranches,
+    totalClients,
+    stageCounts,
+  };
+}
+
+export async function listServicePartnerFilterOptions(session: Session) {
+  const where: Prisma.ServicePartnerWhereInput = {
+    ...getServicePartnerScopeWhere(session),
+    deletedAt: null,
+  };
+
+  const [states, cities] = await Promise.all([
+    prisma.servicePartner.findMany({
+      where: {
+        ...where,
+        state: {
+          not: null,
+        },
+      },
+      distinct: ["state"],
+      select: {
+        state: true,
+      },
+      orderBy: [{ state: "asc" }],
+    }),
+    prisma.servicePartner.findMany({
+      where: {
+        ...where,
+        city: {
+          not: null,
+        },
+      },
+      distinct: ["city"],
+      select: {
+        city: true,
+      },
+      orderBy: [{ city: "asc" }],
+    }),
+  ]);
+
+  return {
+    states: states.map((entry) => entry.state).filter((value): value is string => Boolean(value)),
+    cities: cities.map((entry) => entry.city).filter((value): value is string => Boolean(value)),
+  };
+}
+
+export async function listRecentServicePartners(session: Session, input: Omit<ListServicePartnersInput, "page" | "pageSize" | "q">) {
+  const where = buildServicePartnerWhere(session, input);
+  const servicePartners = await prisma.servicePartner.findMany({
+    where,
+    take: 5,
+    orderBy: [{ createdAt: "desc" }],
+    select: servicePartnerListSelect,
+  });
+  const rows = await buildServicePartnerRows(servicePartners);
+  return input.onboardingStage ? rows.filter((row) => row.onboardingStage.key === input.onboardingStage) : rows;
+}
+
+export async function exportServicePartners(session: Session, input: Omit<ListServicePartnersInput, "page" | "pageSize">): Promise<ExportRow[]> {
+  const where = buildServicePartnerWhere(session, input);
+  const servicePartners = await prisma.servicePartner.findMany({
+    where,
+    take: 5000,
+    orderBy: [{ createdAt: "desc" }],
+    select: servicePartnerListSelect,
+  });
+  const rows = await buildServicePartnerRows(servicePartners);
+  const filteredRows = input.onboardingStage ? rows.filter((row) => row.onboardingStage.key === input.onboardingStage) : rows;
+
+  return filteredRows.map((row) => ({
+    code: row.code,
+    name: row.name,
+    legalName: row.legalName ?? "",
+    companyAdmin: row.companyAdmin?.name ?? row.companyAdmin?.email ?? "",
+    companyAdminEmail: row.companyAdmin?.email ?? "",
+    state: row.state ?? "",
+    city: row.city ?? "",
+    status: row.status,
+    onboardingStage: row.onboardingStage.label,
+    clients: row._count.clients,
+    branches: row._count.branches,
+    admins: row.companyAdminCount,
+    createdAt: row.createdAt.toISOString(),
+  }));
 }
 
 export async function getServicePartnerById(session: Session, id: string) {

@@ -80,40 +80,40 @@ export function TaskForm({
   task,
   compact = false,
 }: TaskFormProps) {
+  const shellClassName = compact ? "space-y-4" : "crm-form-shell space-y-5";
+  const sectionClassName = compact ? "space-y-4" : "crm-form-section space-y-4";
+
   return (
-    <form action={action} className={compact ? "space-y-2" : "space-y-3 rounded-md border border-[var(--border)] p-3"}>
+    <form action={action} className={shellClassName}>
       <input type="hidden" name="serviceRequestId" value={serviceRequestId} />
       {parentTaskId ? <input type="hidden" name="parentTaskId" value={parentTaskId} /> : null}
       <input type="hidden" name="redirectTo" value={redirectTo} />
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Title</span>
-        <input
-          name="title"
-          defaultValue={task?.title ?? ""}
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-          maxLength={240}
-          required
-        />
-      </label>
+      <div className={sectionClassName}>
+        {!compact ? (
+          <div>
+            <h3 className="crm-form-section-title">{task ? "Update Task" : "New Task"}</h3>
+            <p className="crm-form-section-copy">Keep hierarchy, assignee, and work timing aligned with the parent service request.</p>
+          </div>
+        ) : null}
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Description</span>
-        <textarea
-          name="description"
-          defaultValue={task?.description ?? ""}
-          className="min-h-20 w-full rounded-md border border-[var(--border)] px-3 py-2"
-          maxLength={1000}
-        />
-      </label>
+        <label className="crm-field">
+          <span className="crm-field-label">Title</span>
+          <input name="title" defaultValue={task?.title ?? ""} className="crm-input" maxLength={240} required />
+        </label>
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Responsible User</span>
+        <label className="crm-field">
+          <span className="crm-field-label">Description</span>
+          <textarea name="description" defaultValue={task?.description ?? ""} className="crm-textarea" maxLength={1000} />
+        </label>
+
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field">
+            <span className="crm-field-label">Responsible User</span>
           <select
             name="assigneeUserId"
             defaultValue={task?.assigneeUserId ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-select"
           >
             <option value="">Unassigned</option>
             {users.map((user) => (
@@ -122,13 +122,13 @@ export function TaskForm({
               </option>
             ))}
           </select>
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Status</span>
+          </label>
+          <label className="crm-field">
+            <span className="crm-field-label">Status</span>
           <select
             name="status"
             defaultValue={task?.status ?? TaskStatus.YET_TO_START}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-select"
           >
             {statusOptions.map((status) => (
               <option key={status} value={status}>
@@ -136,51 +136,52 @@ export function TaskForm({
               </option>
             ))}
           </select>
-        </label>
-      </div>
+          </label>
+        </div>
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Created At</span>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field">
+            <span className="crm-field-label">Created At</span>
           <input
             value={task?.createdAt ? toDateTimeLocalInput(task.createdAt) : "Auto-recorded on save"}
             readOnly
-            className="h-9 w-full rounded-md border border-[var(--border)] bg-slate-50 px-3 text-slate-600"
+            className="crm-input"
           />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Requested Date/Time</span>
+          </label>
+          <label className="crm-field">
+            <span className="crm-field-label">Requested Date/Time</span>
           <input
             type="datetime-local"
             name="requestedAt"
             defaultValue={toDateTimeLocalInput(task?.requestedAt)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
           />
-        </label>
-      </div>
+          </label>
+        </div>
 
-      <div className="grid gap-2 md:grid-cols-2">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Start Date</span>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field">
+            <span className="crm-field-label">Start Date</span>
           <input
             type="date"
             name="startDate"
             defaultValue={toDateInput(task?.startDate ?? null)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
           />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Due Date</span>
+          </label>
+          <label className="crm-field">
+            <span className="crm-field-label">Due Date</span>
           <input
             type="date"
             name="dueDate"
             defaultValue={toDateInput(task?.dueDate ?? null)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
           />
-        </label>
+          </label>
+        </div>
       </div>
 
-      <button type="submit" className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium">
+      <button type="submit" className="crm-button w-full sm:w-auto">
         {submitLabel}
       </button>
     </form>

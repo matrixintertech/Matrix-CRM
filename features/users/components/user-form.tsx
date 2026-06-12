@@ -56,29 +56,32 @@ export function UserForm({
   const [servicePartnerId, setServicePartnerId] = useState(selectedServicePartnerId);
 
   return (
-    <form action={action} className="space-y-6 rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+    <form action={action} className="crm-form-shell space-y-5">
       {hiddenFields
         ? Object.entries(hiddenFields).map(([key, value]) => <input key={key} type="hidden" name={key} value={value} />)
         : null}
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">1. Basic Information</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Full Name</span>
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Basic Information</h3>
+          <p className="crm-form-section-copy">Capture the user identity and current account state.</p>
+        </div>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field">
+            <span className="crm-field-label">Full Name</span>
             <input
               name="name"
               defaultValue={user?.name ?? ""}
-              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+              className="crm-input"
               maxLength={120}
             />
           </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Status</span>
+          <label className="crm-field">
+            <span className="crm-field-label">Status</span>
             <select
               name="status"
               defaultValue={user?.status ?? UserStatus.ACTIVE}
-              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+              className="crm-select"
             >
               {Object.values(UserStatus).map((status) => (
                 <option key={status} value={status}>
@@ -90,39 +93,41 @@ export function UserForm({
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">2. Contact Information</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Email</span>
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Contact Information</h3>
+          <p className="crm-form-section-copy">At least one verified contact method is required for access and OTP delivery.</p>
+        </div>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field">
+            <span className="crm-field-label">Email</span>
             <input
               name="email"
               type="email"
               defaultValue={user?.email ?? ""}
-              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+              className="crm-input"
             />
           </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Phone</span>
-            <input
-              name="phone"
-              defaultValue={user?.phone ?? ""}
-              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-            />
+          <label className="crm-field">
+            <span className="crm-field-label">Phone</span>
+            <input name="phone" defaultValue={user?.phone ?? ""} className="crm-input" />
           </label>
         </div>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">3. Company Access</h3>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Service Partner / Company</span>
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Company Access</h3>
+          <p className="crm-form-section-copy">Users stay tenant-scoped to one service partner or company workspace.</p>
+        </div>
+        <label className="crm-field">
+          <span className="crm-field-label">Service Partner / Company</span>
           <select
             name="servicePartnerId"
             value={servicePartnerId}
             onChange={(event) => setServicePartnerId(event.target.value)}
             disabled={!canChooseServicePartner}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3 disabled:bg-slate-50"
+            className="crm-select"
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
@@ -131,24 +136,25 @@ export function UserForm({
             ))}
           </select>
           {!canChooseServicePartner ? <input type="hidden" name="servicePartnerId" value={servicePartnerId} /> : null}
+          <p className="crm-field-note">Platform admins can choose the workspace. Tenant admins stay locked to their own company scope.</p>
         </label>
       </div>
 
-      <div className="space-y-4 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">4. Role Access</h3>
-        <UserRoleSelector
-          roles={roles}
-          initialRoleIds={initialRoleIds}
-          selectedServicePartnerId={servicePartnerId}
-        />
-        <p className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Role Access</h3>
+          <p className="crm-form-section-copy">Assign one or more roles. Permission mapping remains role-based only.</p>
+        </div>
+        <UserRoleSelector roles={roles} initialRoleIds={initialRoleIds} selectedServicePartnerId={servicePartnerId} />
+        <p className="crm-note-card">
           Access is controlled by assigned roles. Edit role permissions from the Roles module.
         </p>
       </div>
 
-      <div className="space-y-2 rounded-xl border border-slate-100 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">5. Login Access</h3>
-        <p className="text-xs text-[var(--muted)]">Users sign in with OTP and password (if configured). At least one of email or phone is required.</p>
+      <div className="crm-form-section space-y-2">
+        <h3 className="crm-form-section-title">Login Access</h3>
+        <p className="crm-form-section-copy">Users sign in with OTP and password if enabled for the environment.</p>
+        <p className="crm-note-card">At least one of email or phone is required so account recovery and OTP delivery remain workable.</p>
       </div>
 
       <FormActions cancelHref={cancelHref} submitLabel={user ? "Update user" : "Create user"} />

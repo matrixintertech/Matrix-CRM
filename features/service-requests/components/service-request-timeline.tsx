@@ -26,7 +26,7 @@ export function ServiceRequestTimeline({ entries }: { entries: TimelineEntry[] }
         const changedBy = entry.changedBy?.name || entry.changedBy?.email || entry.changedBy?.phone || "System";
 
         return (
-          <div key={entry.id} className="rounded-md border border-[var(--border)] px-3 py-3">
+          <div key={entry.id} className="rounded-[20px] border border-[#e8eef8] bg-[#fbfcff] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <StatusBadge value={entry.toStatus} />
               <span className="text-[var(--muted)]">

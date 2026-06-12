@@ -119,24 +119,24 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
   }
 
   return (
-    <form action={updateRolePermissionsAction.bind(null, roleId)} className="space-y-4 rounded-md border border-[var(--border)] bg-white p-5">
+    <form action={updateRolePermissionsAction.bind(null, roleId)} className="crm-panel space-y-4">
       <div className="space-y-1">
-        <h2 className="font-semibold">Role Permissions</h2>
+        <h2 className="text-base font-semibold text-[#122449]">Role Permissions</h2>
         <p className="text-sm text-[var(--muted)]">Permissions are grouped by module and aligned by action so role access stays consistent across CRM flows.</p>
       </div>
 
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+      <div className="crm-note-card">
         Selected: <span className="font-semibold">{selectedPermissionIds.size}</span> permissions across{" "}
         <span className="font-semibold">{selectedModuleCount}</span> modules.
       </div>
 
-      <label className="block space-y-1 text-sm">
-        <span className="font-medium">Search permissions</span>
+      <label className="crm-field">
+        <span className="crm-field-label">Search permissions</span>
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search by key, module, or action"
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+          className="crm-input"
           disabled={isProtectedRole}
         />
       </label>
@@ -150,7 +150,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
               const modulePermissions = Array.from(row.actions.values());
 
               return (
-                <section key={row.module} className="rounded-2xl border border-[var(--border)] bg-white p-4">
+                <section key={row.module} className="rounded-[22px] border border-[#e8eef8] bg-[#fbfcff] p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium text-slate-900">{formatModuleLabel(row.module)}</p>
@@ -160,7 +160,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
                       <button
                         type="button"
                         onClick={() => selectAllForModule(modulePermissions)}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
+                        className="crm-button-subtle px-3 py-2 text-xs"
                         disabled={isProtectedRole}
                       >
                         Select all
@@ -168,7 +168,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
                       <button
                         type="button"
                         onClick={() => clearForModule(modulePermissions)}
-                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium"
+                        className="crm-button-secondary px-3 py-2 text-xs"
                         disabled={isProtectedRole}
                       >
                         Clear
@@ -266,7 +266,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
                           <button
                             type="button"
                             onClick={() => selectAllForModule(modulePermissions)}
-                            className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            className="crm-button-subtle min-h-0 rounded-md px-2 py-1 text-xs"
                             disabled={isProtectedRole}
                           >
                             All
@@ -274,7 +274,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
                           <button
                             type="button"
                             onClick={() => clearForModule(modulePermissions)}
-                            className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                            className="crm-button-secondary min-h-0 rounded-md px-2 py-1 text-xs"
                             disabled={isProtectedRole}
                           >
                             Clear
@@ -297,7 +297,7 @@ export function RolePermissionForm({ roleId, isProtectedRole, permissions, assig
       <button
         type="submit"
         disabled={isProtectedRole}
-        className="w-full rounded-xl bg-[var(--primary)] px-3 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        className="crm-button w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         Save permissions
       </button>

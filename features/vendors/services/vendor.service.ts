@@ -9,6 +9,7 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListVendorsInput = {
   q?: string;
   status?: VendorStatus;
+  vendorType?: string;
   page?: number;
   pageSize?: number;
 };
@@ -21,8 +22,7 @@ export function getVendorScopeWhere(session: Session): Prisma.VendorWhereInput {
   return scopeByTenant(session, {});
 }
 
-export async function listVendors(session: Session, input: ListVendorsInput) {
-  const pagination = getPagination(input);
+function buildVendorWhere(session: Session, input: Pick<ListVendorsInput, "q" | "status" | "vendorType">): Prisma.VendorWhereInput {
   const where: Prisma.VendorWhereInput = {
     ...getVendorScopeWhere(session),
     deletedAt: null,
@@ -30,6 +30,10 @@ export async function listVendors(session: Session, input: ListVendorsInput) {
 
   if (input.status) {
     where.status = input.status;
+  }
+
+  if (input.vendorType?.trim()) {
+    where.vendorType = input.vendorType.trim();
   }
 
   if (input.q?.trim()) {
@@ -40,8 +44,18 @@ export async function listVendors(session: Session, input: ListVendorsInput) {
       { email: { contains: q, mode: "insensitive" } },
       { phone: { contains: q, mode: "insensitive" } },
       { gstNumber: { contains: q, mode: "insensitive" } },
+      { city: { contains: q, mode: "insensitive" } },
+      { state: { contains: q, mode: "insensitive" } },
+      { vendorType: { contains: q, mode: "insensitive" } },
     ];
   }
+
+  return where;
+}
+
+export async function listVendors(session: Session, input: ListVendorsInput) {
+  const pagination = getPagination(input);
+  const where = buildVendorWhere(session, input);
 
   const [vendors, total] = await Promise.all([
     prisma.vendor.findMany({
@@ -57,6 +71,42 @@ export async function listVendors(session: Session, input: ListVendorsInput) {
             name: true,
           },
         },
+        _count: {
+          select: {
+            rfqVendors: true,
+            purchaseOrders: true,
+          },
+        },
+        rfqVendors: {
+          where: {
+            rfq: {
+              deletedAt: null,
+            },
+          },
+          orderBy: [{ createdAt: "desc" }],
+          take: 1,
+          select: {
+            createdAt: true,
+            rfq: {
+              select: {
+                id: true,
+                rfqNumber: true,
+              },
+            },
+          },
+        },
+        purchaseOrders: {
+          where: {
+            deletedAt: null,
+          },
+          orderBy: [{ orderDate: "desc" }],
+          take: 1,
+          select: {
+            id: true,
+            poNumber: true,
+            orderDate: true,
+          },
+        },
       },
     }),
     prisma.vendor.count({ where }),
@@ -68,6 +118,130 @@ export async function listVendors(session: Session, input: ListVendorsInput) {
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalPages: getTotalPages(total, pagination.pageSize),
+  };
+}
+
+export async function listVendorTypeOptions(session: Session) {
+  const vendors = await prisma.vendor.findMany({
+    where: {
+      ...getVendorScopeWhere(session),
+      deletedAt: null,
+      vendorType: {
+        not: null,
+      },
+    },
+    select: {
+      vendorType: true,
+    },
+    orderBy: [{ vendorType: "asc" }],
+  });
+
+  return Array.from(new Set(vendors.map((vendor) => vendor.vendorType?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+export async function getVendorOverview(
+  session: Session,
+  input: Pick<ListVendorsInput, "q" | "vendorType"> = {}
+) {
+  const vendors = await prisma.vendor.findMany({
+    where: buildVendorWhere(session, input),
+    select: {
+      id: true,
+      status: true,
+      isVerified: true,
+      gstNumber: true,
+      panNumber: true,
+      vendorType: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: {
+        select: {
+          rfqVendors: true,
+          purchaseOrders: true,
+        },
+      },
+    },
+  });
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const categoryMap = new Map<string, number>();
+  let totalSuppliers = 0;
+  let activeSuppliers = 0;
+  let pendingVerificationSuppliers = 0;
+  let inactiveSuppliers = 0;
+  let rejectedSuppliers = 0;
+  let preferredSuppliers = 0;
+  let newThisMonth = 0;
+  let missingGstDetails = 0;
+  let pendingVendorDocuments = 0;
+
+  let latestUpdatedAt: Date | null = null;
+
+  for (const vendor of vendors) {
+    totalSuppliers += 1;
+
+    if (!latestUpdatedAt || vendor.updatedAt > latestUpdatedAt) {
+      latestUpdatedAt = vendor.updatedAt;
+    }
+
+    if (vendor.status === "ACTIVE") {
+      activeSuppliers += 1;
+    }
+    if (vendor.status === "PENDING_VERIFICATION") {
+      pendingVerificationSuppliers += 1;
+    }
+    if (vendor.status === "INACTIVE") {
+      inactiveSuppliers += 1;
+    }
+    if (vendor.status === "REJECTED") {
+      rejectedSuppliers += 1;
+    }
+    if (
+      vendor.status === "ACTIVE" &&
+      vendor.isVerified &&
+      (vendor._count.purchaseOrders > 0 || vendor._count.rfqVendors > 1)
+    ) {
+      preferredSuppliers += 1;
+    }
+    if (vendor.createdAt.getMonth() === currentMonth && vendor.createdAt.getFullYear() === currentYear) {
+      newThisMonth += 1;
+    }
+    if (!vendor.gstNumber?.trim()) {
+      missingGstDetails += 1;
+    }
+    if (!vendor.isVerified || !vendor.panNumber?.trim()) {
+      pendingVendorDocuments += 1;
+    }
+
+    const category = vendor.vendorType?.trim() || "General";
+    categoryMap.set(category, (categoryMap.get(category) ?? 0) + 1);
+  }
+
+  const categoryDistribution = Array.from(categoryMap.entries())
+    .map(([name, count], index) => ({
+      id: `${name}-${index}`,
+      name,
+      count,
+      color: ["#315cff", "#8d5bff", "#19b56b", "#ff9a1a", "#12a3ff", "#ff6d5a", "#5d76ff", "#8d98b6"][index % 8],
+    }))
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .slice(0, 8);
+
+  return {
+    totalSuppliers,
+    activeSuppliers,
+    pendingVerificationSuppliers,
+    preferredSuppliers,
+    inactiveSuppliers,
+    rejectedSuppliers,
+    newThisMonth,
+    missingGstDetails,
+    pendingVendorDocuments,
+    latestUpdatedAt,
+    categoryDistribution,
   };
 }
 

@@ -22,7 +22,7 @@ type PurchaseOrderSummaryCardProps = {
 
 export function PurchaseOrderSummaryCard({ purchaseOrder }: PurchaseOrderSummaryCardProps) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="crm-panel">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#6f84ab]">PO Summary</h3>
         <StatusBadge value={purchaseOrder.status} />

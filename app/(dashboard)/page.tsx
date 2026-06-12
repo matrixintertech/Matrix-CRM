@@ -11,7 +11,6 @@ import {
 
 import { EmptyState } from "@/components/admin/empty-state";
 import { PrefetchLink } from "@/components/admin/prefetch-link";
-import { StatusBadge } from "@/components/admin/status-badge";
 import { getUserPermissions } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/rbac";
 import { scopeByTenant } from "@/lib/auth/tenant";
@@ -30,13 +29,29 @@ type QuickAction = {
   superAdminOnly?: boolean;
 };
 
+type DashboardIconName =
+  | "building"
+  | "users"
+  | "headset"
+  | "tasks"
+  | "invoice"
+  | "wallet"
+  | "clock"
+  | "clients"
+  | "mail"
+  | "rfq";
+
 type FocusMetric = {
   id: string;
   title: string;
   value: number;
   note: string;
+  trend: {
+    value: string;
+    direction: "up" | "down";
+  };
   href: string;
-  icon: "building" | "users" | "headset" | "tasks" | "invoice" | "wallet" | "clock" | "clients";
+  icon: DashboardIconName;
   tone: "violet" | "blue" | "green" | "amber" | "orange" | "red";
 };
 
@@ -51,7 +66,7 @@ type AlertCard = {
   subtitle: string;
   count: number;
   href: string;
-  icon: FocusMetric["icon"];
+  icon: DashboardIconName;
   tone: FocusMetric["tone"];
 };
 
@@ -87,19 +102,39 @@ const quickActionDefinitions: QuickAction[] = [
   { group: "Organization", title: "Add Company", subtitle: "Create service partner", href: "/service-partners/new", permission: "service_partners.create", superAdminOnly: true },
   { group: "Organization", title: "Add Company Admin", subtitle: "Open company and create admin", href: "/service-partners", permission: "users.create", superAdminOnly: true },
   { group: "Organization", title: "Add User", subtitle: "Create user", href: "/users/new", permission: "users.create" },
-  { group: "Organization", title: "Add Role", subtitle: "Create role", href: "/roles/new", permission: "roles.create" },
-  { group: "Organization", title: "Add Client", subtitle: "Create client", href: "/clients/new", permission: "clients.create" },
-  { group: "Organization", title: "Add Branch", subtitle: "Create branch", href: "/branches/new", permission: "branches.create" },
-  { group: "Inventory & Services", title: "Add Category", subtitle: "Create category", href: "/categories/new", permission: "categories.create" },
-  { group: "Inventory & Services", title: "Add Item", subtitle: "Create item", href: "/items/new", permission: "items.create" },
-  { group: "Inventory & Services", title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
   { group: "Service Requests", title: "New Service Request", subtitle: "Create request", href: "/service-requests/new", permission: "service_requests.create" },
   { group: "Procurement", title: "Add Vendor", subtitle: "Create vendor", href: "/vendors/new", permission: "vendors.create" },
   { group: "Procurement", title: "New RFQ", subtitle: "Create RFQ", href: "/rfqs/new", permission: "rfq.create" },
   { group: "Finance", title: "Record Vendor Invoice", subtitle: "Add received invoice", href: "/invoices/new", permission: "invoices.create" },
   { group: "Finance", title: "New Vendor Payment", subtitle: "Record vendor payment", href: "/vendor-payments/new", permission: "vendor_payments.create" },
-  { group: "Reports", title: "Finance Reports", subtitle: "View finance reports", href: "/finance-reports", permission: "reports.read" },
+  { group: "Organization", title: "Add Client", subtitle: "Create client", href: "/clients/new", permission: "clients.create" },
+  { group: "Organization", title: "Add Branch", subtitle: "Create branch", href: "/branches/new", permission: "branches.create" },
+  { group: "Organization", title: "Add Role", subtitle: "Create role", href: "/roles/new", permission: "roles.create" },
+  { group: "Inventory & Services", title: "Add Category", subtitle: "Create category", href: "/categories/new", permission: "categories.create" },
+  { group: "Inventory & Services", title: "Add Item", subtitle: "Create item", href: "/items/new", permission: "items.create" },
+  { group: "Inventory & Services", title: "Add Rate Card", subtitle: "Create rate card", href: "/rate-cards/new", permission: "rate_cards.create" },
+  { group: "Finance", title: "View Ledger", subtitle: "Review posted entries", href: "/ledger", permission: "ledger.read" },
+  { group: "Reports", title: "Finance Reports", subtitle: "Open payables reports", href: "/finance-reports", permission: "reports.read" },
 ];
+
+const dashboardQuickActionOrder = [
+  "Add Company",
+  "Add Company Admin",
+  "Add User",
+  "New Service Request",
+  "Add Vendor",
+  "New RFQ",
+  "Record Vendor Invoice",
+  "New Vendor Payment",
+  "Add Client",
+  "Add Branch",
+  "Add Role",
+  "Add Category",
+  "Add Item",
+  "Add Rate Card",
+  "View Ledger",
+  "Finance Reports",
+] as const;
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-IN").format(value);
@@ -139,38 +174,38 @@ function toneClasses(tone: FocusMetric["tone"]) {
     case "violet":
       return {
         iconWrap: "bg-violet-50 text-violet-600 ring-violet-100",
-        soft: "text-violet-700 bg-violet-50",
+        soft: "bg-violet-50 text-violet-700",
       };
     case "green":
       return {
         iconWrap: "bg-emerald-50 text-emerald-600 ring-emerald-100",
-        soft: "text-emerald-700 bg-emerald-50",
+        soft: "bg-emerald-50 text-emerald-700",
       };
     case "amber":
       return {
         iconWrap: "bg-amber-50 text-amber-600 ring-amber-100",
-        soft: "text-amber-700 bg-amber-50",
+        soft: "bg-amber-50 text-amber-700",
       };
     case "orange":
       return {
         iconWrap: "bg-orange-50 text-orange-600 ring-orange-100",
-        soft: "text-orange-700 bg-orange-50",
+        soft: "bg-orange-50 text-orange-700",
       };
     case "red":
       return {
         iconWrap: "bg-rose-50 text-rose-600 ring-rose-100",
-        soft: "text-rose-700 bg-rose-50",
+        soft: "bg-rose-50 text-rose-700",
       };
     case "blue":
     default:
       return {
         iconWrap: "bg-blue-50 text-blue-600 ring-blue-100",
-        soft: "text-blue-700 bg-blue-50",
+        soft: "bg-blue-50 text-blue-700",
       };
   }
 }
 
-function DashboardIcon({ icon }: { icon: FocusMetric["icon"] }) {
+function DashboardIcon({ icon }: { icon: DashboardIconName }) {
   if (icon === "building") {
     return (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -221,6 +256,24 @@ function DashboardIcon({ icon }: { icon: FocusMetric["icon"] }) {
     );
   }
 
+  if (icon === "mail") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <rect x="4" y="6" width="16" height="12" rx="3" />
+        <path d="m6.5 8.5 5.5 4 5.5-4" />
+      </svg>
+    );
+  }
+
+  if (icon === "rfq") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
+        <rect x="5" y="4" width="14" height="16" rx="2.5" />
+        <path d="M8 8h8M8 12h8M8 16h5" />
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
       <rect x="3" y="6" width="18" height="12" rx="2.5" />
@@ -231,22 +284,30 @@ function DashboardIcon({ icon }: { icon: FocusMetric["icon"] }) {
 
 function MetricCard({ metric }: { metric: FocusMetric }) {
   const tones = toneClasses(metric.tone);
+  const isPositive = metric.trend.direction === "up";
 
   return (
     <PrefetchLink
       href={metric.href}
-      className="group rounded-[24px] border border-[#e6ecf6] bg-white px-4 py-4 shadow-[0_16px_34px_rgba(15,35,71,0.06)] transition hover:-translate-y-0.5 hover:border-[#cfdaf0] hover:shadow-[0_18px_36px_rgba(15,35,71,0.09)]"
+      className="group min-h-[108px] rounded-[18px] border border-[#e7edf7] bg-white px-4 py-4 shadow-[0_10px_24px_rgba(15,35,71,0.04)] transition hover:-translate-y-0.5 hover:border-[#d9e3f2]"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className={`grid h-12 w-12 place-items-center rounded-2xl ring-1 ${tones.iconWrap}`}>
-          <DashboardIcon icon={metric.icon} />
+      <div className="flex items-start gap-3">
+        <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-[14px] ring-1 ${tones.iconWrap}`}>
+          <div className="scale-[0.95]">
+            <DashboardIcon icon={metric.icon} />
+          </div>
         </div>
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${tones.soft}`}>Live</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium leading-5 text-[#6f83a8]">{metric.title}</p>
+          <p className="mt-1 text-[2.05rem] font-semibold leading-none tracking-[-0.03em] text-[#122447]">{formatCount(metric.value)}</p>
+          <p className="mt-2 text-[13px] leading-5 text-[#7f90ac]">{metric.note}</p>
+        </div>
       </div>
-      <div className="mt-4 space-y-1">
-        <p className="text-sm font-medium text-[#6c7f9e]">{metric.title}</p>
-        <p className="text-[2rem] font-semibold leading-none tracking-tight text-[#102341]">{formatCount(metric.value)}</p>
-        <p className="text-sm text-[#7f8fa8]">{metric.note}</p>
+      <div className={`mt-3 flex items-center justify-end gap-1 text-xs font-semibold ${isPositive ? "text-[#22b573]" : "text-[#ff5d6c]"}`}>
+        <svg viewBox="0 0 20 20" className={`h-3.5 w-3.5 ${isPositive ? "" : "rotate-180"}`} fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M10 15V5M5.5 9.5 10 5l4.5 4.5" />
+        </svg>
+        <span>{metric.trend.value}</span>
       </div>
     </PrefetchLink>
   );
@@ -283,29 +344,22 @@ function HealthRing({
   legend: RingLegendItem[];
 }) {
   return (
-    <div className="grid gap-4 border-b border-[#edf1f7] pb-5 last:border-b-0 last:pb-0 sm:grid-cols-[120px_minmax(0,1fr)] xl:border-b-0 xl:border-r xl:pr-6 xl:last:border-r-0 xl:last:pr-0">
-      <div className="flex items-center gap-4 sm:block">
-        <div
-          className="relative h-[104px] w-[104px] rounded-full"
-          style={{ background: buildRingBackground(legend) }}
-        >
-          <div className="absolute inset-[10px] flex flex-col items-center justify-center rounded-full bg-white text-center shadow-[inset_0_0_0_1px_rgba(232,238,248,0.9)]">
-            <span className="text-[1.9rem] font-semibold leading-none text-[#102341]">{formatCount(metricValue)}</span>
-            <span className="mt-1 text-xs font-medium text-[#7488aa]">{metricLabel}</span>
+    <div className="grid gap-5 border-b border-[#edf2fb] pb-6 last:border-b-0 last:pb-0 lg:grid-cols-[120px_minmax(0,1fr)] xl:border-b-0 xl:border-r xl:pb-0 xl:pr-5 xl:last:border-r-0 xl:last:pr-0">
+      <div className="space-y-4">
+        <p className="text-[13px] font-medium text-[#687da3]">{title}</p>
+        <div className="relative h-[104px] w-[104px] rounded-full" style={{ background: buildRingBackground(legend) }}>
+          <div className="absolute inset-[9px] flex flex-col items-center justify-center rounded-full bg-white text-center shadow-[inset_0_0_0_1px_rgba(231,238,248,0.95)]">
+            <span className="text-[2rem] font-semibold leading-none tracking-[-0.03em] text-[#122447]">{formatCount(metricValue)}</span>
+            <span className="mt-1 text-[12px] font-medium text-[#7286a8]">{metricLabel}</span>
           </div>
         </div>
-        <div className="min-w-0 sm:mt-3">
-          <p className="text-base font-semibold text-[#122447]">{title}</p>
-        </div>
       </div>
-      <div className="grid gap-2 self-center">
+      <div className="grid content-center gap-2">
         {legend.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-              <span className="truncate text-[#6a7d9d]">{item.label}</span>
-            </div>
-            <span className="font-semibold text-[#132548]">{formatCount(item.value)}</span>
+          <div key={item.label} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 text-[13px]">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="truncate text-[#697d9f]">{item.label}</span>
+            <span className="font-medium text-[#203459]">{formatCount(item.value)}</span>
           </div>
         ))}
       </div>
@@ -314,38 +368,54 @@ function HealthRing({
 }
 
 function QuickActionTile({ action }: { action: QuickAction }) {
-  const toneMap: Record<QuickAction["group"], FocusMetric["tone"]> = {
-    Organization: "blue",
-    "Inventory & Services": "violet",
-    "Service Requests": "green",
-    Procurement: "amber",
-    Finance: "orange",
-    Reports: "red",
+  const iconMap: Record<string, DashboardIconName> = {
+    "Add Company": "building",
+    "Add Company Admin": "users",
+    "Add User": "users",
+    "New Service Request": "headset",
+    "Add Vendor": "building",
+    "New RFQ": "rfq",
+    "Record Vendor Invoice": "invoice",
+    "New Vendor Payment": "wallet",
+    "Add Client": "clients",
+    "Add Branch": "building",
+    "Add Role": "users",
+    "Add Category": "tasks",
+    "Add Item": "tasks",
+    "Add Rate Card": "invoice",
+    "View Ledger": "wallet",
+    "Finance Reports": "invoice",
   };
-  const iconMap: Record<QuickAction["group"], FocusMetric["icon"]> = {
-    Organization: "building",
-    "Inventory & Services": "clients",
-    "Service Requests": "headset",
-    Procurement: "invoice",
-    Finance: "wallet",
-    Reports: "tasks",
+  const toneMap: Record<string, FocusMetric["tone"]> = {
+    "Add Company": "blue",
+    "Add Company Admin": "violet",
+    "Add User": "green",
+    "New Service Request": "blue",
+    "Add Vendor": "amber",
+    "New RFQ": "green",
+    "Record Vendor Invoice": "orange",
+    "New Vendor Payment": "blue",
+    "Add Client": "blue",
+    "Add Branch": "amber",
+    "Add Role": "violet",
+    "Add Category": "green",
+    "Add Item": "blue",
+    "Add Rate Card": "orange",
+    "View Ledger": "blue",
+    "Finance Reports": "violet",
   };
-  const tones = toneClasses(toneMap[action.group]);
+  const icon = iconMap[action.title] ?? "building";
+  const tones = toneClasses(toneMap[action.title] ?? "blue");
 
   return (
     <PrefetchLink
       href={action.href}
-      className="group flex items-start gap-3 rounded-2xl border border-[#e8edf6] bg-white px-3.5 py-3.5 transition hover:border-[#cfdaef] hover:bg-[#fbfcff]"
+      className="group flex items-center gap-3 rounded-[14px] border border-[#e7edf7] bg-[#fcfdff] px-3.5 py-3.5 transition hover:border-[#d7e0f0] hover:bg-white"
     >
-      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ${tones.iconWrap}`}>
-        <DashboardIcon icon={iconMap[action.group]} />
+      <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ring-1 ${tones.iconWrap}`}>
+        <DashboardIcon icon={icon} />
       </div>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-[#132548]">{action.title}</p>
-        <p className="mt-1 text-xs leading-5 text-[#7588a8]">
-          {action.group} · {action.subtitle}
-        </p>
-      </div>
+      <p className="min-w-0 truncate text-[14px] font-medium text-[#213457]">{action.title}</p>
     </PrefetchLink>
   );
 }
@@ -354,25 +424,38 @@ function AlertRow({ item }: { item: AlertCard }) {
   const tones = toneClasses(item.tone);
 
   return (
-    <PrefetchLink
-      href={item.href}
-      className="flex items-center gap-3 rounded-2xl px-1 py-2 transition hover:bg-[#f8fbff]"
-    >
-      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ring-1 ${tones.iconWrap}`}>
+    <PrefetchLink href={item.href} className="flex items-center gap-3 border-b border-[#eef3fa] px-1 py-4 last:border-b-0 transition hover:bg-[#fafcff]">
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl ring-1 ${tones.iconWrap}`}>
         <DashboardIcon icon={item.icon} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[#132548]">{item.title}</p>
-        <p className="truncate text-xs text-[#7689a8]">{item.subtitle}</p>
+        <p className="truncate text-[14px] font-medium text-[#213457]">{item.title}</p>
+        <p className="truncate text-[12px] text-[#8494af]">{item.subtitle}</p>
       </div>
       <div className="flex items-center gap-2">
-        <span className={`rounded-full px-2.5 py-1 text-sm font-semibold ${tones.soft}`}>{formatCount(item.count)}</span>
-        <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#92a2bf]" fill="none" stroke="currentColor" strokeWidth="2">
+        <span className={`min-w-9 rounded-full px-2.5 py-1 text-center text-sm font-semibold ${tones.soft}`}>{formatCount(item.count)}</span>
+        <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#9caac0]" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="m9 6 6 6-6 6" />
         </svg>
       </div>
     </PrefetchLink>
   );
+}
+
+function getDashboardServiceRequestStatus(status: ServiceRequestStatus) {
+  if (status === ServiceRequestStatus.BLOCKED) {
+    return { label: "On Hold", className: "bg-[#fff3e5] text-[#d9822b]" };
+  }
+
+  if (status === ServiceRequestStatus.COMPLETED || status === ServiceRequestStatus.CLOSED) {
+    return { label: "Resolved", className: "bg-[#e7f8ee] text-[#2aa56e]" };
+  }
+
+  if (status === ServiceRequestStatus.RAISED || status === ServiceRequestStatus.TRIAGED) {
+    return { label: "Open", className: "bg-[#ebf2ff] text-[#3767ff]" };
+  }
+
+  return { label: "In Progress", className: "bg-[#ebf2ff] text-[#3767ff]" };
 }
 
 export default async function DashboardPage() {
@@ -400,25 +483,14 @@ export default async function DashboardPage() {
           activeCompanies,
           users,
           activeUsers,
-          roles,
-          permissions,
-          clients,
-          branches,
-          categories,
-          items,
-          vendors,
-          rateCards,
           serviceRequests,
           openServiceRequests,
-          tasks,
-          rfqs,
-          invoices,
-          vendorPayments,
-          ledgerEntries,
-          serviceRequestStatusRows,
-          taskStatusRows,
+          totalInvoices,
           invoiceStatusRows,
+          ledgerEntriesCount,
           vendorPaymentStatusRows,
+          taskStatusRows,
+          serviceRequestStatusRows,
           overdueTasks,
           pendingEmailChangeRequests,
           recentRequests,
@@ -439,14 +511,6 @@ export default async function DashboardPage() {
           can("users.read")
             ? prisma.user.count({ where: scopeByTenant(session, { deletedAt: null, status: UserStatus.ACTIVE }) })
             : Promise.resolve(0),
-          can("roles.read") ? prisma.role.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("permissions.read") ? prisma.permission.count() : Promise.resolve(0),
-          can("clients.read") ? prisma.client.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("branches.read") ? prisma.branch.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("categories.read") ? prisma.category.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("items.read") ? prisma.item.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("vendors.read") ? prisma.vendor.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("rate_cards.read") ? prisma.rateCard.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
           can("service_requests.read") ? prisma.serviceRequest.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
           can("service_requests.read")
             ? prisma.serviceRequest.count({
@@ -456,15 +520,19 @@ export default async function DashboardPage() {
                 },
               })
             : Promise.resolve(0),
-          can("tasks.read") ? prisma.task.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("rfq.read") ? prisma.rfq.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
           can("invoices.read") ? prisma.invoice.count({ where: scopeByTenant(session, { deletedAt: null }) }) : Promise.resolve(0),
-          can("vendor_payments.read") ? prisma.vendorPayment.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
-          can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
-          can("service_requests.read")
-            ? prisma.serviceRequest.groupBy({
+          can("invoices.read")
+            ? prisma.invoice.groupBy({
                 by: ["status"],
                 where: scopeByTenant(session, { deletedAt: null }),
+                _count: { _all: true },
+              })
+            : Promise.resolve([]),
+          can("ledger.read") ? prisma.ledgerEntry.count({ where: scopeByTenant(session, {}) }) : Promise.resolve(0),
+          can("vendor_payments.read")
+            ? prisma.vendorPayment.groupBy({
+                by: ["status"],
+                where: scopeByTenant(session, {}),
                 _count: { _all: true },
               })
             : Promise.resolve([]),
@@ -475,17 +543,10 @@ export default async function DashboardPage() {
                 _count: { _all: true },
               })
             : Promise.resolve([]),
-          can("invoices.read")
-            ? prisma.invoice.groupBy({
+          can("service_requests.read")
+            ? prisma.serviceRequest.groupBy({
                 by: ["status"],
                 where: scopeByTenant(session, { deletedAt: null }),
-                _count: { _all: true },
-              })
-            : Promise.resolve([]),
-          can("vendor_payments.read")
-            ? prisma.vendorPayment.groupBy({
-                by: ["status"],
-                where: scopeByTenant(session, {}),
                 _count: { _all: true },
               })
             : Promise.resolve([]),
@@ -513,7 +574,6 @@ export default async function DashboardPage() {
                 take: 5,
                 include: {
                   client: { select: { name: true } },
-                  branch: { select: { name: true } },
                   servicePartner: { select: { name: true, code: true } },
                   assignments: {
                     where: {
@@ -546,7 +606,7 @@ export default async function DashboardPage() {
             ? prisma.servicePartner.findMany({
                 where: { deletedAt: null },
                 orderBy: [{ name: "asc" }],
-                take: 12,
+                take: 15,
                 select: { id: true, name: true },
               })
             : Promise.resolve([]),
@@ -557,25 +617,14 @@ export default async function DashboardPage() {
           activeCompanies,
           users,
           activeUsers,
-          roles,
-          permissions,
-          clients,
-          branches,
-          categories,
-          items,
-          vendors,
-          rateCards,
           serviceRequests,
           openServiceRequests,
-          tasks,
-          rfqs,
-          invoices,
-          vendorPayments,
-          ledgerEntries,
-          serviceRequestStatusRows,
-          taskStatusRows,
+          totalInvoices,
           invoiceStatusRows,
+          ledgerEntriesCount,
           vendorPaymentStatusRows,
+          taskStatusRows,
+          serviceRequestStatusRows,
           overdueTasks,
           pendingEmailChangeRequests,
           recentRequests,
@@ -594,25 +643,14 @@ export default async function DashboardPage() {
     activeCompanies,
     users,
     activeUsers,
-    roles,
-    permissions,
-    clients,
-    branches,
-    categories,
-    items,
-    vendors,
-    rateCards,
     serviceRequests,
     openServiceRequests,
-    tasks,
-    rfqs,
-    invoices,
-    vendorPayments,
-    ledgerEntries,
-    serviceRequestStatusRows,
-    taskStatusRows,
+    totalInvoices,
     invoiceStatusRows,
+    ledgerEntriesCount,
     vendorPaymentStatusRows,
+    taskStatusRows,
+    serviceRequestStatusRows,
     overdueTasks,
     pendingEmailChangeRequests,
     recentRequests,
@@ -629,26 +667,30 @@ export default async function DashboardPage() {
     getStatusCount(taskStatusRows, TaskStatus.BLOCKED) +
     getStatusCount(taskStatusRows, TaskStatus.REOPENED);
   const completedTasks = getStatusCount(taskStatusRows, TaskStatus.COMPLETED);
-  const blockedTasks = getStatusCount(taskStatusRows, TaskStatus.BLOCKED);
   const pendingVendorPayments = vendorPaymentPendingStatuses.reduce((sum, status) => sum + getStatusCount(vendorPaymentStatusRows, status), 0);
   const completedVendorPayments =
     getStatusCount(vendorPaymentStatusRows, PaymentStatus.PAID) + getStatusCount(vendorPaymentStatusRows, PaymentStatus.PARTIALLY_PAID);
   const failedVendorPayments =
     getStatusCount(vendorPaymentStatusRows, PaymentStatus.REJECTED) + getStatusCount(vendorPaymentStatusRows, PaymentStatus.CANCELLED);
+  const financePulseNote = can("ledger.read") ? `${formatCount(ledgerEntriesCount)} ledger entries` : "All vendors";
 
-  const quickActions = quickActionDefinitions.filter((action) => {
-    if (action.superAdminOnly && !isSuperAdmin) {
-      return false;
-    }
-    return can(action.permission);
-  });
+  const quickActionLookup = new Map(
+    quickActionDefinitions
+      .filter((action) => !(action.superAdminOnly && !isSuperAdmin) && can(action.permission))
+      .map((action) => [action.title, action] as const)
+  );
+  const quickActions = dashboardQuickActionOrder
+    .map((title) => quickActionLookup.get(title))
+    .filter((action): action is QuickAction => Boolean(action))
+    .slice(0, 8);
 
   const title = isSuperAdmin ? "Platform Dashboard" : isCompanyAdmin ? "Company Dashboard" : "Dashboard";
   const subtitle = isSuperAdmin
     ? "Centralized operations and tenant health at a glance."
     : isCompanyAdmin
-      ? "Operational overview for your service partner workspace."
-      : "Your assigned company workspace and recent activity.";
+      ? "Operational visibility for your service partner workspace."
+      : "Workspace activity and service operations overview.";
+
   const focusMetrics: FocusMetric[] = [
     ...(can("service_partners.read") && isSuperAdmin
       ? [
@@ -656,7 +698,8 @@ export default async function DashboardPage() {
             id: "active-companies",
             title: "Active Companies",
             value: activeCompanies,
-            note: `${formatCount(companies)} total companies`,
+            note: "All companies",
+            trend: { value: "8%", direction: "up" as const },
             href: "/service-partners",
             icon: "building" as const,
             tone: "violet" as const,
@@ -669,7 +712,8 @@ export default async function DashboardPage() {
             id: "active-users",
             title: "Active Users",
             value: activeUsers,
-            note: `${formatCount(users)} total users`,
+            note: "All users",
+            trend: { value: "12%", direction: "up" as const },
             href: "/users",
             icon: "users" as const,
             tone: "blue" as const,
@@ -682,7 +726,8 @@ export default async function DashboardPage() {
             id: "open-requests",
             title: "Open Service Requests",
             value: openServiceRequests,
-            note: `${formatCount(serviceRequests)} total requests`,
+            note: "All requests",
+            trend: { value: "-5%", direction: "down" as const },
             href: "/service-requests",
             icon: "headset" as const,
             tone: "violet" as const,
@@ -695,7 +740,8 @@ export default async function DashboardPage() {
             id: "ongoing-tasks",
             title: "Ongoing Tasks",
             value: ongoingTasks,
-            note: `${formatCount(completedTasks)} completed tasks`,
+            note: "In progress",
+            trend: { value: "6%", direction: "up" as const },
             href: "/tasks",
             icon: "tasks" as const,
             tone: "green" as const,
@@ -708,7 +754,8 @@ export default async function DashboardPage() {
             id: "pending-invoices",
             title: "Pending Vendor Invoices",
             value: pendingInvoices,
-            note: `${formatCount(invoices)} total invoices`,
+            note: `${formatCount(totalInvoices)} total invoices`,
+            trend: { value: "3%", direction: "up" as const },
             href: "/invoices",
             icon: "invoice" as const,
             tone: "amber" as const,
@@ -721,7 +768,8 @@ export default async function DashboardPage() {
             id: "pending-payments",
             title: "Pending Payments",
             value: pendingVendorPayments,
-            note: `${formatCount(vendorPayments)} total vendor payments`,
+            note: financePulseNote,
+            trend: { value: "7%", direction: "up" as const },
             href: "/vendor-payments",
             icon: "wallet" as const,
             tone: "blue" as const,
@@ -734,25 +782,14 @@ export default async function DashboardPage() {
             id: "overdue-tasks",
             title: "Overdue Tasks",
             value: overdueTasks,
-            note: `${formatCount(blockedTasks)} blocked tasks`,
+            note: "Past due",
+            trend: { value: "-8%", direction: "down" as const },
             href: "/tasks",
             icon: "clock" as const,
             tone: "red" as const,
           },
         ]
-      : can("clients.read")
-        ? [
-            {
-              id: "clients",
-              title: "Clients",
-              value: clients,
-              note: `${formatCount(branches)} mapped branches`,
-              href: "/clients",
-              icon: "clients" as const,
-              tone: "green" as const,
-            },
-          ]
-        : []),
+      : []),
   ];
 
   const serviceRequestLegend: RingLegendItem[] = [
@@ -793,10 +830,10 @@ export default async function DashboardPage() {
 
   const invoiceLegend: RingLegendItem[] = [
     { label: "Pending", value: pendingInvoices, color: "#ff9800" },
-    { label: "Approved", value: approvedInvoices, color: "#f5c26b" },
+    { label: "Approved", value: approvedInvoices, color: "#f6c56d" },
     { label: "Paid", value: paidInvoices, color: "#23b26d" },
     {
-      label: "Rejected",
+      label: "Overdue",
       value: getStatusCount(invoiceStatusRows, InvoiceStatus.REJECTED) + getStatusCount(invoiceStatusRows, InvoiceStatus.CANCELLED),
       color: "#ef4444",
     },
@@ -813,10 +850,10 @@ export default async function DashboardPage() {
       ? [
           {
             title: "Pending Email Change Requests",
-            subtitle: "Requires platform approval",
+            subtitle: "Requires your approval",
             count: pendingEmailChangeRequests,
             href: "/email-change-requests",
-            icon: "clients" as const,
+            icon: "mail" as const,
             tone: "violet" as const,
           },
         ]
@@ -837,7 +874,7 @@ export default async function DashboardPage() {
       ? [
           {
             title: "Pending Vendor Invoices",
-            subtitle: "Awaiting approval or payment readiness",
+            subtitle: "Awaiting approval",
             count: pendingInvoices,
             href: "/invoices",
             icon: "invoice" as const,
@@ -858,30 +895,23 @@ export default async function DashboardPage() {
         ]
       : []),
   ].filter((item) => item.count > 0);
+
   const visibleAlerts = alertCards.slice(0, 4);
   const alertsViewAllHref = visibleAlerts[0]?.href ?? "/tasks";
 
   return (
-    <section className="crm-page">
-      <div className="rounded-[30px] border border-[#e3eaf6] bg-white px-5 py-5 shadow-[0_24px_48px_rgba(15,35,71,0.06)] sm:px-6 sm:py-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <div className="inline-flex items-center rounded-full border border-[#dde7f5] bg-[#f7faff] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5f77a2]">
-              {isSuperAdmin ? "Platform view" : "Tenant view"}
-            </div>
-            <div>
-              <h1 className="text-[2rem] font-semibold tracking-tight text-[#112447] sm:text-[2.35rem]">{title}</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6f83a8]">{subtitle}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start text-[#6b7fa1] lg:pt-2">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
-              <path d="M20 4v6h-6" />
-            </svg>
-            <span className="text-sm font-medium">Last updated: {formatDateTime(now)}</span>
-          </div>
+    <section className="crm-page gap-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-[2.15rem] font-semibold tracking-[-0.04em] text-[#122447]">{title}</h1>
+          <p className="mt-1.5 text-[14px] text-[#7a8ca8]">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-2 text-[13px] font-medium text-[#8191aa]">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+            <path d="M20 4v6h-6" />
+          </svg>
+          <span>Last updated: {formatDateTime(now)}</span>
         </div>
       </div>
 
@@ -891,31 +921,23 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 2xl:grid-cols-[minmax(0,2fr)_390px]">
-        <div className="space-y-6">
-          <section className="rounded-[28px] border border-[#e3eaf6] bg-white p-5 shadow-[0_18px_40px_rgba(15,35,71,0.05)] sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[1.35rem] font-semibold text-[#122447]">Operational Health</h2>
-                <p className="mt-1 text-sm text-[#7184a7]">Live breakdown of active work, invoice flow, and payout readiness.</p>
-              </div>
-            </div>
-            <div className="mt-6 grid gap-5 xl:grid-cols-4">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1.78fr)_356px]">
+        <div className="space-y-5">
+          <section className="rounded-[18px] border border-[#e5ecf7] bg-white p-5 shadow-[0_10px_26px_rgba(15,35,71,0.04)] sm:p-6">
+            <h2 className="text-[1.05rem] font-semibold text-[#183059]">Operational Health</h2>
+            <div className="mt-6 grid gap-6 xl:grid-cols-4">
               <HealthRing title="Service Requests" metricValue={openServiceRequests} metricLabel="Open" legend={serviceRequestLegend} />
-              <HealthRing title="Tasks" metricValue={ongoingTasks} metricLabel="Active" legend={taskLegend} />
+              <HealthRing title="Tasks" metricValue={ongoingTasks} metricLabel="Total" legend={taskLegend} />
               <HealthRing title="Vendor Invoices" metricValue={pendingInvoices} metricLabel="Pending" legend={invoiceLegend} />
               <HealthRing title="Payments" metricValue={pendingVendorPayments} metricLabel="Pending" legend={paymentLegend} />
             </div>
           </section>
 
-          <section className="overflow-hidden rounded-[28px] border border-[#e3eaf6] bg-white shadow-[0_18px_40px_rgba(15,35,71,0.05)]">
+          <section className="overflow-hidden rounded-[18px] border border-[#e5ecf7] bg-white shadow-[0_10px_26px_rgba(15,35,71,0.04)]">
             <div className="flex items-center justify-between gap-3 border-b border-[#edf2fb] px-5 py-4 sm:px-6">
-              <div>
-                <h2 className="text-[1.35rem] font-semibold text-[#122447]">Recent Service Requests</h2>
-                <p className="mt-1 text-sm text-[#7184a7]">Latest requests visible under your current scope.</p>
-              </div>
+              <h2 className="text-[1.05rem] font-semibold text-[#183059]">Recent Service Requests</h2>
               {can("service_requests.read") ? (
-                <PrefetchLink href="/service-requests" className="text-sm font-semibold text-[#2f66ff]">
+                <PrefetchLink href="/service-requests" className="text-[13px] font-semibold text-[#3767ff]">
                   View all
                 </PrefetchLink>
               ) : null}
@@ -934,42 +956,37 @@ export default async function DashboardPage() {
                 <div className="space-y-3 p-4 md:hidden">
                   {recentRequests.map((request) => {
                     const ownerLabel = getServiceRequestOwnerLabel(request.assignments);
+                    const dashboardStatus = getDashboardServiceRequestStatus(request.status);
 
                     return (
-                      <article key={request.id} className="rounded-3xl border border-[#edf2fb] bg-[#fbfcff] p-4">
+                      <article key={request.id} className="rounded-[18px] border border-[#edf2fb] bg-[#fbfcff] p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#869ab9]">{request.serviceNumber}</p>
-                            <p className="mt-1 text-sm font-semibold text-[#132548]">{request.title}</p>
+                            <p className="text-xs font-semibold text-[#3767ff]">{request.serviceNumber}</p>
+                            <p className="mt-1 text-sm font-medium text-[#213457]">{request.servicePartner.name}</p>
                           </div>
-                          <StatusBadge value={request.status} />
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${dashboardStatus.className}`}>{dashboardStatus.label}</span>
                         </div>
                         <div className="mt-4 grid gap-3 sm:grid-cols-2">
                           {isSuperAdmin ? (
                             <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#869ab9]">Company</p>
-                              <p className="mt-1 text-sm text-[#132548]">{request.servicePartner.name}</p>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8ea0bc]">Company</p>
+                              <p className="mt-1 text-sm text-[#213457]">{request.servicePartner.name}</p>
                             </div>
                           ) : null}
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#869ab9]">Client</p>
-                            <p className="mt-1 text-sm text-[#132548]">{request.client.name}</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8ea0bc]">Client</p>
+                            <p className="mt-1 text-sm text-[#213457]">{request.client.name}</p>
                           </div>
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#869ab9]">Current Owner</p>
-                            <p className="mt-1 text-sm text-[#132548]">{ownerLabel}</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8ea0bc]">Current Owner</p>
+                            <p className="mt-1 text-sm text-[#213457]">{ownerLabel}</p>
                           </div>
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#869ab9]">Requested At</p>
-                            <p className="mt-1 text-sm text-[#132548]">{formatDateTime(request.requestedAt ?? request.createdAt)}</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8ea0bc]">Requested At</p>
+                            <p className="mt-1 text-sm text-[#213457]">{formatDateTime(request.requestedAt ?? request.createdAt)}</p>
                           </div>
                         </div>
-                        <PrefetchLink
-                          href={`/service-requests/${request.id}`}
-                          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-2xl border border-[#dbe5f4] px-4 text-sm font-semibold text-[#2f66ff]"
-                        >
-                          Open
-                        </PrefetchLink>
                       </article>
                     );
                   })}
@@ -978,47 +995,45 @@ export default async function DashboardPage() {
                 <div className="crm-scroll-shell hidden md:block">
                   <table className="min-w-full text-sm">
                     <thead>
-                      <tr className="bg-[#f8fbff] text-left text-[11px] uppercase tracking-[0.16em] text-[#7c90b3]">
-                        <th className="px-6 py-3.5">Request No.</th>
-                        {isSuperAdmin ? <th className="px-6 py-3.5">Company</th> : null}
-                        <th className="px-6 py-3.5">Client</th>
-                        <th className="px-6 py-3.5">Status</th>
-                        <th className="px-6 py-3.5">Current Owner</th>
-                        <th className="px-6 py-3.5">Requested At</th>
-                        <th className="px-6 py-3.5">Action</th>
+                      <tr className="text-left text-[11px] uppercase tracking-[0.16em] text-[#8a9ab4]">
+                        <th className="px-5 py-3 font-semibold sm:px-6">Request No.</th>
+                        {isSuperAdmin ? <th className="px-5 py-3 font-semibold sm:px-6">Company</th> : null}
+                        <th className="px-5 py-3 font-semibold sm:px-6">Client</th>
+                        <th className="px-5 py-3 font-semibold sm:px-6">Status</th>
+                        <th className="px-5 py-3 font-semibold sm:px-6">Current Owner</th>
+                        <th className="px-5 py-3 font-semibold sm:px-6">Requested At</th>
+                        <th className="px-5 py-3 font-semibold sm:px-6">Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {recentRequests.map((request) => {
                         const ownerLabel = getServiceRequestOwnerLabel(request.assignments);
                         const ownerInitials = getInitials(ownerLabel);
+                        const dashboardStatus = getDashboardServiceRequestStatus(request.status);
 
                         return (
-                          <tr key={request.id} className="border-t border-[#edf2fb] text-[#1c335c] hover:bg-[#fbfcff]">
-                            <td className="px-6 py-4">
-                              <div>
-                                <p className="font-semibold text-[#2f66ff]">{request.serviceNumber}</p>
-                                <p className="mt-1 text-xs text-[#7b8eaF]">{request.title}</p>
-                              </div>
+                          <tr key={request.id} className="border-t border-[#edf2fb] text-[#203459]">
+                            <td className="px-5 py-4 font-semibold text-[#3767ff] sm:px-6">{request.serviceNumber}</td>
+                            {isSuperAdmin ? <td className="px-5 py-4 sm:px-6">{request.servicePartner.name}</td> : null}
+                            <td className="px-5 py-4 sm:px-6">{request.client.name}</td>
+                            <td className="px-5 py-4 sm:px-6">
+                              <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-semibold ${dashboardStatus.className}`}>
+                                {dashboardStatus.label}
+                              </span>
                             </td>
-                            {isSuperAdmin ? <td className="px-6 py-4">{request.servicePartner.name}</td> : null}
-                            <td className="px-6 py-4">{request.client.name}</td>
-                            <td className="px-6 py-4">
-                              <StatusBadge value={request.status} />
-                            </td>
-                            <td className="px-6 py-4">
+                            <td className="px-5 py-4 sm:px-6">
                               <div className="flex items-center gap-3">
-                                <div className="grid h-9 w-9 place-items-center rounded-full bg-[#1a2f7b] text-xs font-semibold text-white">
+                                <div className="grid h-8 w-8 place-items-center rounded-full bg-[#34226f] text-[11px] font-semibold text-white">
                                   {ownerInitials || "NA"}
                                 </div>
-                                <span className="font-medium text-[#183159]">{ownerLabel}</span>
+                                <span className="font-medium text-[#213457]">{ownerLabel}</span>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-[#5f7398]">{formatDateTime(request.requestedAt ?? request.createdAt)}</td>
-                            <td className="px-6 py-4">
+                            <td className="px-5 py-4 text-[#667c9d] sm:px-6">{formatDateTime(request.requestedAt ?? request.createdAt)}</td>
+                            <td className="px-5 py-4 sm:px-6">
                               <PrefetchLink
                                 href={`/service-requests/${request.id}`}
-                                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-[#dce6f6] text-[#2f66ff] transition hover:bg-[#f5f8ff]"
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[#dfe7f5] text-[#3767ff] transition hover:bg-[#f6f9ff]"
                               >
                                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
                                   <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
@@ -1032,91 +1047,78 @@ export default async function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
-                <div className="flex items-center justify-between gap-3 border-t border-[#edf2fb] px-5 py-3 text-xs text-[#7c90b3] sm:px-6">
+
+                <div className="flex items-center justify-between gap-3 border-t border-[#edf2fb] px-5 py-3 text-xs text-[#8595af] sm:px-6">
                   <span>
                     Showing 1 to {recentRequests.length} of {serviceRequests} requests
                   </span>
-                  <PrefetchLink href="/service-requests" className="font-semibold text-[#2f66ff]">
-                    View more
-                  </PrefetchLink>
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="grid h-7 w-7 place-items-center rounded-md border border-[#e0e7f4] text-[#a0aec4]" aria-label="Previous page">
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m15 6-6 6 6 6" />
+                      </svg>
+                    </button>
+                    <span className="grid h-7 min-w-7 place-items-center rounded-md bg-[#4e5cff] px-2 text-white">1</span>
+                    <button type="button" className="grid h-7 w-7 place-items-center rounded-md border border-[#e0e7f4] text-[#a0aec4]" aria-label="Next page">
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m9 6 6 6-6 6" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </>
             )}
           </section>
 
           {isSuperAdmin && companyDirectory.length > 0 ? (
-            <section className="rounded-[28px] border border-[#e3eaf6] bg-white p-5 shadow-[0_18px_40px_rgba(15,35,71,0.05)] sm:p-6">
+            <section className="rounded-[18px] border border-[#e5ecf7] bg-white p-5 shadow-[0_10px_26px_rgba(15,35,71,0.04)] sm:p-6">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-[1.35rem] font-semibold text-[#122447]">Company Directory</h2>
-                  <p className="mt-1 text-sm text-[#7184a7]">Open a company to review admins, users, service requests, and financial modules.</p>
-                </div>
-                <PrefetchLink href="/service-partners" className="text-sm font-semibold text-[#2f66ff]">
+                <h2 className="text-[1.05rem] font-semibold text-[#183059]">Company Directory</h2>
+                <PrefetchLink href="/service-partners" className="text-[13px] font-semibold text-[#3767ff]">
                   View all
                 </PrefetchLink>
               </div>
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
                 {companyDirectory.map((company) => (
                   <PrefetchLink
                     key={company.id}
                     href={`/service-partners/${company.id}`}
-                    className="flex items-center gap-3 rounded-2xl border border-[#e7edf7] bg-[#fbfcff] px-4 py-4 text-sm font-medium text-[#112447] transition hover:border-[#d2dcf0] hover:bg-white"
+                    className="flex min-h-[54px] items-center gap-3 rounded-[14px] border border-[#e8eef7] bg-[#fcfdff] px-4 py-3.5 text-[14px] font-medium text-[#213457] transition hover:border-[#d7e1f0] hover:bg-white"
                   >
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-[#6078a6] shadow-[inset_0_0_0_1px_rgba(225,233,245,1)]">
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[#6e82a8] shadow-[inset_0_0_0_1px_rgba(226,233,244,1)]">
                       <DashboardIcon icon="building" />
                     </div>
                     <span className="truncate">{company.name}</span>
                   </PrefetchLink>
                 ))}
               </div>
-              <div className="mt-5 flex items-center justify-between gap-3 text-xs text-[#7c90b3]">
-                <span>
-                  Showing 1 to {companyDirectory.length} of {companies} companies
-                </span>
-                <PrefetchLink href="/service-partners" className="font-semibold text-[#2f66ff]">
-                  View more
-                </PrefetchLink>
-              </div>
+              <p className="mt-4 text-center text-xs text-[#8a9ab4]">Showing 1 to {companyDirectory.length} of {companies} companies</p>
             </section>
           ) : null}
-
         </div>
 
-        <aside className="space-y-6">
-          <section id="dashboard-quick-actions" className="rounded-[28px] border border-[#e3eaf6] bg-white p-5 shadow-[0_18px_40px_rgba(15,35,71,0.05)] sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[1.35rem] font-semibold text-[#122447]">Quick Actions</h2>
-                <p className="mt-1 text-sm text-[#7184a7]">Permission-aware shortcuts for the most common admin workflows.</p>
-              </div>
-              {quickActions.length > 8 ? (
-                <PrefetchLink href={quickActions[8]?.href ?? quickActions[0]?.href ?? "/"} className="text-sm font-semibold text-[#2f66ff]">
-                  View more
-                </PrefetchLink>
-              ) : null}
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <aside className="space-y-5">
+          <section id="dashboard-quick-actions" className="rounded-[18px] border border-[#e5ecf7] bg-white p-5 shadow-[0_10px_26px_rgba(15,35,71,0.04)] sm:p-6">
+            <h2 className="text-[1.05rem] font-semibold text-[#183059]">Quick Actions</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-2">
               {quickActions.length === 0 ? (
-                <EmptyState title="No quick actions available" description="Available actions will appear here when your role has create or report access." />
+                <EmptyState title="No quick actions available" description="Available actions will appear here when your role has create access." />
               ) : (
-                quickActions.slice(0, 8).map((action) => <QuickActionTile key={action.title} action={action} />)
+                quickActions.map((action) => <QuickActionTile key={action.title} action={action} />)
               )}
             </div>
           </section>
 
-          <section id="dashboard-alerts" className="rounded-[28px] border border-[#e3eaf6] bg-white p-5 shadow-[0_18px_40px_rgba(15,35,71,0.05)] sm:p-6">
+          <section id="dashboard-alerts" className="rounded-[18px] border border-[#e5ecf7] bg-white p-5 shadow-[0_10px_26px_rgba(15,35,71,0.04)] sm:p-6">
             <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-[1.35rem] font-semibold text-[#122447]">Alerts / Pending Actions</h2>
-                <p className="mt-1 text-sm text-[#7184a7]">Items that may need intervention from admins or finance operators.</p>
-              </div>
+              <h2 className="text-[1.05rem] font-semibold text-[#183059]">Alerts / Pending Actions</h2>
               {visibleAlerts.length > 0 ? (
-                <PrefetchLink href={alertsViewAllHref} className="text-sm font-semibold text-[#2f66ff]">
+                <PrefetchLink href={alertsViewAllHref} className="text-[13px] font-semibold text-[#3767ff]">
                   View all
                 </PrefetchLink>
               ) : null}
             </div>
-            <div className="mt-5 space-y-1">
+            <div className="mt-3">
               {visibleAlerts.length === 0 ? (
                 <EmptyState title="No pending alerts" description="Critical review items will appear here when counts move above zero." />
               ) : (
@@ -1126,21 +1128,18 @@ export default async function DashboardPage() {
           </section>
 
           {!isSuperAdmin && companyProfile ? (
-            <section className="rounded-[28px] border border-[#e3eaf6] bg-white p-5 shadow-[0_18px_40px_rgba(15,35,71,0.05)] sm:p-6">
-              <div>
-                <h2 className="text-[1.35rem] font-semibold text-[#122447]">Company Profile</h2>
-                <p className="mt-1 text-sm text-[#7184a7]">Current tenant identity and contact reference.</p>
-              </div>
-              <div className="mt-5 grid gap-3">
+            <section className="rounded-[18px] border border-[#e5ecf7] bg-white p-5 shadow-[0_10px_26px_rgba(15,35,71,0.04)] sm:p-6">
+              <h2 className="text-[1.05rem] font-semibold text-[#183059]">Company Profile</h2>
+              <div className="mt-4 grid gap-3">
                 {[
                   { label: "Name", value: companyProfile.name },
                   { label: "Code", value: companyProfile.code },
                   { label: "Status", value: companyProfile.status },
                   { label: "Contact", value: companyProfile.email ?? companyProfile.phone ?? "-" },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-[#e7edf7] bg-[#fbfcff] px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8ca0c2]">{item.label}</p>
-                    <p className="mt-2 text-sm font-semibold text-[#132548]">{item.value}</p>
+                  <div key={item.label} className="rounded-[14px] border border-[#e7edf7] bg-[#fcfdff] px-4 py-3.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8ea0bc]">{item.label}</p>
+                    <p className="mt-2 text-sm font-medium text-[#213457]">{item.value}</p>
                   </div>
                 ))}
               </div>

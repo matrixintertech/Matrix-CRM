@@ -9,14 +9,29 @@ import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
 import { getOrSetServerCache } from "@/lib/cache/server-cache";
 import { prisma } from "@/lib/db/prisma";
 import type { UserUpsertInput } from "@/features/users/validations";
+import type { ExportRow } from "@/lib/export/csv";
 import { measurePerf } from "@/lib/observability/perf";
 
 type ListUsersInput = {
   q?: string;
   status?: UserStatus;
+  servicePartnerId?: string;
+  roleKey?: string;
+  dateRange?: UserManagementDateRangePreset;
   page?: number;
   pageSize?: number;
 };
+
+export const USER_MANAGEMENT_DATE_RANGE_PRESETS = ["all", "30d", "90d", "year"] as const;
+
+export type UserManagementDateRangePreset = (typeof USER_MANAGEMENT_DATE_RANGE_PRESETS)[number];
+
+type BuildUserWhereOptions = {
+  includeStatus?: boolean;
+  includeQuery?: boolean;
+};
+
+type ExportUsersInput = Omit<ListUsersInput, "page" | "pageSize">;
 
 export type AssignablePermission = {
   id: string;
@@ -38,6 +53,88 @@ export function getUserTenantWhere(session: Session): Prisma.UserWhereInput {
   return scopeByTenant(session, {});
 }
 
+export function normalizeUserManagementDateRange(value?: string): UserManagementDateRangePreset {
+  if (!value) {
+    return "all";
+  }
+
+  return USER_MANAGEMENT_DATE_RANGE_PRESETS.includes(value as UserManagementDateRangePreset)
+    ? (value as UserManagementDateRangePreset)
+    : "all";
+}
+
+function resolveUserCreatedAtFilter(dateRange?: UserManagementDateRangePreset): Prisma.DateTimeFilter | undefined {
+  const normalized = normalizeUserManagementDateRange(dateRange);
+  if (normalized === "all") {
+    return undefined;
+  }
+
+  const now = new Date();
+
+  if (normalized === "year") {
+    return {
+      gte: new Date(now.getFullYear(), 0, 1),
+      lte: now,
+    };
+  }
+
+  const days = normalized === "30d" ? 30 : 90;
+  const from = new Date(now);
+  from.setDate(from.getDate() - (days - 1));
+  from.setHours(0, 0, 0, 0);
+
+  return {
+    gte: from,
+    lte: now,
+  };
+}
+
+function buildUserWhere(session: Session, input: ListUsersInput, options: BuildUserWhereOptions = {}): Prisma.UserWhereInput {
+  const where: Prisma.UserWhereInput = {
+    ...getUserTenantWhere(session),
+    deletedAt: null,
+  };
+
+  if (session.user.isSuperAdmin && input.servicePartnerId) {
+    where.servicePartnerId = input.servicePartnerId;
+  }
+
+  if (options.includeStatus !== false && input.status) {
+    where.status = input.status;
+  }
+
+  const createdAtFilter = resolveUserCreatedAtFilter(input.dateRange);
+  if (createdAtFilter) {
+    where.createdAt = createdAtFilter;
+  }
+
+  if (input.roleKey?.trim()) {
+    where.roles = {
+      some: {
+        role: {
+          key: input.roleKey.trim(),
+          deletedAt: null,
+        },
+      },
+    };
+  }
+
+  if (options.includeQuery !== false && input.q?.trim()) {
+    const q = input.q.trim();
+    where.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  return where;
+}
+
+function toIsoString(value: Date | null | undefined) {
+  return value ? value.toISOString() : "";
+}
+
 export async function listUsers(session: Session, input: ListUsersInput) {
   return measurePerf("users.list", async () => {
     const pagination = getPagination(input);
@@ -48,27 +145,14 @@ export async function listUsers(session: Session, input: ListUsersInput) {
       buildFilterSignature({
         q: input.q?.trim() || null,
         status: input.status ?? null,
+        servicePartnerId: input.servicePartnerId ?? null,
+        roleKey: input.roleKey?.trim() || null,
+        dateRange: normalizeUserManagementDateRange(input.dateRange),
         page: pagination.page,
         pageSize: pagination.pageSize,
       }),
     ].join(":");
-    const where: Prisma.UserWhereInput = {
-      ...getUserTenantWhere(session),
-      deletedAt: null,
-    };
-
-    if (input.status) {
-      where.status = input.status;
-    }
-
-    if (input.q?.trim()) {
-      const q = input.q.trim();
-      where.OR = [
-        { name: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-        { phone: { contains: q, mode: "insensitive" } },
-      ];
-    }
+    const where = buildUserWhere(session, input);
 
     const loadUsers = async () => {
       const [users, total] = await Promise.all([
@@ -83,58 +167,44 @@ export async function listUsers(session: Session, input: ListUsersInput) {
             email: true,
             phone: true,
             status: true,
+            lastLoginAt: true,
             createdAt: true,
-            servicePartnerId: true,
+            servicePartner: {
+              select: {
+                name: true,
+                code: true,
+              },
+            },
           },
         }),
         prisma.user.count({ where }),
       ]);
 
-      const servicePartnerIds = Array.from(
-        new Set(users.map((user) => user.servicePartnerId).filter((servicePartnerId): servicePartnerId is string => Boolean(servicePartnerId)))
-      );
       const userIds = users.map((user) => user.id);
 
-      const [servicePartners, userRoles] = await Promise.all([
-        servicePartnerIds.length > 0
-          ? prisma.servicePartner.findMany({
-              where: {
-                id: {
-                  in: servicePartnerIds,
+      const userRoles = userIds.length > 0
+        ? await prisma.userRole.findMany({
+            where: {
+              userId: {
+                in: userIds,
+              },
+              role: {
+                deletedAt: null,
+              },
+            },
+            select: {
+              userId: true,
+              role: {
+                select: {
+                  key: true,
+                  name: true,
+                  level: true,
                 },
               },
-              select: {
-                id: true,
-                name: true,
-                code: true,
-              },
-            })
-          : Promise.resolve([]),
-        userIds.length > 0
-          ? prisma.userRole.findMany({
-              where: {
-                userId: {
-                  in: userIds,
-                },
-                role: {
-                  deletedAt: null,
-                },
-              },
-              select: {
-                userId: true,
-                role: {
-                  select: {
-                    key: true,
-                    name: true,
-                  },
-                },
-              },
-            })
-          : Promise.resolve([]),
-      ]);
-
-      const servicePartnerMap = new Map(servicePartners.map((servicePartner) => [servicePartner.id, servicePartner]));
-      const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string } }>>>((map, entry) => {
+            },
+          })
+        : [];
+      const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string; level: number } }>>>((map, entry) => {
         const roles = map.get(entry.userId);
         if (roles) {
           roles.push({ role: entry.role });
@@ -151,9 +221,12 @@ export async function listUsers(session: Session, input: ListUsersInput) {
           email: user.email,
           phone: user.phone,
           status: user.status,
+          lastLoginAt: user.lastLoginAt,
           createdAt: user.createdAt,
-          servicePartner: servicePartnerMap.get(user.servicePartnerId) ?? { name: "-", code: "-" },
-          roles: userRolesMap.get(user.id) ?? [],
+          servicePartner: user.servicePartner ?? { name: "-", code: "-" },
+          roles: (userRolesMap.get(user.id) ?? []).sort(
+            (left, right) => right.role.level - left.role.level || left.role.name.localeCompare(right.role.name)
+          ),
         })),
         total,
         page: pagination.page,
@@ -170,6 +243,121 @@ export async function listUsers(session: Session, input: ListUsersInput) {
     }
 
     return loadUsers();
+  });
+}
+
+export async function getUserManagementOverview(session: Session, input: Omit<ListUsersInput, "page" | "pageSize" | "q" | "status">) {
+  return measurePerf("users.overview", async () => {
+    const baseWhere = buildUserWhere(session, input, { includeQuery: false, includeStatus: false });
+
+    const [totalUsers, activeUsers, pendingInvites, inactiveUsers, coveredCompanies] = await Promise.all([
+      prisma.user.count({ where: baseWhere }),
+      prisma.user.count({ where: { ...baseWhere, status: UserStatus.ACTIVE } }),
+      prisma.user.count({
+        where: {
+          ...baseWhere,
+          lastLoginAt: null,
+          status: {
+            not: UserStatus.INACTIVE,
+          },
+        },
+      }),
+      prisma.user.count({ where: { ...baseWhere, status: UserStatus.INACTIVE } }),
+      prisma.user.findMany({
+        where: baseWhere,
+        distinct: ["servicePartnerId"],
+        select: {
+          servicePartnerId: true,
+        },
+      }),
+    ]);
+
+    return {
+      totalUsers,
+      activeUsers,
+      pendingInvites,
+      inactiveUsers,
+      companiesCovered: coveredCompanies.length,
+    };
+  });
+}
+
+export async function exportUsers(session: Session, input: ExportUsersInput): Promise<ExportRow[]> {
+  return measurePerf("users.export", async () => {
+    const where = buildUserWhere(session, input);
+    const users = await prisma.user.findMany({
+      where,
+      take: 5000,
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        lastLoginAt: true,
+        createdAt: true,
+        servicePartner: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+      },
+    });
+
+    const userIds = users.map((user) => user.id);
+    const userRoles = userIds.length > 0
+      ? await prisma.userRole.findMany({
+          where: {
+            userId: {
+              in: userIds,
+            },
+            role: {
+              deletedAt: null,
+            },
+          },
+          select: {
+            userId: true,
+            role: {
+              select: {
+                key: true,
+                name: true,
+                level: true,
+              },
+            },
+          },
+        })
+      : [];
+
+    const userRolesMap = userRoles.reduce<Map<string, Array<{ role: { key: string; name: string; level: number } }>>>((map, entry) => {
+      const roles = map.get(entry.userId);
+      if (roles) {
+        roles.push({ role: entry.role });
+      } else {
+        map.set(entry.userId, [{ role: entry.role }]);
+      }
+      return map;
+    }, new Map());
+
+    return users.map((user) => {
+      const roles = (userRolesMap.get(user.id) ?? []).sort(
+        (left, right) => right.role.level - left.role.level || left.role.name.localeCompare(right.role.name)
+      );
+
+      return {
+        name: user.name ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+        status: user.status,
+        primaryRole: roles[0]?.role.name ?? "",
+        roles: roles.map((entry) => entry.role.name).join(", "),
+        company: user.servicePartner?.name ?? "",
+        companyCode: user.servicePartner?.code ?? "",
+        lastLoginAt: toIsoString(user.lastLoginAt),
+        createdAt: toIsoString(user.createdAt),
+      };
+    });
   });
 }
 

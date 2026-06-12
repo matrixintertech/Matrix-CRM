@@ -10,14 +10,38 @@ import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 import { measurePerf } from "@/lib/observability/perf";
 
+export type ServiceRequestStatusGroup = "open" | "in_progress" | "resolved" | "closed" | "overdue";
+export type ServiceRequestPriority = "high" | "medium" | "low";
+
 type ListServiceRequestsInput = {
   q?: string;
   status?: ServiceRequestStatus;
+  statusGroup?: ServiceRequestStatusGroup;
+  priority?: ServiceRequestPriority;
   clientId?: string;
   branchId?: string;
+  servicePartnerId?: string;
   page?: number;
   pageSize?: number;
 };
+
+type ServiceRequestFilterInput = Omit<ListServiceRequestsInput, "page" | "pageSize" | "statusGroup" | "priority">;
+
+const OPEN_STATUSES = [
+  "DRAFT",
+  "RAISED",
+  "TRIAGED",
+  "PM_ASSIGNED",
+  "SM_ASSIGNED",
+  "QUOTE_PREPARING",
+  "QUOTE_SUBMITTED",
+  "QUOTE_APPROVED",
+  "QUOTE_REJECTED",
+] as const satisfies ServiceRequestStatus[];
+
+const IN_PROGRESS_STATUSES = ["IN_PROGRESS", "BLOCKED"] as const satisfies ServiceRequestStatus[];
+const RESOLVED_STATUSES = ["COMPLETED"] as const satisfies ServiceRequestStatus[];
+const CLOSED_STATUSES = ["CLOSED", "CANCELLED"] as const satisfies ServiceRequestStatus[];
 
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
@@ -25,6 +49,194 @@ function normalizeOptionalString(value?: string | null) {
 
 export function getServiceRequestScopeWhere(session: Session): Prisma.ServiceRequestWhereInput {
   return scopeByTenant(session, {});
+}
+
+function buildServiceRequestWhere(session: Session, input: ServiceRequestFilterInput): Prisma.ServiceRequestWhereInput {
+  const where: Prisma.ServiceRequestWhereInput = {
+    ...getServiceRequestScopeWhere(session),
+    deletedAt: null,
+  };
+
+  if (input.status) {
+    where.status = input.status;
+  }
+
+  if (input.clientId?.trim()) {
+    where.clientId = input.clientId.trim();
+  }
+
+  if (input.branchId?.trim()) {
+    where.branchId = input.branchId.trim();
+  }
+
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
+  }
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    where.OR = [
+      { serviceNumber: { contains: q, mode: "insensitive" } },
+      { title: { contains: q, mode: "insensitive" } },
+      { serviceType: { contains: q, mode: "insensitive" } },
+      { client: { name: { contains: q, mode: "insensitive" } } },
+      { client: { code: { contains: q, mode: "insensitive" } } },
+      { branch: { name: { contains: q, mode: "insensitive" } } },
+      { branch: { code: { contains: q, mode: "insensitive" } } },
+      { servicePartner: { name: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  return where;
+}
+
+function getStatusGroup(status: ServiceRequestStatus): ServiceRequestStatusGroup {
+  if ((OPEN_STATUSES as readonly ServiceRequestStatus[]).includes(status)) {
+    return "open";
+  }
+  if ((IN_PROGRESS_STATUSES as readonly ServiceRequestStatus[]).includes(status)) {
+    return "in_progress";
+  }
+  if ((RESOLVED_STATUSES as readonly ServiceRequestStatus[]).includes(status)) {
+    return "resolved";
+  }
+  return "closed";
+}
+
+function isClosedLike(status: ServiceRequestStatus) {
+  return (RESOLVED_STATUSES as readonly ServiceRequestStatus[]).includes(status) || (CLOSED_STATUSES as readonly ServiceRequestStatus[]).includes(status);
+}
+
+function isOverdue(record: { status: ServiceRequestStatus; targetDate: Date | null }) {
+  if (!record.targetDate) {
+    return false;
+  }
+  if (isClosedLike(record.status)) {
+    return false;
+  }
+  return record.targetDate.getTime() < Date.now();
+}
+
+function getPriority(record: { status: ServiceRequestStatus; targetDate: Date | null }) {
+  if (isOverdue(record)) {
+    return "high" as const;
+  }
+
+  if (record.targetDate) {
+    const diffDays = (record.targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+    if (diffDays <= 1) {
+      return "high" as const;
+    }
+    if (diffDays <= 3) {
+      return "medium" as const;
+    }
+  }
+
+  if ((IN_PROGRESS_STATUSES as readonly ServiceRequestStatus[]).includes(record.status)) {
+    return "medium" as const;
+  }
+
+  return "low" as const;
+}
+
+function matchesDerivedFilters(
+  record: { status: ServiceRequestStatus; targetDate: Date | null },
+  statusGroup?: ServiceRequestStatusGroup,
+  priority?: ServiceRequestPriority
+) {
+  if (statusGroup) {
+    if (statusGroup === "overdue") {
+      if (!isOverdue(record)) {
+        return false;
+      }
+    } else if (getStatusGroup(record.status) !== statusGroup) {
+      return false;
+    }
+  }
+
+  if (priority && getPriority(record) !== priority) {
+    return false;
+  }
+
+  return true;
+}
+
+function startOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function endOfDay(value: Date) {
+  const date = new Date(value);
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
+
+async function fetchServiceRequestsBase(session: Session, input: ServiceRequestFilterInput) {
+  const where = buildServiceRequestWhere(session, input);
+
+  return prisma.serviceRequest.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      serviceNumber: true,
+      title: true,
+      serviceType: true,
+      status: true,
+      requestedAt: true,
+      targetDate: true,
+      completedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      client: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      branch: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      servicePartner: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+        },
+      },
+      _count: {
+        select: {
+          statusHistory: true,
+        },
+      },
+    },
+  });
+}
+
+function enrichServiceRequestRow<
+  T extends {
+    status: ServiceRequestStatus;
+    targetDate: Date | null;
+    requestedAt: Date | null;
+    createdAt: Date;
+  },
+>(row: T) {
+  return {
+    ...row,
+    derived: {
+      statusGroup: getStatusGroup(row.status),
+      priority: getPriority(row),
+      overdue: isOverdue(row),
+      requestDate: row.requestedAt ?? row.createdAt,
+    },
+  };
 }
 
 export async function listServiceRequests(session: Session, input: ListServiceRequestsInput) {
@@ -37,88 +249,28 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
       buildFilterSignature({
         q: input.q?.trim() || null,
         status: input.status ?? null,
+        statusGroup: input.statusGroup ?? null,
+        priority: input.priority ?? null,
         clientId: input.clientId?.trim() || null,
         branchId: input.branchId?.trim() || null,
+        servicePartnerId: input.servicePartnerId?.trim() || null,
         page: pagination.page,
         pageSize: pagination.pageSize,
       }),
     ].join(":");
-    const where: Prisma.ServiceRequestWhereInput = {
-      ...getServiceRequestScopeWhere(session),
-      deletedAt: null,
-    };
-
-    if (input.status) {
-      where.status = input.status;
-    }
-
-    if (input.clientId?.trim()) {
-      where.clientId = input.clientId;
-    }
-
-    if (input.branchId?.trim()) {
-      where.branchId = input.branchId;
-    }
-
-    if (input.q?.trim()) {
-      const q = input.q.trim();
-      where.OR = [
-        { serviceNumber: { contains: q, mode: "insensitive" } },
-        { title: { contains: q, mode: "insensitive" } },
-        { serviceType: { contains: q, mode: "insensitive" } },
-        { client: { name: { contains: q, mode: "insensitive" } } },
-        { client: { code: { contains: q, mode: "insensitive" } } },
-        { branch: { name: { contains: q, mode: "insensitive" } } },
-        { branch: { code: { contains: q, mode: "insensitive" } } },
-      ];
-    }
 
     const loadServiceRequests = async () => {
-      const [serviceRequests, total] = await Promise.all([
-        prisma.serviceRequest.findMany({
-          where,
-          skip: pagination.skip,
-          take: pagination.take,
-          orderBy: [{ createdAt: "desc" }],
-          select: {
-            id: true,
-            serviceNumber: true,
-            title: true,
-            serviceType: true,
-            status: true,
-            requestedAt: true,
-            targetDate: true,
-            createdAt: true,
-            client: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
-            },
-            branch: {
-              select: {
-                id: true,
-                code: true,
-                name: true,
-              },
-            },
-            _count: {
-              select: {
-                statusHistory: true,
-              },
-            },
-          },
-        }),
-        prisma.serviceRequest.count({ where }),
-      ]);
+      const rows = await fetchServiceRequestsBase(session, input);
+      const enriched = rows.map(enrichServiceRequestRow);
+      const filtered = enriched.filter((row) => matchesDerivedFilters(row, input.statusGroup, input.priority));
+      const paged = filtered.slice(pagination.skip, pagination.skip + pagination.take);
 
       return {
-        serviceRequests,
-        total,
+        serviceRequests: paged,
+        total: filtered.length,
         page: pagination.page,
         pageSize: pagination.pageSize,
-        totalPages: getTotalPages(total, pagination.pageSize),
+        totalPages: getTotalPages(filtered.length, pagination.pageSize),
       };
     };
 
@@ -131,6 +283,70 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
 
     return loadServiceRequests();
   });
+}
+
+export async function getServiceRequestOverview(session: Session, input: ServiceRequestFilterInput) {
+  const rows = await fetchServiceRequestsBase(session, input);
+  const enriched = rows.map(enrichServiceRequestRow);
+  const totalRequests = enriched.length;
+  const openRequests = enriched.filter((row) => row.derived.statusGroup === "open").length;
+  const inProgressRequests = enriched.filter((row) => row.derived.statusGroup === "in_progress").length;
+  const resolvedRequests = enriched.filter((row) => row.derived.statusGroup === "resolved").length;
+  const closedRequests = enriched.filter((row) => row.derived.statusGroup === "closed").length;
+  const overdueRequests = enriched.filter((row) => row.derived.overdue).length;
+  const latestUpdatedAt = enriched.reduce<Date | null>((latest, row) => (!latest || row.updatedAt > latest ? row.updatedAt : latest), null);
+
+  const resolutionDurations = enriched
+    .filter((row) => row.completedAt && row.derived.statusGroup !== "open" && row.derived.statusGroup !== "in_progress")
+    .map((row) => {
+      const start = row.requestedAt ?? row.createdAt;
+      return Math.max((row.completedAt!.getTime() - start.getTime()) / (1000 * 60 * 60 * 24), 0);
+    });
+  const avgResolutionDays =
+    resolutionDurations.length > 0 ? resolutionDurations.reduce((sum, value) => sum + value, 0) / resolutionDurations.length : null;
+
+  const priorityCounts = enriched.reduce(
+    (accumulator, row) => {
+      accumulator[row.derived.priority] += 1;
+      return accumulator;
+    },
+    { high: 0, medium: 0, low: 0 }
+  );
+
+  return {
+    totalRequests,
+    openRequests,
+    inProgressRequests,
+    resolvedRequests,
+    closedRequests,
+    overdueRequests,
+    latestUpdatedAt,
+    avgResolutionDays,
+    statusBreakdown: [
+      { key: "open", label: "Open", count: openRequests, color: "#3f66ff" },
+      { key: "in_progress", label: "In Progress", count: inProgressRequests, color: "#ffab1f" },
+      { key: "resolved", label: "Resolved", count: resolvedRequests, color: "#28b463" },
+      { key: "closed", label: "Closed", count: closedRequests, color: "#9aa8bf" },
+    ],
+    priorityBreakdown: [
+      { key: "high", label: "High", count: priorityCounts.high, color: "#ff4f5e" },
+      { key: "medium", label: "Medium", count: priorityCounts.medium, color: "#ffab1f" },
+      { key: "low", label: "Low", count: priorityCounts.low, color: "#28b463" },
+    ],
+  };
+}
+
+export async function listRecentOverdueServiceRequests(session: Session, input: ServiceRequestFilterInput) {
+  const rows = await fetchServiceRequestsBase(session, input);
+  return rows
+    .map(enrichServiceRequestRow)
+    .filter((row) => row.derived.overdue)
+    .sort((left, right) => {
+      const leftDate = left.targetDate?.getTime() ?? 0;
+      const rightDate = right.targetDate?.getTime() ?? 0;
+      return leftDate - rightDate;
+    })
+    .slice(0, 5);
 }
 
 export async function getServiceRequestById(session: Session, id: string) {

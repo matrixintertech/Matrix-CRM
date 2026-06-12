@@ -337,7 +337,7 @@ export function LoginForm() {
       </button>
 
       <p className="matrix-login-terms">
-        By continuing, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
+        By continuing, you agree to the platform terms and privacy policy configured for your workspace.
       </p>
 
       <div className="matrix-login-feedback">

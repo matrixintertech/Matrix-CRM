@@ -10,6 +10,9 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListRolesInput = {
   q?: string;
   scope?: RoleScope;
+  servicePartnerId?: string;
+  roleType?: "system" | "custom";
+  sortBy?: "name_asc" | "level_desc" | "users_desc" | "updated_desc";
   page?: number;
   pageSize?: number;
 };
@@ -26,15 +29,26 @@ function getTenantRoleWhere(session: Session): Prisma.RoleWhereInput {
   };
 }
 
-export async function listRoles(session: Session, input: ListRolesInput) {
-  const pagination = getPagination(input);
+function buildRoleWhere(session: Session, input: Omit<ListRolesInput, "page" | "pageSize" | "sortBy">): Prisma.RoleWhereInput {
   const where: Prisma.RoleWhereInput = {
     ...getTenantRoleWhere(session),
     deletedAt: null,
   };
 
+  if (session.user.isSuperAdmin && input.servicePartnerId) {
+    where.servicePartnerId = input.servicePartnerId;
+  }
+
   if (input.scope) {
     where.scope = input.scope;
+  }
+
+  if (input.roleType === "system") {
+    where.isSystem = true;
+  }
+
+  if (input.roleType === "custom") {
+    where.isSystem = false;
   }
 
   if (input.q?.trim()) {
@@ -46,12 +60,35 @@ export async function listRoles(session: Session, input: ListRolesInput) {
     ];
   }
 
+  return where;
+}
+
+function getRoleOrderBy(sortBy?: ListRolesInput["sortBy"]): Prisma.RoleOrderByWithRelationInput[] {
+  if (sortBy === "name_asc") {
+    return [{ name: "asc" }];
+  }
+
+  if (sortBy === "users_desc") {
+    return [{ users: { _count: "desc" } }, { level: "desc" }, { name: "asc" }];
+  }
+
+  if (sortBy === "updated_desc") {
+    return [{ updatedAt: "desc" }, { level: "desc" }, { name: "asc" }];
+  }
+
+  return [{ level: "desc" }, { isSystem: "desc" }, { updatedAt: "desc" }, { name: "asc" }];
+}
+
+export async function listRoles(session: Session, input: ListRolesInput) {
+  const pagination = getPagination(input);
+  const where = buildRoleWhere(session, input);
+
   const [roles, total] = await Promise.all([
     prisma.role.findMany({
       where,
       skip: pagination.skip,
       take: pagination.take,
-      orderBy: [{ level: "desc" }, { isSystem: "desc" }, { createdAt: "desc" }],
+      orderBy: getRoleOrderBy(input.sortBy),
       include: {
         servicePartner: { select: { id: true, name: true, code: true } },
         _count: {
@@ -71,6 +108,36 @@ export async function listRoles(session: Session, input: ListRolesInput) {
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalPages: getTotalPages(total, pagination.pageSize),
+  };
+}
+
+export async function getRoleManagementOverview(
+  session: Session,
+  input: Omit<ListRolesInput, "page" | "pageSize" | "sortBy" | "q">
+) {
+  const where = buildRoleWhere(session, input);
+
+  const [totalRoles, systemRoles, customRoles, assignmentCounts] = await Promise.all([
+    prisma.role.count({ where }),
+    prisma.role.count({ where: { ...where, isSystem: true } }),
+    prisma.role.count({ where: { ...where, isSystem: false } }),
+    prisma.role.findMany({
+      where,
+      select: {
+        _count: {
+          select: {
+            users: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    totalRoles,
+    systemRoles,
+    customRoles,
+    activeAssignments: assignmentCounts.reduce((sum, role) => sum + role._count.users, 0),
   };
 }
 

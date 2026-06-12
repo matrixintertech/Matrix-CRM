@@ -18,7 +18,7 @@ type NavSection = {
 };
 
 const NAV_SECTION_ORDER = [
-  "Dashboard",
+  "Platform",
   "User Management",
   "Organization",
   "Inventory & Services",
@@ -29,32 +29,57 @@ const NAV_SECTION_ORDER = [
 ] as const;
 
 const SECTION_MATCHERS: Record<(typeof NAV_SECTION_ORDER)[number], string[]> = {
-  Dashboard: ["dashboard"],
+  Platform: ["dashboard"],
   "User Management": ["users", "/users", "roles", "/roles", "permissions", "/permissions"],
   Organization: ["service-partners", "/service-partners", "clients", "/clients", "branches", "/branches"],
   "Inventory & Services": ["categories", "/categories", "items", "/items", "rate-cards", "/rate-cards"],
   "Service Requests": ["service-requests", "/service-requests", "quotations", "/quotations", "tasks", "/tasks"],
   Procurement: ["vendors", "/vendors", "rfq", "/rfqs", "purchase-order", "/purchase-orders"],
   Finance: ["invoice", "/invoices", "payments", "/vendor-payments", "ledger", "/ledger"],
-  Reports: ["finance-reports", "/finance-reports", "activity-log", "/activity-log", "notifications", "/notifications"],
+  Reports: ["finance-reports", "/finance-reports", "activity-log", "/activity-log", "email-change", "/email-change-requests"],
+};
+
+const labelOverrides: Record<string, string> = {
+  "/": "Dashboard",
+  "/users": "Client User Management",
+  "/roles": "Roles",
+  "/permissions": "Permissions",
+  "/service-partners": "Service Partners",
+  "/clients": "Clients",
+  "/branches": "Branch Management",
+  "/categories": "Category Management",
+  "/items": "Items",
+  "/rate-cards": "RC Management",
+  "/service-requests": "Service Requests",
+  "/tasks": "Tasks",
+  "/vendors": "Supplier Management",
+  "/rfqs": "RFQ List",
+  "/purchase-orders": "PO List",
+  "/ledger": "Ledger",
+  "/invoices": "Vendor Invoices",
+  "/vendor-payments": "Vendors Payment List",
+  "/finance-reports": "Finance Reports",
+  "/activity-log": "Activity Log",
+  "/email-change-requests": "Email Change Requests",
+  "/settings": "Settings",
 };
 
 function MatrixLogo() {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#5c63ff] via-[#435bff] to-[#2f66ff] shadow-[0_10px_24px_rgba(64,93,255,0.32)]">
+      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#5a6bff] via-[#455dff] to-[#2f66ff] shadow-[0_10px_24px_rgba(56,87,255,0.28)]">
         <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 18V6l5.5 6L14 6v12" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M14 18V6l7 12V6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M4 18V6l4.5 5L13 6v12" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M13 18V6l7 12V8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
-      <span className="text-[20px] font-semibold leading-none tracking-tight text-white">Matrix CRM</span>
+      <span className="text-[18px] font-semibold tracking-[-0.02em] text-white">Matrix CRM</span>
     </div>
   );
 }
 
 function iconClass(level: number) {
-  return level === 0 ? "h-[18px] w-[18px]" : "h-4 w-4";
+  return level === 0 ? "h-[17px] w-[17px]" : "h-4 w-4";
 }
 
 function IconForKey({ keyName, level }: { keyName: string; level: number }) {
@@ -64,9 +89,9 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="4" y="4" width="7" height="7" rx="2" />
-        <rect x="13" y="4" width="7" height="11" rx="2" />
+        <rect x="13" y="4" width="7" height="7" rx="2" />
         <rect x="4" y="13" width="7" height="7" rx="2" />
-        <rect x="13" y="17" width="7" height="3" rx="1.5" />
+        <rect x="13" y="13" width="7" height="7" rx="2" />
       </svg>
     );
   }
@@ -91,21 +116,12 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     );
   }
 
-  if (keyName.includes("partner")) {
+  if (keyName.includes("partner") || keyName.includes("branch") || keyName.includes("vendor")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M8.5 13.5 5 10a2.5 2.5 0 1 1 3.5-3.5L12 10l3.5-3.5A2.5 2.5 0 1 1 19 10l-3.5 3.5" />
-        <path d="m7 17 2-2m6 2-2-2" />
-      </svg>
-    );
-  }
-
-  if (keyName.includes("supplier") || keyName.includes("vendor")) {
-    return (
-      <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 19h16" />
-        <path d="M6 19V8l6-3 6 3v11" />
-        <path d="M9 12h.01M12 12h.01M15 12h.01M9 15h.01M12 15h.01M15 15h.01" />
+        <path d="M4 20h16" />
+        <path d="M7 20V5l5-2 5 2v15" />
+        <path d="M9 9h.01M12 9h.01M15 9h.01M9 13h.01M12 13h.01M15 13h.01" />
       </svg>
     );
   }
@@ -119,20 +135,10 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     );
   }
 
-  if (keyName.includes("branch")) {
-    return (
-      <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 20h16" />
-        <path d="M6 20V8l6-3 6 3v12" />
-        <path d="M10 12h4M10 15h4" />
-      </svg>
-    );
-  }
-
   if (keyName.includes("categorie") || keyName.includes("item")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d="M4 7h16M4 12h16M4 17h16" />
+        <path d="M5 7h14M5 12h14M5 17h14" />
       </svg>
     );
   }
@@ -155,29 +161,20 @@ function IconForKey({ keyName, level }: { keyName: string; level: number }) {
     );
   }
 
-  if (keyName.includes("rfq")) {
+  if (keyName.includes("rfq") || keyName.includes("invoice") || keyName.includes("finance") || keyName.includes("ledger") || keyName.includes("payment")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="5" y="4" width="14" height="16" rx="2" />
+        <rect x="5" y="4" width="14" height="16" rx="2.5" />
         <path d="M8 8h8M8 12h8M8 16h5" />
       </svg>
     );
   }
 
-  if (keyName.includes("task") || keyName.includes("activity")) {
+  if (keyName.includes("task") || keyName.includes("activity") || keyName.includes("email")) {
     return (
       <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M8 6h12M8 12h12M8 18h12" />
         <path d="m3 6 1.5 1.5L6.5 5.5M3 12l1.5 1.5L6.5 11.5M3 18l1.5 1.5L6.5 17.5" />
-      </svg>
-    );
-  }
-
-  if (keyName.includes("ledger") || keyName.includes("finance") || keyName.includes("payment") || keyName.includes("expense") || keyName.includes("invoice")) {
-    return (
-      <svg viewBox="0 0 24 24" className={common} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="4" y="4" width="16" height="16" rx="2.5" />
-        <path d="M8 8h8M8 12h8M8 16h5" />
       </svg>
     );
   }
@@ -225,7 +222,7 @@ function resolveSections(items: SidebarNavItem[]): NavSection[] {
 
   const ungroupedItems = items.filter((item) => !mappedItemIds.has(item.id));
   if (ungroupedItems.length > 0) {
-    sections.push({ title: "MORE", items: ungroupedItems });
+    sections.push({ title: "More", items: ungroupedItems });
   }
 
   return sections.filter((group) => group.items.length > 0);
@@ -269,68 +266,53 @@ function MenuItem({ item, pathname, level, openKeys, onToggle, onNavigate }: Men
   const isOpen = openKeys.has(item.id);
   const hasChildren = item.children.length > 0;
   const isDisabled = item.href === "#";
-
-  const containerClass =
-    level === 0
-      ? "rounded-xl"
-      : "rounded-lg border border-[#25467f]/35 bg-[#0b2c63]/35";
+  const displayLabel = labelOverrides[item.href] ?? item.label;
 
   const linkBase =
     level === 0
-      ? "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium"
-      : "flex items-center gap-3 rounded-lg px-3 py-2 text-[14px] font-medium";
+      ? "flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-[14px] font-medium"
+      : "flex items-center gap-3 rounded-[10px] px-3 py-2 text-[13px] font-medium";
 
   const linkState = isActive
-    ? "bg-gradient-to-r from-[#2854e8] to-[#2f64ff] text-white shadow-[0_10px_24px_rgba(47,100,255,0.35)]"
+    ? "bg-gradient-to-r from-[#4e57fa] to-[#3566ff] text-white shadow-[0_10px_24px_rgba(53,102,255,0.32)]"
     : hasActiveChild
-      ? "bg-[#11357a]/70 text-white"
+      ? "bg-white/10 text-white"
       : isDisabled
-        ? "text-[#90a9d8]/70"
-        : "text-[#d7e5ff] hover:bg-white/10";
-
-  const chevronColor = isActive || hasActiveChild ? "text-[#d6e4ff]" : "text-[#9db6e8]";
+        ? "text-[#8ea6d3]/70"
+        : "text-[#dce7ff] hover:bg-white/8";
 
   return (
-    <li className={containerClass}>
+    <li>
       <div className={`${linkBase} ${linkState}`}>
         {isDisabled ? (
           <span className="flex min-w-0 flex-1 items-center gap-3">
             <span className="opacity-95">
               <IconForKey keyName={item.key} level={level} />
             </span>
-            <span className="truncate">{item.label}</span>
-            <span className="rounded border border-[#47649a] px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-[#9ab3e1]">
-              SOON
-            </span>
+            <span className="truncate">{displayLabel}</span>
           </span>
         ) : (
           <PrefetchLink href={item.href} onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-3">
             <span className="opacity-95">
               <IconForKey keyName={item.key} level={level} />
             </span>
-            <span className="truncate">{item.label}</span>
+            <span className="truncate">{displayLabel}</span>
           </PrefetchLink>
         )}
 
         {hasChildren ? (
           <button
             type="button"
-            aria-label={isOpen ? `Collapse ${item.label}` : `Expand ${item.label}`}
+            aria-label={isOpen ? `Collapse ${displayLabel}` : `Expand ${displayLabel}`}
             onClick={() => onToggle(item.id)}
-            className={`grid h-6 w-6 place-items-center rounded-md hover:bg-white/10 ${chevronColor}`}
+            className="grid h-6 w-6 place-items-center rounded-md text-[#a9bbe2] hover:bg-white/10"
           >
-            <svg
-              viewBox="0 0 24 24"
-              className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
+            <svg viewBox="0 0 24 24" className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2">
               <path d="m9 6 6 6-6 6" />
             </svg>
           </button>
         ) : (
-          <span className={chevronColor}>
+          <span className="text-[#9ab0d9]">
             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="m9 6 6 6-6 6" />
             </svg>
@@ -360,7 +342,6 @@ function MenuItem({ item, pathname, level, openKeys, onToggle, onNavigate }: Men
 export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const sections = resolveSections(items);
-  const usingFallback = items.some((item) => item.isDevelopmentFallback);
 
   const initialKeys = useMemo(() => {
     const keySet = collectInitialOpenKeys(items, pathname);
@@ -393,20 +374,17 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 flex w-[min(85vw,296px)] shrink-0 flex-col border-r border-[#102a63] bg-gradient-to-b from-[#08214f] via-[#061f4a] to-[#061a42] px-4 py-5 text-white shadow-[0_24px_60px_rgba(5,18,44,0.45)] transition-transform duration-200 ease-out ${
+      className={`fixed inset-y-0 left-0 z-40 flex w-[min(86vw,294px)] shrink-0 flex-col border-r border-[#10204d] bg-gradient-to-b from-[#07153f] via-[#081845] to-[#06163b] px-4 py-5 text-white shadow-[0_24px_60px_rgba(5,18,44,0.42)] transition-transform duration-200 ease-out ${
         isOpen ? "translate-x-0" : "-translate-x-full"
-      } xl:static xl:z-auto xl:w-[296px] xl:translate-x-0 xl:px-5 xl:py-6 xl:shadow-none`}
+      } xl:static xl:z-auto xl:w-[294px] xl:translate-x-0 xl:px-4 xl:py-5 xl:shadow-none`}
     >
-      <div className="flex items-start justify-between gap-3 xl:block">
-        <div className="min-w-0">
-          <MatrixLogo />
-          <p className="mt-3 text-sm leading-6 text-[#a8bee8]">Platform operations, procurement, finance, and access control in one workspace.</p>
-        </div>
+      <div className="flex items-start justify-between gap-3">
+        <MatrixLogo />
         <button
           type="button"
           aria-label="Close sidebar"
           onClick={onNavigate}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-[#d7e5ff] xl:hidden"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/12 text-[#d7e5ff] xl:hidden"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="m6 6 12 12M18 6 6 18" />
@@ -414,10 +392,10 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
         </button>
       </div>
 
-      <nav aria-label="Primary navigation" className="mt-6 flex-1 overflow-y-auto pr-1 xl:mt-8">
+      <nav aria-label="Primary navigation" className="mt-6 flex-1 overflow-y-auto pr-1">
         {sections.map((section) => (
-          <div key={section.title || "main"} className="mb-6">
-            <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#9db6e8]">{section.title}</p>
+          <div key={section.title} className="mb-5">
+            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8fa6d3]">{section.title}</p>
             <ul className="space-y-1.5">
               {section.items.map((item) => (
                 <MenuItem
@@ -435,23 +413,18 @@ export function Sidebar({ items, isOpen, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      {usingFallback ? (
-        <p className="mt-3 rounded-md border border-amber-300/40 bg-amber-200/10 px-3 py-2 text-xs text-amber-100">
-          Development navigation fallback is active.
-        </p>
-      ) : null}
-      <div className="mt-4 rounded-[22px] border border-[#2a477d] bg-gradient-to-br from-[#101f56] to-[#0d1b48] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <div className="mt-4 rounded-[14px] border border-[#4b2f73] bg-gradient-to-br from-[#1d1b5a] to-[#152457] px-4 py-4">
         <div className="flex items-start gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-[#dbe8ff]">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-[#dce7ff]">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M12 17v.01" />
-              <path d="M9.1 9a3 3 0 1 1 5.8 1c-.4 1.4-1.8 2-2.3 3" />
-              <circle cx="12" cy="12" r="9" />
+              <path d="M5 12a7 7 0 0 1 14 0v5" />
+              <rect x="4" y="12" width="4" height="6" rx="2" />
+              <rect x="16" y="12" width="4" height="6" rx="2" />
             </svg>
           </div>
           <div>
             <p className="text-sm font-semibold text-white">Need help?</p>
-            <p className="mt-1 text-xs leading-5 text-[#a8bee8]">Use the header quick actions on smaller screens. Long module lists stay scrollable here.</p>
+            <p className="mt-1 text-xs text-[#b9c7ea]">Visit our help center</p>
           </div>
         </div>
       </div>

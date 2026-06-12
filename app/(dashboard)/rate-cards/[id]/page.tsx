@@ -67,7 +67,7 @@ export default async function RateCardDetailPage({ params, searchParams }: RateC
 
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-4 text-base font-semibold">Summary</h2>
             <dl className="grid gap-3 text-sm md:grid-cols-2">
               <div>
@@ -109,7 +109,7 @@ export default async function RateCardDetailPage({ params, searchParams }: RateC
             </dl>
           </div>
 
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Lines</h2>
             {rateCard.lines.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No lines configured.</p>
@@ -143,7 +143,7 @@ export default async function RateCardDetailPage({ params, searchParams }: RateC
         </div>
 
         {canUpdate ? (
-          <div className="rounded-md border border-[var(--border)] bg-white p-5">
+          <div className="crm-panel">
             <h2 className="mb-3 text-base font-semibold">Status and deletion</h2>
             <RateCardStatusActions rateCardId={rateCard.id} canDelete={canDelete} canPublish={canPublish} />
           </div>

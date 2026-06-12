@@ -98,7 +98,7 @@ export function RateCardForm({
   );
 
   return (
-    <form action={action} className="space-y-5 rounded-md border border-[var(--border)] bg-white p-5">
+    <form action={action} className="crm-form-shell space-y-5">
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-1 text-sm md:col-span-2">

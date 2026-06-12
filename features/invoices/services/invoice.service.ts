@@ -13,11 +13,17 @@ import { measurePerf } from "@/lib/observability/perf";
 type ListInvoicesInput = {
   q?: string;
   status?: InvoiceStatus;
+  statusGroup?: InvoiceStatusGroup;
   vendorId?: string;
   purchaseOrderId?: string;
+  categoryId?: string;
+  dateRange?: InvoiceDateRange;
   page?: number;
   pageSize?: number;
 };
+
+export type InvoiceStatusGroup = "pending_approval" | "approved" | "paid" | "overdue";
+export type InvoiceDateRange = "today" | "this_week" | "this_month" | "overdue";
 
 const invoiceStatusTransitionMap: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   [InvoiceStatus.DRAFT]: [InvoiceStatus.DRAFT, InvoiceStatus.SUBMITTED, InvoiceStatus.APPROVAL_PENDING, InvoiceStatus.CANCELLED],
@@ -190,6 +196,102 @@ export function getInvoiceScopeWhere(session: Session): Prisma.InvoiceWhereInput
   return scopeByTenant(session, {});
 }
 
+function getStatusesForGroup(group: InvoiceStatusGroup) {
+  if (group === "pending_approval") {
+    return [InvoiceStatus.DRAFT, InvoiceStatus.SUBMITTED, InvoiceStatus.APPROVAL_PENDING];
+  }
+  if (group === "approved") {
+    return [InvoiceStatus.APPROVED];
+  }
+  return [InvoiceStatus.PAID, InvoiceStatus.PARTIALLY_PAID];
+}
+
+function buildInvoiceWhere(
+  session: Session,
+  input: Pick<ListInvoicesInput, "q" | "status" | "statusGroup" | "vendorId" | "purchaseOrderId" | "categoryId" | "dateRange">
+): Prisma.InvoiceWhereInput {
+  const where: Prisma.InvoiceWhereInput = {
+    ...getInvoiceScopeWhere(session),
+    deletedAt: null,
+  };
+
+  if (input.status) {
+    where.status = input.status;
+  } else if (input.statusGroup && input.statusGroup !== "overdue") {
+    where.status = {
+      in: getStatusesForGroup(input.statusGroup),
+    };
+  }
+
+  if (input.vendorId?.trim()) {
+    where.vendorId = input.vendorId;
+  }
+
+  if (input.purchaseOrderId?.trim()) {
+    where.purchaseOrderId = input.purchaseOrderId;
+  }
+
+  if (input.categoryId?.trim()) {
+    where.items = {
+      some: {
+        item: {
+          categoryId: input.categoryId.trim(),
+        },
+      },
+    };
+  }
+
+  const now = new Date();
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  if (input.dateRange || input.statusGroup === "overdue") {
+    if (input.dateRange === "today") {
+      const endToday = new Date(startToday);
+      endToday.setHours(23, 59, 59, 999);
+      where.invoiceDate = {
+        gte: startToday,
+        lte: endToday,
+      };
+    } else if (input.dateRange === "this_week") {
+      const endWeek = new Date(startToday);
+      endWeek.setDate(endWeek.getDate() + 7);
+      endWeek.setHours(23, 59, 59, 999);
+      where.invoiceDate = {
+        gte: startToday,
+        lte: endWeek,
+      };
+    } else if (input.dateRange === "this_month") {
+      const endMonth = new Date(startToday.getFullYear(), startToday.getMonth() + 1, 0, 23, 59, 59, 999);
+      where.invoiceDate = {
+        gte: startToday,
+        lte: endMonth,
+      };
+    } else if (input.dateRange === "overdue" || input.statusGroup === "overdue") {
+      where.dueDate = {
+        lt: now,
+      };
+      where.status = {
+        notIn: [InvoiceStatus.PAID, InvoiceStatus.CANCELLED],
+      };
+    }
+  }
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    where.OR = [
+      { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
+      { invoiceNumber: { contains: q, mode: "insensitive" } },
+      { notes: { contains: q, mode: "insensitive" } },
+      { vendor: { name: { contains: q, mode: "insensitive" } } },
+      { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
+      { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
+      { items: { some: { item: { category: { name: { contains: q, mode: "insensitive" } } } } } },
+    ];
+  }
+
+  return where;
+}
+
 export async function listInvoices(session: Session, input: ListInvoicesInput) {
   return measurePerf("invoices.list", async () => {
     const pagination = getPagination(input);
@@ -200,40 +302,16 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
       buildFilterSignature({
         q: input.q?.trim() || null,
         status: input.status ?? null,
+        statusGroup: input.statusGroup ?? null,
         vendorId: input.vendorId?.trim() || null,
         purchaseOrderId: input.purchaseOrderId?.trim() || null,
+        categoryId: input.categoryId?.trim() || null,
+        dateRange: input.dateRange ?? null,
         page: pagination.page,
         pageSize: pagination.pageSize,
       }),
     ].join(":");
-    const where: Prisma.InvoiceWhereInput = {
-      ...getInvoiceScopeWhere(session),
-      deletedAt: null,
-    };
-
-    if (input.status) {
-      where.status = input.status;
-    }
-
-    if (input.vendorId?.trim()) {
-      where.vendorId = input.vendorId;
-    }
-
-    if (input.purchaseOrderId?.trim()) {
-      where.purchaseOrderId = input.purchaseOrderId;
-    }
-
-    if (input.q?.trim()) {
-      const q = input.q.trim();
-      where.OR = [
-        { vendorInvoiceNumber: { contains: q, mode: "insensitive" } },
-        { invoiceNumber: { contains: q, mode: "insensitive" } },
-        { notes: { contains: q, mode: "insensitive" } },
-        { vendor: { name: { contains: q, mode: "insensitive" } } },
-        { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
-        { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
-      ];
-    }
+    const where = buildInvoiceWhere(session, input);
 
     const loadInvoices = async () => {
       const [invoices, total] = await Promise.all([
@@ -247,6 +325,24 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
             vendor: { select: { id: true, code: true, name: true } },
             purchaseOrder: { select: { id: true, poNumber: true, status: true } },
             serviceRequest: { select: { id: true, serviceNumber: true, title: true } },
+            items: {
+              take: 3,
+              orderBy: [{ itemId: "asc" }],
+              select: {
+                item: {
+                  select: {
+                    id: true,
+                    name: true,
+                    category: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
             _count: { select: { items: true } },
           },
         }),
@@ -271,6 +367,154 @@ export async function listInvoices(session: Session, input: ListInvoicesInput) {
 
     return loadInvoices();
   });
+}
+
+export async function listInvoiceCategoryOptions(session: Session) {
+  return prisma.category.findMany({
+    where: {
+      deletedAt: null,
+      ...scopeByTenant(session, {}),
+    },
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+}
+
+export async function getInvoiceOverview(
+  session: Session,
+  input: Pick<ListInvoicesInput, "q" | "vendorId" | "purchaseOrderId" | "categoryId" | "dateRange"> = {}
+) {
+  const where = buildInvoiceWhere(session, input);
+  const invoices = await prisma.invoice.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      vendorInvoiceNumber: true,
+      invoiceNumber: true,
+      status: true,
+      invoiceDate: true,
+      dueDate: true,
+      grandTotal: true,
+      updatedAt: true,
+      vendor: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      items: {
+        take: 3,
+        select: {
+          item: {
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const now = Date.now();
+  let latestUpdatedAt: Date | null = null;
+  let pendingApprovalCount = 0;
+  let approvedCount = 0;
+  let paidCount = 0;
+  let overdueCount = 0;
+  let totalAmount = 0;
+  let totalPayable = 0;
+  const vendorTotals = new Map<string, { id: string; name: string; amount: number }>();
+  const statusBreakdown = {
+    pendingApproval: { key: "pending_approval", label: "Pending Approval", count: 0, color: "#ff9a1a" },
+    approved: { key: "approved", label: "Approved", count: 0, color: "#21c16b" },
+    paid: { key: "paid", label: "Paid", count: 0, color: "#315cff" },
+    overdue: { key: "overdue", label: "Overdue", count: 0, color: "#ff4f5e" },
+  };
+  const overdueInvoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    vendorName: string;
+    daysOverdue: number;
+  }> = [];
+
+  for (const invoice of invoices) {
+    const amount = Number(invoice.grandTotal);
+    totalAmount += amount;
+
+    if (!latestUpdatedAt || invoice.updatedAt > latestUpdatedAt) {
+      latestUpdatedAt = invoice.updatedAt;
+    }
+
+    const vendorTotal = vendorTotals.get(invoice.vendor.id);
+    if (vendorTotal) {
+      vendorTotal.amount += amount;
+    } else {
+      vendorTotals.set(invoice.vendor.id, {
+        id: invoice.vendor.id,
+        name: invoice.vendor.name,
+        amount,
+      });
+    }
+
+    if (
+      invoice.status === InvoiceStatus.DRAFT ||
+      invoice.status === InvoiceStatus.SUBMITTED ||
+      invoice.status === InvoiceStatus.APPROVAL_PENDING
+    ) {
+      pendingApprovalCount += 1;
+      statusBreakdown.pendingApproval.count += 1;
+      totalPayable += amount;
+    } else if (invoice.status === InvoiceStatus.APPROVED) {
+      approvedCount += 1;
+      statusBreakdown.approved.count += 1;
+      totalPayable += amount;
+    } else if (invoice.status === InvoiceStatus.PAID || invoice.status === InvoiceStatus.PARTIALLY_PAID) {
+      paidCount += 1;
+      statusBreakdown.paid.count += 1;
+      if (invoice.status !== InvoiceStatus.PAID) {
+        totalPayable += amount;
+      }
+    }
+
+    if (invoice.dueDate && invoice.dueDate.getTime() < now && invoice.status !== InvoiceStatus.PAID && invoice.status !== InvoiceStatus.CANCELLED) {
+      overdueCount += 1;
+      statusBreakdown.overdue.count += 1;
+      overdueInvoices.push({
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        vendorName: invoice.vendor.name,
+        daysOverdue: Math.max(Math.ceil((now - invoice.dueDate.getTime()) / (1000 * 60 * 60 * 24)), 1),
+      });
+    }
+  }
+
+  return {
+    totalInvoices: invoices.length,
+    pendingApprovalCount,
+    approvedCount,
+    paidCount,
+    overdueCount,
+    totalAmount: roundMoney(totalAmount),
+    totalPayable: roundMoney(totalPayable),
+    latestUpdatedAt,
+    statusBreakdown: [
+      statusBreakdown.pendingApproval,
+      statusBreakdown.approved,
+      statusBreakdown.paid,
+      statusBreakdown.overdue,
+    ],
+    vendorBreakdown: Array.from(vendorTotals.values()).sort((left, right) => right.amount - left.amount).slice(0, 5),
+    overdueInvoices: overdueInvoices.sort((left, right) => right.daysOverdue - left.daysOverdue).slice(0, 5),
+  };
 }
 
 export async function getInvoiceById(session: Session, id: string) {

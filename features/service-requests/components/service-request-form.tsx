@@ -130,17 +130,22 @@ export function ServiceRequestForm({
   }, [branchOptions, selectedBranchId]);
 
   return (
-    <form action={action} className="space-y-5 rounded-md border border-[var(--border)] bg-white p-5">
+    <form action={action} className="crm-form-shell space-y-5">
       {errorMessage ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p> : null}
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Service partner</span>
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Request Context</h3>
+          <p className="crm-form-section-copy">Scope the request to the correct company, client, and branch before assigning work.</p>
+        </div>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Service partner</span>
           <select
             name="servicePartnerId"
             value={selectedServicePartnerId}
             onChange={(event) => setSelectedServicePartnerId(event.target.value)}
             disabled={!canChooseServicePartner}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3 disabled:bg-slate-50"
+            className="crm-select"
           >
             {servicePartners.map((partner) => (
               <option key={partner.id} value={partner.id}>
@@ -151,26 +156,26 @@ export function ServiceRequestForm({
           {!canChooseServicePartner ? <input type="hidden" name="servicePartnerId" value={selectedServicePartnerId} /> : null}
         </label>
 
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Service number (optional)</span>
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Service number</span>
           <input
             name="serviceNumber"
             defaultValue={serviceRequest?.serviceNumber ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3 uppercase"
+            className="crm-input uppercase"
             maxLength={60}
             placeholder="Auto-generated if left blank"
             readOnly={isEdit}
           />
-          {isEdit ? <p className="text-xs text-[var(--muted)]">Service number is fixed after creation.</p> : null}
-        </label>
+            <p className="crm-field-note">{isEdit ? "Service number is fixed after creation." : "Leave blank to use the existing auto-numbering flow."}</p>
+          </label>
 
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Client</span>
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Client</span>
           <select
             name="clientId"
             value={selectedClientId}
             onChange={(event) => setSelectedClientId(event.target.value)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-select"
             required
           >
             {clientOptions.map((client) => (
@@ -179,16 +184,16 @@ export function ServiceRequestForm({
               </option>
             ))}
           </select>
-          {clientOptions.length === 0 ? <p className="text-xs text-red-700">No clients available for the selected tenant.</p> : null}
-        </label>
+            {clientOptions.length === 0 ? <p className="text-xs text-red-700">No clients available for the selected tenant.</p> : null}
+          </label>
 
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Branch (optional)</span>
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Branch</span>
           <select
             name="branchId"
             value={selectedBranchId}
             onChange={(event) => setSelectedBranchId(event.target.value)}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-select"
           >
             <option value="">No branch</option>
             {branchOptions.map((branch) => (
@@ -197,73 +202,79 @@ export function ServiceRequestForm({
               </option>
             ))}
           </select>
-        </label>
+            <p className="crm-field-note">Keep branch empty only when the request is company-level and not tied to a site.</p>
+          </label>
+        </div>
+      </div>
 
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Title</span>
+      <div className="crm-form-section space-y-4">
+        <div>
+          <h3 className="crm-form-section-title">Request Details</h3>
+          <p className="crm-form-section-copy">Capture the subject, service type, scheduling, and request description.</p>
+        </div>
+        <div className="crm-form-grid md:grid-cols-2">
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Title</span>
           <input
             name="title"
             defaultValue={serviceRequest?.title ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
             maxLength={240}
             required
           />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Service type</span>
+          </label>
+          <label className="crm-field">
+            <span className="crm-field-label">Service type</span>
           <input
             name="serviceType"
             defaultValue={serviceRequest?.serviceType ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
             maxLength={120}
             required
           />
-        </label>
-        {isEdit ? (
-          <input type="hidden" name="status" value={serviceRequest?.status ?? ServiceRequestStatus.RAISED} />
-        ) : (
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">Initial status</span>
-            <select
-              name="status"
-              defaultValue={serviceRequest?.status ?? ServiceRequestStatus.RAISED}
-              className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-            >
-              {editableStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
           </label>
-        )}
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Requested at</span>
+          {isEdit ? (
+            <input type="hidden" name="status" value={serviceRequest?.status ?? ServiceRequestStatus.RAISED} />
+          ) : (
+            <label className="crm-field">
+              <span className="crm-field-label">Initial status</span>
+              <select name="status" defaultValue={serviceRequest?.status ?? ServiceRequestStatus.RAISED} className="crm-select">
+                {editableStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="crm-field">
+            <span className="crm-field-label">Requested at</span>
           <input
             type="date"
             name="requestedAt"
             defaultValue={serviceRequest?.requestedAt ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
           />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">Target date</span>
+          </label>
+          <label className="crm-field">
+            <span className="crm-field-label">Target date</span>
           <input
             type="date"
             name="targetDate"
             defaultValue={serviceRequest?.targetDate ?? ""}
-            className="h-9 w-full rounded-md border border-[var(--border)] px-3"
+            className="crm-input"
           />
-        </label>
-        <label className="space-y-1 text-sm md:col-span-2">
-          <span className="font-medium">Description</span>
+          </label>
+          <label className="crm-field md:col-span-2">
+            <span className="crm-field-label">Description</span>
           <textarea
             name="description"
             defaultValue={serviceRequest?.description ?? ""}
-            className="min-h-24 w-full rounded-md border border-[var(--border)] px-3 py-2"
+            className="crm-textarea"
             maxLength={1000}
           />
-        </label>
+          </label>
+        </div>
       </div>
 
       <FormActions cancelHref={cancelHref} submitLabel={serviceRequest ? "Update request" : "Create request"} />

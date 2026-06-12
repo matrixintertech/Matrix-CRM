@@ -236,6 +236,7 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
         select: {
           id: true,
           servicePartnerId: true,
+          updatedAt: true,
           vendorInvoiceNumber: true,
           invoiceNumber: true,
           status: true,
@@ -248,6 +249,13 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
               id: true,
               code: true,
               name: true,
+            },
+          },
+          servicePartner: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
             },
           },
           purchaseOrder: {
@@ -271,6 +279,14 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
           amount: true,
           status: true,
           paidAt: true,
+          updatedAt: true,
+          servicePartner: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
           invoice: {
             select: {
               id: true,
@@ -305,6 +321,14 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
           amount: true,
           status: true,
           paidAt: true,
+          updatedAt: true,
+          servicePartner: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
           vendor: {
             select: {
               id: true,
@@ -374,6 +398,7 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       vendorInvoiceNumber: invoice.vendorInvoiceNumber,
       invoiceNumber: invoice.invoiceNumber,
       vendor: invoice.vendor,
+      servicePartner: invoice.servicePartner,
       purchaseOrder: invoice.purchaseOrder,
       status: invoice.status,
       invoiceDate: invoice.invoiceDate,
@@ -382,6 +407,7 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       grandTotal,
       paidAmount,
       balanceDue,
+      updatedAt: invoice.updatedAt,
     };
     });
 
@@ -401,10 +427,12 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
         status: payment.status,
         paidAt: payment.paidAt,
         sourceLabel: "Vendor Invoice Payment",
+        servicePartner: payment.servicePartner,
         vendor: payment.invoice!.vendor,
         purchaseOrder: payment.invoice!.purchaseOrder,
         vendorInvoiceNumber: payment.invoice!.vendorInvoiceNumber,
         invoiceNumber: payment.invoice!.invoiceNumber,
+        updatedAt: payment.updatedAt,
       })),
     ...vendorPaymentsForCash.map((vendorPayment) => ({
       id: vendorPayment.id,
@@ -413,10 +441,12 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       status: vendorPayment.status,
       paidAt: vendorPayment.paidAt,
       sourceLabel: "Vendor Payment",
+      servicePartner: vendorPayment.servicePartner,
       vendor: vendorPayment.vendor,
       purchaseOrder: vendorPayment.purchaseOrder,
       vendorInvoiceNumber: null,
       invoiceNumber: null,
+      updatedAt: vendorPayment.updatedAt,
     })),
     ].sort((left, right) => {
     const leftTime = left.paidAt?.getTime() ?? 0;
@@ -470,6 +500,11 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       })),
     };
 
+      const latestUpdatedAt = [
+        ...payables.map((row) => row.updatedAt),
+        ...paymentsMade.map((row) => row.updatedAt),
+      ].reduce<Date | null>((latest, current) => (!latest || current > latest ? current : latest), null);
+
       return {
         summary: {
         totalVendorInvoiceAmount,
@@ -483,6 +518,7 @@ export async function getFinanceReportData(session: Session, input: FinanceRepor
       paymentsMade,
       cashMovement,
       ledgerSummary,
+      latestUpdatedAt,
       };
     }, {
       ttlSeconds: 30,

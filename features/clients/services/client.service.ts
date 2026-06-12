@@ -14,6 +14,8 @@ type ListClientsInput = {
   q?: string;
   status?: ClientStatus;
   servicePartnerId?: string;
+  state?: string;
+  city?: string;
   page?: number;
   pageSize?: number;
 };
@@ -30,6 +32,117 @@ export function getClientScopeWhere(session: Session): Prisma.ClientWhereInput {
   return scopeByTenant(session, {});
 }
 
+function buildClientWhere(session: Session, input: Omit<ListClientsInput, "page" | "pageSize">): Prisma.ClientWhereInput {
+  const where: Prisma.ClientWhereInput = {
+    ...getClientScopeWhere(session),
+    deletedAt: null,
+  };
+
+  if (input.status) {
+    where.status = input.status;
+  }
+
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
+  }
+
+  if (input.state?.trim()) {
+    where.state = input.state.trim();
+  }
+
+  if (input.city?.trim()) {
+    where.city = input.city.trim();
+  }
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    where.OR = [
+      { code: { contains: q, mode: "insensitive" } },
+      { name: { contains: q, mode: "insensitive" } },
+      { legalName: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q, mode: "insensitive" } },
+      { city: { contains: q, mode: "insensitive" } },
+      { state: { contains: q, mode: "insensitive" } },
+      { clientUsers: { some: { user: { name: { contains: q, mode: "insensitive" } } } } },
+      { clientUsers: { some: { user: { email: { contains: q, mode: "insensitive" } } } } },
+      { clientUsers: { some: { designation: { contains: q, mode: "insensitive" } } } },
+    ];
+  }
+
+  return where;
+}
+
+type ClientListRow = Awaited<ReturnType<typeof listClients>>["clients"][number];
+
+async function listPrimaryContactsByClientIds(clientIds: string[]) {
+  if (clientIds.length === 0) {
+    return new Map<
+      string,
+      {
+        id: string;
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        designation: string | null;
+      } | null
+    >();
+  }
+
+  const contacts = await prisma.clientUser.findMany({
+    where: {
+      clientId: {
+        in: clientIds,
+      },
+      deletedAt: null,
+    },
+    select: {
+      clientId: true,
+      designation: true,
+      createdAt: true,
+      reportingToId: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: [{ reportingToId: "asc" }, { createdAt: "asc" }],
+  });
+
+  const map = new Map<
+    string,
+    {
+      id: string;
+      name: string | null;
+      email: string | null;
+      phone: string | null;
+      designation: string | null;
+    } | null
+  >();
+
+  for (const clientId of clientIds) {
+    map.set(clientId, null);
+  }
+
+  for (const contact of contacts) {
+    if (!map.get(contact.clientId)) {
+      map.set(contact.clientId, {
+        id: contact.user.id,
+        name: contact.user.name,
+        email: contact.user.email,
+        phone: contact.user.phone,
+        designation: contact.designation,
+      });
+    }
+  }
+
+  return map;
+}
+
 export async function listClients(session: Session, input: ListClientsInput) {
   return measurePerf("clients.list", async () => {
     const pagination = getPagination(input);
@@ -41,32 +154,13 @@ export async function listClients(session: Session, input: ListClientsInput) {
         q: input.q?.trim() || null,
         status: input.status ?? null,
         servicePartnerId: input.servicePartnerId?.trim() || null,
+        state: input.state?.trim() || null,
+        city: input.city?.trim() || null,
         page: pagination.page,
         pageSize: pagination.pageSize,
       }),
     ].join(":");
-    const where: Prisma.ClientWhereInput = {
-      ...getClientScopeWhere(session),
-      deletedAt: null,
-    };
-
-    if (input.status) {
-      where.status = input.status;
-    }
-
-    if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
-      where.servicePartnerId = input.servicePartnerId.trim();
-    }
-
-    if (input.q?.trim()) {
-      const q = input.q.trim();
-      where.OR = [
-        { code: { contains: q, mode: "insensitive" } },
-        { name: { contains: q, mode: "insensitive" } },
-        { email: { contains: q, mode: "insensitive" } },
-        { phone: { contains: q, mode: "insensitive" } },
-      ];
-    }
+    const where = buildClientWhere(session, input);
 
     const loadClients = async () => {
       const [clients, total] = await Promise.all([
@@ -90,9 +184,13 @@ export async function listClients(session: Session, input: ListClientsInput) {
         }),
         prisma.client.count({ where }),
       ]);
+      const contactMap = await listPrimaryContactsByClientIds(clients.map((client) => client.id));
 
       return {
-        clients,
+        clients: clients.map((client) => ({
+          ...client,
+          primaryContact: contactMap.get(client.id) ?? null,
+        })),
         total,
         page: pagination.page,
         pageSize: pagination.pageSize,
@@ -108,6 +206,124 @@ export async function listClients(session: Session, input: ListClientsInput) {
     }
 
     return loadClients();
+  });
+}
+
+export async function getClientOverview(session: Session, input: Omit<ListClientsInput, "page" | "pageSize" | "q">) {
+  const where = buildClientWhere(session, input);
+
+  const [clients, totalClients, activeClients, pendingClients, servicePartners] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      select: {
+        id: true,
+        status: true,
+        createdAt: true,
+        servicePartnerId: true,
+        state: true,
+      },
+    }),
+    prisma.client.count({ where }),
+    prisma.client.count({ where: { ...where, status: ClientStatus.ACTIVE } }),
+    prisma.client.count({ where: { ...where, status: ClientStatus.ON_HOLD } }),
+    prisma.client.findMany({
+      where,
+      distinct: ["servicePartnerId"],
+      select: {
+        servicePartnerId: true,
+      },
+    }),
+  ]);
+
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const addedThisMonth = clients.filter((client) => client.createdAt >= monthStart).length;
+  const stateCounts = Array.from(
+    clients.reduce<Map<string, number>>((map, client) => {
+      if (!client.state) {
+        return map;
+      }
+      map.set(client.state, (map.get(client.state) ?? 0) + 1);
+      return map;
+    }, new Map())
+  )
+    .map(([state, count]) => ({ state, count }))
+    .sort((left, right) => right.count - left.count || left.state.localeCompare(right.state))
+    .slice(0, 5);
+
+  return {
+    totalClients,
+    activeClients,
+    addedThisMonth,
+    linkedServicePartners: servicePartners.length,
+    pendingClients,
+    inactiveClients: clients.filter((client) => client.status === ClientStatus.INACTIVE).length,
+    stateCounts,
+  };
+}
+
+export async function listClientFilterOptions(session: Session) {
+  const baseWhere: Prisma.ClientWhereInput = {
+    ...getClientScopeWhere(session),
+    deletedAt: null,
+  };
+
+  const [states, cities] = await Promise.all([
+    prisma.client.findMany({
+      where: {
+        ...baseWhere,
+        state: {
+          not: null,
+        },
+      },
+      distinct: ["state"],
+      select: {
+        state: true,
+      },
+      orderBy: [{ state: "asc" }],
+    }),
+    prisma.client.findMany({
+      where: {
+        ...baseWhere,
+        city: {
+          not: null,
+        },
+      },
+      distinct: ["city"],
+      select: {
+        city: true,
+      },
+      orderBy: [{ city: "asc" }],
+    }),
+  ]);
+
+  return {
+    states: states.map((entry) => entry.state).filter((value): value is string => Boolean(value)),
+    cities: cities.map((entry) => entry.city).filter((value): value is string => Boolean(value)),
+  };
+}
+
+export async function listRecentClients(session: Session, input: Omit<ListClientsInput, "page" | "pageSize" | "q">) {
+  const where = buildClientWhere(session, input);
+  return prisma.client.findMany({
+    where,
+    take: 5,
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      servicePartner: { select: { id: true, name: true, code: true } },
+      _count: {
+        select: {
+          branches: {
+            where: {
+              deletedAt: null,
+            },
+          },
+        },
+      },
+    },
   });
 }
 

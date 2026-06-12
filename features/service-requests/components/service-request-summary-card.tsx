@@ -34,42 +34,47 @@ type ServiceRequestSummary = {
 
 export function ServiceRequestSummaryCard({ serviceRequest }: { serviceRequest: ServiceRequestSummary }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-white p-5">
-      <h2 className="mb-4 text-base font-semibold">Summary</h2>
-      <dl className="grid gap-3 text-sm md:grid-cols-2">
+    <div className="crm-panel">
+      <div className="crm-panel-heading">
         <div>
-          <dt className="text-[var(--muted)]">Service number</dt>
+          <h2>Request Summary</h2>
+          <p>Core request context, tenant linkage, schedule, and current processing state.</p>
+        </div>
+      </div>
+      <dl className="crm-detail-grid crm-detail-grid--two">
+        <div className="crm-detail-item">
+          <dt>Service number</dt>
           <dd>{serviceRequest.serviceNumber}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Status</dt>
+        <div className="crm-detail-item">
+          <dt>Status</dt>
           <dd>
             <StatusBadge value={serviceRequest.status} />
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Service type</dt>
+        <div className="crm-detail-item">
+          <dt>Service type</dt>
           <dd>{serviceRequest.serviceType}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Service partner</dt>
+        <div className="crm-detail-item">
+          <dt>Service partner</dt>
           <dd>
             {serviceRequest.servicePartner.name} ({serviceRequest.servicePartner.code})
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Client</dt>
+        <div className="crm-detail-item">
+          <dt>Client</dt>
           <dd>
-            <Link href={`/clients/${serviceRequest.client.id}`} className="underline">
+            <Link href={`/clients/${serviceRequest.client.id}`} className="crm-inline-link">
               {serviceRequest.client.name} ({serviceRequest.client.code})
             </Link>
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Branch</dt>
+        <div className="crm-detail-item">
+          <dt>Branch</dt>
           <dd>
             {serviceRequest.branch ? (
-              <Link href={`/branches/${serviceRequest.branch.id}`} className="underline">
+              <Link href={`/branches/${serviceRequest.branch.id}`} className="crm-inline-link">
                 {serviceRequest.branch.name} ({serviceRequest.branch.code})
               </Link>
             ) : (
@@ -77,28 +82,28 @@ export function ServiceRequestSummaryCard({ serviceRequest }: { serviceRequest: 
             )}
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Requested at</dt>
+        <div className="crm-detail-item">
+          <dt>Requested at</dt>
           <dd>{formatDateTime(serviceRequest.requestedAt)}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Target date</dt>
+        <div className="crm-detail-item">
+          <dt>Target date</dt>
           <dd>{formatDateTime(serviceRequest.targetDate)}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Completed at</dt>
+        <div className="crm-detail-item">
+          <dt>Completed at</dt>
           <dd>{formatDateTime(serviceRequest.completedAt)}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Created</dt>
+        <div className="crm-detail-item">
+          <dt>Created</dt>
           <dd>{formatDateTime(serviceRequest.createdAt)}</dd>
         </div>
-        <div>
-          <dt className="text-[var(--muted)]">Updated</dt>
+        <div className="crm-detail-item">
+          <dt>Updated</dt>
           <dd>{formatDateTime(serviceRequest.updatedAt)}</dd>
         </div>
-        <div className="md:col-span-2">
-          <dt className="text-[var(--muted)]">Description</dt>
+        <div className="crm-detail-item crm-detail-item--full">
+          <dt>Description</dt>
           <dd>{formatOptional(serviceRequest.description)}</dd>
         </div>
       </dl>

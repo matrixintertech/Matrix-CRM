@@ -9,10 +9,17 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListPurchaseOrdersInput = {
   q?: string;
   status?: PurchaseOrderStatus;
+  statusGroup?: PurchaseOrderStatusGroup;
   vendorId?: string;
+  categoryId?: string;
+  dateRange?: PurchaseOrderDateRange;
+  servicePartnerId?: string;
   page?: number;
   pageSize?: number;
 };
+
+export type PurchaseOrderStatusGroup = "open" | "partially_received" | "completed" | "cancelled";
+export type PurchaseOrderDateRange = "today" | "this_week" | "this_month" | "overdue";
 
 const purchaseOrderStatusTransitionMap: Record<PurchaseOrderStatus, readonly PurchaseOrderStatus[]> = {
   [PurchaseOrderStatus.DRAFT]: [
@@ -152,19 +159,94 @@ export function getPurchaseOrderScopeWhere(session: Session): Prisma.PurchaseOrd
   return scopeByTenant(session, {});
 }
 
-export async function listPurchaseOrders(session: Session, input: ListPurchaseOrdersInput) {
-  const pagination = getPagination(input);
+function getStatusesForGroup(group: PurchaseOrderStatusGroup) {
+  if (group === "open") {
+    return [
+      PurchaseOrderStatus.DRAFT,
+      PurchaseOrderStatus.APPROVAL_PENDING,
+      PurchaseOrderStatus.APPROVED,
+      PurchaseOrderStatus.REJECTED,
+      PurchaseOrderStatus.ISSUED,
+    ];
+  }
+  if (group === "partially_received") {
+    return [PurchaseOrderStatus.PARTIALLY_FULFILLED];
+  }
+  if (group === "completed") {
+    return [PurchaseOrderStatus.FULFILLED];
+  }
+  return [PurchaseOrderStatus.CANCELLED];
+}
+
+function buildPurchaseOrderWhere(
+  session: Session,
+  input: Pick<ListPurchaseOrdersInput, "q" | "status" | "statusGroup" | "vendorId" | "categoryId" | "dateRange" | "servicePartnerId">
+): Prisma.PurchaseOrderWhereInput {
   const where: Prisma.PurchaseOrderWhereInput = {
     ...getPurchaseOrderScopeWhere(session),
     deletedAt: null,
   };
 
+  if (session.user.isSuperAdmin && input.servicePartnerId?.trim()) {
+    where.servicePartnerId = input.servicePartnerId.trim();
+  }
+
   if (input.status) {
     where.status = input.status;
+  } else if (input.statusGroup) {
+    where.status = {
+      in: getStatusesForGroup(input.statusGroup),
+    };
   }
 
   if (input.vendorId?.trim()) {
-    where.vendorId = input.vendorId;
+    where.vendorId = input.vendorId.trim();
+  }
+
+  if (input.categoryId?.trim()) {
+    where.items = {
+      some: {
+        item: {
+          categoryId: input.categoryId.trim(),
+        },
+      },
+    };
+  }
+
+  if (input.dateRange) {
+    const now = new Date();
+    const startToday = new Date(now);
+    startToday.setHours(0, 0, 0, 0);
+    const endToday = new Date(startToday);
+    endToday.setHours(23, 59, 59, 999);
+
+    if (input.dateRange === "today") {
+      where.orderDate = {
+        gte: startToday,
+        lte: endToday,
+      };
+    } else if (input.dateRange === "this_week") {
+      const endWeek = new Date(startToday);
+      endWeek.setDate(endWeek.getDate() + 7);
+      endWeek.setHours(23, 59, 59, 999);
+      where.orderDate = {
+        gte: startToday,
+        lte: endWeek,
+      };
+    } else if (input.dateRange === "this_month") {
+      const endMonth = new Date(startToday.getFullYear(), startToday.getMonth() + 1, 0, 23, 59, 59, 999);
+      where.orderDate = {
+        gte: startToday,
+        lte: endMonth,
+      };
+    } else if (input.dateRange === "overdue") {
+      where.expectedDate = {
+        lt: now,
+      };
+      where.status = {
+        notIn: [PurchaseOrderStatus.FULFILLED, PurchaseOrderStatus.CANCELLED],
+      };
+    }
   }
 
   if (input.q?.trim()) {
@@ -174,8 +256,35 @@ export async function listPurchaseOrders(session: Session, input: ListPurchaseOr
       { notes: { contains: q, mode: "insensitive" } },
       { vendor: { name: { contains: q, mode: "insensitive" } } },
       { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
+      {
+        items: {
+          some: {
+            OR: [
+              {
+                item: {
+                  name: { contains: q, mode: "insensitive" },
+                },
+              },
+              {
+                item: {
+                  category: {
+                    name: { contains: q, mode: "insensitive" },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
     ];
   }
+
+  return where;
+}
+
+export async function listPurchaseOrders(session: Session, input: ListPurchaseOrdersInput) {
+  const pagination = getPagination(input);
+  const where = buildPurchaseOrderWhere(session, input);
 
   const [purchaseOrders, total] = await Promise.all([
     prisma.purchaseOrder.findMany({
@@ -193,6 +302,25 @@ export async function listPurchaseOrders(session: Session, input: ListPurchaseOr
         serviceRequest: {
           select: { id: true, serviceNumber: true, title: true },
         },
+        items: {
+          take: 3,
+          orderBy: [{ itemId: "asc" }],
+          select: {
+            quantity: true,
+            item: {
+              select: {
+                id: true,
+                name: true,
+                category: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         _count: {
           select: { items: true },
         },
@@ -207,6 +335,142 @@ export async function listPurchaseOrders(session: Session, input: ListPurchaseOr
     page: pagination.page,
     pageSize: pagination.pageSize,
     totalPages: getTotalPages(total, pagination.pageSize),
+  };
+}
+
+export async function listPurchaseOrderCategoryOptions(session: Session, servicePartnerId?: string) {
+  const resolvedServicePartnerId = session.user.isSuperAdmin ? servicePartnerId : session.user.servicePartnerId;
+
+  return prisma.category.findMany({
+    where: {
+      deletedAt: null,
+      ...(resolvedServicePartnerId ? { servicePartnerId: resolvedServicePartnerId } : {}),
+      ...scopeByTenant(session, {}),
+    },
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+}
+
+export async function getPurchaseOrderOverview(
+  session: Session,
+  input: Pick<ListPurchaseOrdersInput, "q" | "vendorId" | "categoryId" | "dateRange" | "servicePartnerId"> = {}
+) {
+  const where = buildPurchaseOrderWhere(session, input);
+  const purchaseOrders = await prisma.purchaseOrder.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+    select: {
+      id: true,
+      poNumber: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      orderDate: true,
+      expectedDate: true,
+      vendor: {
+        select: {
+          name: true,
+        },
+      },
+      items: {
+        select: {
+          quantity: true,
+          item: {
+            select: {
+              category: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const totalPurchaseOrders = purchaseOrders.length;
+  let openPurchaseOrders = 0;
+  let partiallyReceivedPurchaseOrders = 0;
+  let completedPurchaseOrders = 0;
+  let cancelledPurchaseOrders = 0;
+  let latestUpdatedAt: Date | null = null;
+
+  const categoryMap = new Map<string, { id: string; name: string; count: number }>();
+
+  for (const purchaseOrder of purchaseOrders) {
+    if (!latestUpdatedAt || purchaseOrder.updatedAt > latestUpdatedAt) {
+      latestUpdatedAt = purchaseOrder.updatedAt;
+    }
+
+    if (
+      purchaseOrder.status === PurchaseOrderStatus.DRAFT ||
+      purchaseOrder.status === PurchaseOrderStatus.APPROVAL_PENDING ||
+      purchaseOrder.status === PurchaseOrderStatus.APPROVED ||
+      purchaseOrder.status === PurchaseOrderStatus.REJECTED ||
+      purchaseOrder.status === PurchaseOrderStatus.ISSUED
+    ) {
+      openPurchaseOrders += 1;
+    } else if (purchaseOrder.status === PurchaseOrderStatus.PARTIALLY_FULFILLED) {
+      partiallyReceivedPurchaseOrders += 1;
+    } else if (purchaseOrder.status === PurchaseOrderStatus.FULFILLED) {
+      completedPurchaseOrders += 1;
+    } else if (purchaseOrder.status === PurchaseOrderStatus.CANCELLED) {
+      cancelledPurchaseOrders += 1;
+    }
+
+    const category = purchaseOrder.items.find((item) => item.item.category)?.item.category ?? null;
+    const categoryId = category?.id ?? "others";
+    const categoryName = category?.name ?? "Others";
+    const existing = categoryMap.get(categoryId);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      categoryMap.set(categoryId, {
+        id: categoryId,
+        name: categoryName,
+        count: 1,
+      });
+    }
+  }
+
+  const statusBreakdown = [
+    { key: "open", label: "Open", count: openPurchaseOrders, color: "#315cff" },
+    { key: "partially_received", label: "Partially Received", count: partiallyReceivedPurchaseOrders, color: "#ff9a1a" },
+    { key: "completed", label: "Completed", count: completedPurchaseOrders, color: "#21c16b" },
+    { key: "cancelled", label: "Cancelled", count: cancelledPurchaseOrders, color: "#8d98b6" },
+  ] as const;
+
+  const categoryBreakdown = Array.from(categoryMap.values())
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .map((entry, index) => ({
+      ...entry,
+      color: ["#315cff", "#ff9a1a", "#21c16b", "#8d5bff", "#12a3ff", "#ff6d5a", "#5d76ff", "#8d98b6"][index % 8],
+    }))
+    .slice(0, 8);
+
+  const recentPurchaseOrders = purchaseOrders.slice(0, 5).map((purchaseOrder) => ({
+    id: purchaseOrder.id,
+    poNumber: purchaseOrder.poNumber,
+    status: purchaseOrder.status,
+    vendorName: purchaseOrder.vendor.name,
+  }));
+
+  return {
+    totalPurchaseOrders,
+    openPurchaseOrders,
+    partiallyReceivedPurchaseOrders,
+    completedPurchaseOrders,
+    cancelledPurchaseOrders,
+    latestUpdatedAt,
+    statusBreakdown,
+    categoryBreakdown,
+    recentPurchaseOrders,
   };
 }
 

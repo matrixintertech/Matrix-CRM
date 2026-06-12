@@ -20,16 +20,12 @@ export function ServiceRequestResponsibilityForm({
   snapshot,
 }: ServiceRequestResponsibilityFormProps) {
   return (
-    <form action={updateServiceRequestResponsibilitiesAction.bind(null, serviceRequestId)} className="space-y-3 rounded-md border border-[var(--border)] p-3">
+    <form action={updateServiceRequestResponsibilitiesAction.bind(null, serviceRequestId)} className="crm-form-section space-y-3">
       <input type="hidden" name="redirectTo" value={`/service-requests/${serviceRequestId}`} />
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Project Manager</span>
-        <select
-          name="pmUserId"
-          defaultValue={snapshot.PM?.user.id ?? ""}
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-        >
+      <label className="crm-field">
+        <span className="crm-field-label">Project Manager</span>
+        <select name="pmUserId" defaultValue={snapshot.PM?.user.id ?? ""} className="crm-select">
           <option value="">Unassigned</option>
           {candidates.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
@@ -39,13 +35,9 @@ export function ServiceRequestResponsibilityForm({
         </select>
       </label>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Service Manager</span>
-        <select
-          name="smUserId"
-          defaultValue={snapshot.SM?.user.id ?? ""}
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-        >
+      <label className="crm-field">
+        <span className="crm-field-label">Service Manager</span>
+        <select name="smUserId" defaultValue={snapshot.SM?.user.id ?? ""} className="crm-select">
           <option value="">Unassigned</option>
           {candidates.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
@@ -55,13 +47,9 @@ export function ServiceRequestResponsibilityForm({
         </select>
       </label>
 
-      <label className="space-y-1 text-sm">
-        <span className="font-medium">Technician</span>
-        <select
-          name="technicianUserId"
-          defaultValue={snapshot.TECHNICIAN?.user.id ?? ""}
-          className="h-9 w-full rounded-md border border-[var(--border)] px-3"
-        >
+      <label className="crm-field">
+        <span className="crm-field-label">Technician</span>
+        <select name="technicianUserId" defaultValue={snapshot.TECHNICIAN?.user.id ?? ""} className="crm-select">
           <option value="">Unassigned</option>
           {candidates.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
@@ -71,7 +59,7 @@ export function ServiceRequestResponsibilityForm({
         </select>
       </label>
 
-      <button type="submit" className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium">
+      <button type="submit" className="crm-button w-full sm:w-auto">
         Save responsibility
       </button>
     </form>

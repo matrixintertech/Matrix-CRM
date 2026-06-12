@@ -17,6 +17,10 @@ const optionalDate = z.preprocess((value) => {
 export const ledgerFilterSchema = z.object({
   q: z.string().trim().max(200).optional(),
   sourceType: z.nativeEnum(LedgerSourceType).optional(),
+  accountGroup: z.enum(["receivables", "payables", "expenses", "inventory"]).optional(),
+  entryType: z.enum(["debit", "credit"]).optional(),
+  status: z.enum(["completed", "pending"]).optional(),
+  dateRange: z.enum(["today", "this_week", "this_month", "overdue"]).optional(),
   dateFrom: optionalDate,
   dateTo: optionalDate,
   page: z.number().int().positive().optional(),

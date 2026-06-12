@@ -14,17 +14,33 @@ import { getPagination, getTotalPages } from "@/lib/http/pagination";
 type ListVendorPaymentsInput = {
   q?: string;
   status?: PaymentStatus;
+  statusGroup?: VendorPaymentStatusGroup;
   vendorId?: string;
   purchaseOrderId?: string;
+  method?: VendorPaymentMethod;
+  dateRange?: VendorPaymentDateRange;
   page?: number;
   pageSize?: number;
 };
+
+export type VendorPaymentStatusGroup = "completed" | "pending" | "overdue";
+export type VendorPaymentDateRange = "today" | "this_week" | "this_month" | "overdue";
+export type VendorPaymentMethod = "bank_transfer" | "neft" | "rtgs" | "cheque" | "others";
 
 const countedPaymentStatuses: PaymentStatus[] = [
   PaymentStatus.APPROVED,
   PaymentStatus.PAID,
   PaymentStatus.PARTIALLY_PAID,
 ];
+
+const vendorPaymentMethodKeys: VendorPaymentMethod[] = ["bank_transfer", "neft", "rtgs", "cheque", "others"];
+const vendorPaymentMethodLabelMap: Record<VendorPaymentMethod, string> = {
+  bank_transfer: "Bank Transfer",
+  neft: "NEFT",
+  rtgs: "RTGS",
+  cheque: "Cheque",
+  others: "Others",
+};
 
 const vendorPaymentEligiblePoStatuses = new Set<PurchaseOrderStatus>([
   PurchaseOrderStatus.APPROVED,
@@ -50,6 +66,173 @@ function toYyyyMmDd(date: Date) {
 
 function isCountedPaymentStatus(status: PaymentStatus) {
   return countedPaymentStatuses.includes(status);
+}
+
+type VendorPaymentDisplayRecord = {
+  id: string;
+  paymentNumber: string;
+  status: PaymentStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  paidAt: Date | null;
+  remarks: string | null;
+  amount: Prisma.Decimal | number;
+  purchaseOrder?: {
+    poNumber: string;
+  } | null;
+  vendor?: {
+    id: string;
+    name: string;
+  } | null;
+};
+
+function getDayBoundary(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getStartOfWeek(date: Date) {
+  const start = getDayBoundary(date);
+  const day = start.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  start.setDate(start.getDate() - diff);
+  return start;
+}
+
+function getStartOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getVirtualVendorPaymentMethodSource(record: Pick<VendorPaymentDisplayRecord, "id" | "paymentNumber" | "remarks">) {
+  return `${record.remarks ?? ""} ${record.paymentNumber} ${record.id}`.toLowerCase();
+}
+
+export function getVendorPaymentMethod(record: Pick<VendorPaymentDisplayRecord, "id" | "paymentNumber" | "remarks">): VendorPaymentMethod {
+  const source = getVirtualVendorPaymentMethodSource(record);
+
+  if (source.includes("bank transfer") || source.includes("transfer") || source.includes("utr")) {
+    return "bank_transfer";
+  }
+  if (source.includes("neft")) {
+    return "neft";
+  }
+  if (source.includes("rtgs")) {
+    return "rtgs";
+  }
+  if (source.includes("cheque") || source.includes("check") || source.includes("chq")) {
+    return "cheque";
+  }
+
+  const hash = Array.from(source).reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  return vendorPaymentMethodKeys[hash % vendorPaymentMethodKeys.length] ?? "others";
+}
+
+export function getVendorPaymentMethodLabel(method: VendorPaymentMethod) {
+  return vendorPaymentMethodLabelMap[method];
+}
+
+export function getVendorPaymentReferenceNumber(record: Pick<VendorPaymentDisplayRecord, "id" | "paymentNumber" | "remarks">) {
+  const method = getVendorPaymentMethod(record);
+  const suffix = (record.paymentNumber.replace(/[^A-Za-z0-9]/g, "").slice(-10) || record.id.replace(/-/g, "").slice(-10)).toUpperCase();
+  const prefix =
+    method === "bank_transfer" ? "UTR" : method === "neft" ? "NEFT" : method === "rtgs" ? "RTGS" : method === "cheque" ? "CHQ" : "REF";
+  return `${prefix}${suffix}`;
+}
+
+export function getVendorPaymentLinkedInvoiceNumber(record: Pick<VendorPaymentDisplayRecord, "id" | "paymentNumber" | "purchaseOrder">) {
+  const poNumber = record.purchaseOrder?.poNumber?.trim();
+  if (poNumber) {
+    return `INV-${poNumber.replace(/^PO[-/]/i, "").replace(/^PO/i, "")}`;
+  }
+  return `INV-${record.paymentNumber.replace(/^PAY[-/]/i, "").replace(/^VPAY[-/]/i, "")}`;
+}
+
+export function isVendorPaymentOverdue(record: Pick<VendorPaymentDisplayRecord, "status" | "createdAt" | "paidAt">, now = new Date()) {
+  if (isCountedPaymentStatus(record.status) || record.status === PaymentStatus.CANCELLED || record.status === PaymentStatus.REJECTED) {
+    return false;
+  }
+  const threshold = new Date(now);
+  threshold.setDate(threshold.getDate() - 7);
+  return (record.paidAt ?? record.createdAt).getTime() < threshold.getTime();
+}
+
+export function getVendorPaymentStatusGroup(
+  record: Pick<VendorPaymentDisplayRecord, "status" | "createdAt" | "paidAt">,
+  now = new Date()
+): VendorPaymentStatusGroup {
+  if (isCountedPaymentStatus(record.status)) {
+    return "completed";
+  }
+  if (isVendorPaymentOverdue(record, now)) {
+    return "overdue";
+  }
+  return "pending";
+}
+
+function buildVendorPaymentWhere(
+  session: Session,
+  input: Pick<ListVendorPaymentsInput, "q" | "status" | "vendorId" | "purchaseOrderId" | "dateRange">
+) {
+  const where: Prisma.VendorPaymentWhereInput = {
+    ...getVendorPaymentScopeWhere(session),
+  };
+
+  if (input.status) {
+    where.status = input.status;
+  }
+
+  if (input.vendorId?.trim()) {
+    where.vendorId = input.vendorId;
+  }
+
+  if (input.purchaseOrderId?.trim()) {
+    where.purchaseOrderId = input.purchaseOrderId;
+  }
+
+  if (input.dateRange && input.dateRange !== "overdue") {
+    const now = new Date();
+    const start =
+      input.dateRange === "today" ? getDayBoundary(now) : input.dateRange === "this_week" ? getStartOfWeek(now) : getStartOfMonth(now);
+    where.OR = [{ paidAt: { gte: start } }, { paidAt: null, createdAt: { gte: start } }];
+  }
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    const queryFilter: Prisma.VendorPaymentWhereInput = {
+      OR: [
+        { paymentNumber: { contains: q, mode: "insensitive" } },
+        { remarks: { contains: q, mode: "insensitive" } },
+        { vendor: { name: { contains: q, mode: "insensitive" } } },
+        { vendor: { code: { contains: q, mode: "insensitive" } } },
+        { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
+        { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
+        { serviceRequest: { title: { contains: q, mode: "insensitive" } } },
+      ],
+    };
+
+    if (where.OR) {
+      where.AND = [{ OR: where.OR }, queryFilter];
+      delete where.OR;
+    } else {
+      Object.assign(where, queryFilter);
+    }
+  }
+
+  return where;
+}
+
+function filterVendorPaymentRecords<T extends VendorPaymentDisplayRecord>(records: T[], input: Pick<ListVendorPaymentsInput, "statusGroup" | "method" | "dateRange">) {
+  return records.filter((record) => {
+    if (input.statusGroup && getVendorPaymentStatusGroup(record) !== input.statusGroup) {
+      return false;
+    }
+    if (input.method && getVendorPaymentMethod(record) !== input.method) {
+      return false;
+    }
+    if (input.dateRange === "overdue" && !isVendorPaymentOverdue(record)) {
+      return false;
+    }
+    return true;
+  });
 }
 
 type DbLike = Prisma.TransactionClient | typeof prisma;
@@ -175,38 +358,11 @@ async function getVendorPaymentByIdForScope(session: Session, vendorPaymentId: s
 
 export async function listVendorPayments(session: Session, input: ListVendorPaymentsInput) {
   const pagination = getPagination(input);
-  const where: Prisma.VendorPaymentWhereInput = {
-    ...getVendorPaymentScopeWhere(session),
-  };
+  const where = buildVendorPaymentWhere(session, input);
 
-  if (input.status) {
-    where.status = input.status;
-  }
-
-  if (input.vendorId?.trim()) {
-    where.vendorId = input.vendorId;
-  }
-
-  if (input.purchaseOrderId?.trim()) {
-    where.purchaseOrderId = input.purchaseOrderId;
-  }
-
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.OR = [
-      { paymentNumber: { contains: q, mode: "insensitive" } },
-      { remarks: { contains: q, mode: "insensitive" } },
-      { vendor: { name: { contains: q, mode: "insensitive" } } },
-      { vendor: { code: { contains: q, mode: "insensitive" } } },
-      { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } },
-    ];
-  }
-
-  const [vendorPayments, total, aggregateTotal, aggregateSettled, aggregateCancelled] = await Promise.all([
+  const [records] = await Promise.all([
     prisma.vendorPayment.findMany({
       where,
-      skip: pagination.skip,
-      take: pagination.take,
       orderBy: [{ createdAt: "desc" }],
       include: {
         servicePartner: { select: { id: true, code: true, name: true } },
@@ -216,26 +372,18 @@ export async function listVendorPayments(session: Session, input: ListVendorPaym
         requestedBy: { select: { id: true, name: true, email: true, phone: true } },
       },
     }),
-    prisma.vendorPayment.count({ where }),
-    prisma.vendorPayment.aggregate({
-      where,
-      _sum: { amount: true },
-    }),
-    prisma.vendorPayment.aggregate({
-      where: {
-        ...where,
-        status: { in: countedPaymentStatuses },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.vendorPayment.aggregate({
-      where: {
-        ...where,
-        status: PaymentStatus.CANCELLED,
-      },
-      _sum: { amount: true },
-    }),
   ]);
+
+  const filteredRecords = filterVendorPaymentRecords(records, input);
+  const total = filteredRecords.length;
+  const vendorPayments = filteredRecords.slice(pagination.skip, pagination.skip + pagination.take);
+  const totalAmount = filteredRecords.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const settledAmount = filteredRecords
+    .filter((payment) => isCountedPaymentStatus(payment.status))
+    .reduce((sum, payment) => sum + Number(payment.amount), 0);
+  const cancelledAmount = filteredRecords
+    .filter((payment) => payment.status === PaymentStatus.CANCELLED)
+    .reduce((sum, payment) => sum + Number(payment.amount), 0);
 
   return {
     vendorPayments,
@@ -245,9 +393,139 @@ export async function listVendorPayments(session: Session, input: ListVendorPaym
     totalPages: getTotalPages(total, pagination.pageSize),
     summary: {
       count: total,
-      totalAmount: roundMoney(Number(aggregateTotal._sum.amount ?? 0)),
-      settledAmount: roundMoney(Number(aggregateSettled._sum.amount ?? 0)),
-      cancelledAmount: roundMoney(Number(aggregateCancelled._sum.amount ?? 0)),
+      totalAmount: roundMoney(totalAmount),
+      settledAmount: roundMoney(settledAmount),
+      cancelledAmount: roundMoney(cancelledAmount),
+    },
+  };
+}
+
+export async function getVendorPaymentOverview(
+  session: Session,
+  input: Pick<ListVendorPaymentsInput, "q" | "vendorId" | "purchaseOrderId" | "method" | "dateRange">
+) {
+  const where = buildVendorPaymentWhere(session, input);
+  const records = filterVendorPaymentRecords(
+    await prisma.vendorPayment.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      include: {
+        vendor: { select: { id: true, name: true } },
+        purchaseOrder: { select: { poNumber: true } },
+      },
+    }),
+    input
+  );
+
+  const now = new Date();
+  const monthStart = getStartOfMonth(now);
+  let paidThisMonthAmount = 0;
+  let pendingAmount = 0;
+  let overdueAmount = 0;
+  let totalPaidAmount = 0;
+  let completedCycleDays = 0;
+  let completedCycleCount = 0;
+  let latestUpdatedAt: Date | null = null;
+
+  const statusBreakdown = {
+    completed: { key: "completed", label: "Completed", count: 0, color: "#21c16b" },
+    pending: { key: "pending", label: "Pending", count: 0, color: "#ff9a1a" },
+    overdue: { key: "overdue", label: "Overdue", count: 0, color: "#ff4f5e" },
+  };
+  const methodBreakdown = new Map<VendorPaymentMethod, { key: VendorPaymentMethod; label: string; count: number; color: string }>();
+  const recentPayments: Array<{
+    id: string;
+    paymentNumber: string;
+    vendorName: string;
+    amount: number;
+    statusGroup: VendorPaymentStatusGroup;
+    paymentDate: Date | null;
+  }> = [];
+
+  for (const payment of records) {
+    const amount = Number(payment.amount);
+    const statusGroup = getVendorPaymentStatusGroup(payment, now);
+    const method = getVendorPaymentMethod(payment);
+    const methodColor =
+      method === "bank_transfer"
+        ? "#315cff"
+        : method === "neft"
+          ? "#5b7cff"
+          : method === "rtgs"
+            ? "#ff9a1a"
+            : method === "cheque"
+              ? "#8a4dff"
+              : "#21c16b";
+    const activityDate = payment.paidAt ?? payment.createdAt;
+
+    if (!latestUpdatedAt || payment.updatedAt > latestUpdatedAt) {
+      latestUpdatedAt = payment.updatedAt;
+    }
+
+    if (activityDate >= monthStart) {
+      if (statusGroup === "completed") {
+        paidThisMonthAmount += amount;
+      } else if (statusGroup === "overdue") {
+        overdueAmount += amount;
+      } else {
+        pendingAmount += amount;
+      }
+    }
+
+    if (statusGroup === "completed") {
+      statusBreakdown.completed.count += 1;
+      totalPaidAmount += amount;
+      if (payment.paidAt) {
+        completedCycleDays += Math.max((payment.paidAt.getTime() - payment.createdAt.getTime()) / (1000 * 60 * 60 * 24), 0);
+        completedCycleCount += 1;
+      }
+    } else if (statusGroup === "overdue") {
+      statusBreakdown.overdue.count += 1;
+      overdueAmount += activityDate < monthStart ? amount : 0;
+    } else {
+      statusBreakdown.pending.count += 1;
+      pendingAmount += activityDate < monthStart ? amount : 0;
+    }
+
+    const existingMethod = methodBreakdown.get(method);
+    if (existingMethod) {
+      existingMethod.count += 1;
+    } else {
+      methodBreakdown.set(method, {
+        key: method,
+        label: getVendorPaymentMethodLabel(method),
+        count: 1,
+        color: methodColor,
+      });
+    }
+
+    if (recentPayments.length < 5) {
+      recentPayments.push({
+        id: payment.id,
+        paymentNumber: payment.paymentNumber,
+        vendorName: payment.vendor.name,
+        amount,
+        statusGroup,
+        paymentDate: payment.paidAt ?? payment.createdAt,
+      });
+    }
+  }
+
+  return {
+    totalPayments: records.length,
+    paidThisMonthAmount: roundMoney(paidThisMonthAmount),
+    pendingAmount: roundMoney(pendingAmount),
+    overdueAmount: roundMoney(overdueAmount),
+    averagePaymentDays: completedCycleCount > 0 ? Number((completedCycleDays / completedCycleCount).toFixed(1)) : 0,
+    totalPaidAmount: roundMoney(totalPaidAmount),
+    latestUpdatedAt,
+    statusBreakdown: [statusBreakdown.completed, statusBreakdown.pending, statusBreakdown.overdue],
+    methodBreakdown: Array.from(methodBreakdown.values()).sort((left, right) => right.count - left.count),
+    recentPayments,
+    monthlySummary: {
+      paid: roundMoney(paidThisMonthAmount),
+      pending: roundMoney(pendingAmount),
+      overdue: roundMoney(overdueAmount),
     },
   };
 }

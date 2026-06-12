@@ -98,46 +98,51 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
           <div className="crm-panel">
-            <h2 className="mb-4 text-base font-semibold">Role details</h2>
-            <dl className="grid gap-3 text-sm md:grid-cols-2">
+            <div className="crm-panel-heading">
               <div>
-                <dt className="text-[var(--muted)]">Name</dt>
+                <h2>Role Details</h2>
+                <p>Role scope, tenant ownership, hierarchy level, and protected-system status.</p>
+              </div>
+            </div>
+            <dl className="crm-detail-grid crm-detail-grid--two">
+              <div className="crm-detail-item">
+                <dt>Name</dt>
                 <dd>{role.name}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Key</dt>
+              <div className="crm-detail-item">
+                <dt>Key</dt>
                 <dd>{role.key}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Scope</dt>
+              <div className="crm-detail-item">
+                <dt>Scope</dt>
                 <dd>
                   <StatusBadge value={role.scope} />
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Role type</dt>
+              <div className="crm-detail-item">
+                <dt>Role type</dt>
                 <dd>{role.isSystem ? "System" : "Custom"}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Level</dt>
+              <div className="crm-detail-item">
+                <dt>Level</dt>
                 <dd>{role.level}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Service partner</dt>
+              <div className="crm-detail-item">
+                <dt>Service partner</dt>
                 <dd>
                   {role.servicePartner.name} ({role.servicePartner.code})
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Description</dt>
+              <div className="crm-detail-item crm-detail-item--full">
+                <dt>Description</dt>
                 <dd>{formatOptional(role.description)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Created</dt>
+              <div className="crm-detail-item">
+                <dt>Created</dt>
                 <dd>{formatDateTime(role.createdAt)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Updated</dt>
+              <div className="crm-detail-item">
+                <dt>Updated</dt>
                 <dd>{formatDateTime(role.updatedAt)}</dd>
               </div>
             </dl>
@@ -157,7 +162,12 @@ export default async function RoleDetailPage({ params, searchParams }: RoleDetai
           ) : null}
 
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Assigned users</h2>
+            <div className="crm-panel-heading">
+              <div>
+                <h2>Assigned Users</h2>
+                <p>Users inherit module access from this role only. No user-level permission overrides are used.</p>
+              </div>
+            </div>
             {role.users.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">No users are currently assigned to this role.</p>
             ) : (

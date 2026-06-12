@@ -219,21 +219,26 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
       <div className="grid gap-5 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-5">
           <div className="crm-panel">
-            <h2 className="mb-3 text-base font-semibold">Task summary</h2>
-            <dl className="grid gap-3 text-sm md:grid-cols-2">
+            <div className="crm-panel-heading">
               <div>
-                <dt className="text-[var(--muted)]">Task number</dt>
+                <h2>Task Summary</h2>
+                <p>Assignment chain, linked request, work session counts, and current delivery status.</p>
+              </div>
+            </div>
+            <dl className="crm-detail-grid crm-detail-grid--two">
+              <div className="crm-detail-item">
+                <dt>Task number</dt>
                 <dd>{taskTaskNumber}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Status</dt>
+              <div className="crm-detail-item">
+                <dt>Status</dt>
                 <dd><StatusBadge value={taskStatus} /></dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Service request</dt>
+              <div className="crm-detail-item">
+                <dt>Service request</dt>
                 <dd>
                   {taskServiceRequestSummary ? (
-                    <Link href={`/service-requests/${taskServiceRequestSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                    <Link href={`/service-requests/${taskServiceRequestSummary.id}`} className="crm-inline-link">
                       {taskServiceRequestSummary.serviceNumber}
                     </Link>
                   ) : (
@@ -241,11 +246,11 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                   )}
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Parent task</dt>
+              <div className="crm-detail-item">
+                <dt>Parent task</dt>
                 <dd>
                   {task.parentTaskSummary ? (
-                    <Link href={`/tasks/${task.parentTaskSummary.id}`} className="text-[var(--primary)] underline-offset-2 hover:underline">
+                    <Link href={`/tasks/${task.parentTaskSummary.id}`} className="crm-inline-link">
                       {task.parentTaskSummary.taskNumber}
                     </Link>
                   ) : (
@@ -253,40 +258,40 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                   )}
                 </dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Assigned to</dt>
+              <div className="crm-detail-item">
+                <dt>Assigned to</dt>
                 <dd>{task.assignee ? task.assignee.name?.trim() || task.assignee.email || task.assignee.phone : "Unassigned"}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Assigned by</dt>
+              <div className="crm-detail-item">
+                <dt>Assigned by</dt>
                 <dd>{task.assignedBy ? task.assignedBy.name?.trim() || task.assignedBy.email || task.assignedBy.phone : "-"}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Requested at</dt>
+              <div className="crm-detail-item">
+                <dt>Requested at</dt>
                 <dd>{formatDateTime(taskRequestedAt)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Created at</dt>
+              <div className="crm-detail-item">
+                <dt>Created at</dt>
                 <dd>{formatDateTime(taskCreatedAt)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Due date</dt>
+              <div className="crm-detail-item">
+                <dt>Due date</dt>
                 <dd>{formatDateTime(taskDueDate)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Completed at</dt>
+              <div className="crm-detail-item">
+                <dt>Completed at</dt>
                 <dd>{formatDateTime(taskCompletedAt)}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Active work sessions</dt>
+              <div className="crm-detail-item">
+                <dt>Active work sessions</dt>
                 <dd>{taskWorkBundle.summary.activeSessionCount}</dd>
               </div>
-              <div>
-                <dt className="text-[var(--muted)]">Proof uploads</dt>
+              <div className="crm-detail-item">
+                <dt>Proof uploads</dt>
                 <dd>{taskWorkBundle.summary.proofCount}</dd>
               </div>
-              <div className="md:col-span-2">
-                <dt className="text-[var(--muted)]">Description</dt>
+              <div className="crm-detail-item crm-detail-item--full">
+                <dt>Description</dt>
                 <dd>{formatOptional(taskDescription)}</dd>
               </div>
             </dl>
@@ -329,7 +334,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                         }
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-1 inline-block text-xs text-[var(--primary)] underline-offset-2 hover:underline"
+                        className="crm-inline-link mt-1 inline-block text-xs"
                       >
                         Open check-in map
                       </Link>
@@ -415,7 +420,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                               {entry.checkInLatitude !== null && entry.checkInLongitude !== null ? "Location available" : "Location unavailable"}
                             </p>
                             {checkInMapLink ? (
-                              <Link href={checkInMapLink} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-[var(--primary)] underline-offset-2 hover:underline">
+                              <Link href={checkInMapLink} target="_blank" rel="noreferrer" className="crm-inline-link mt-1 inline-block text-xs">
                                 Open check-in map
                               </Link>
                             ) : null}
@@ -428,7 +433,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                               {entry.checkOutLatitude !== null && entry.checkOutLongitude !== null ? "Location available" : "Location unavailable"}
                             </p>
                             {checkOutMapLink ? (
-                              <Link href={checkOutMapLink} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-[var(--primary)] underline-offset-2 hover:underline">
+                              <Link href={checkOutMapLink} target="_blank" rel="noreferrer" className="crm-inline-link mt-1 inline-block text-xs">
                                 Open check-out map
                               </Link>
                             ) : null}
@@ -457,19 +462,19 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                 <input type="hidden" name="redirectTo" value={`/tasks/${taskId}`} />
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Proof file</span>
-                  <input name="file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" className="block w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm" required />
+                  <input name="file" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" className="crm-file-input block w-full" required />
                 </label>
                 <label className="space-y-1 text-sm">
                   <span className="font-medium">Upload note</span>
                   <textarea
                     name="note"
                     maxLength={1000}
-                    className="min-h-24 w-full rounded-xl border border-[var(--border)] px-3 py-2"
+                    className="crm-textarea"
                     placeholder="Add a short note about this proof"
                   />
                 </label>
                 <p className="text-xs text-[var(--muted)]">Allowed: JPG, JPEG, PNG, WEBP, PDF. Upload limit follows tenant config.</p>
-                <button type="submit" className="min-h-11 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium">
+                <button type="submit" className="crm-button w-full sm:w-auto">
                   Upload proof
                 </button>
               </form>
@@ -495,13 +500,13 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Link href={attachment.fileUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-medium">
+                        <Link href={attachment.fileUrl} target="_blank" rel="noreferrer" className="crm-button-secondary px-3 py-2 text-xs">
                           Open
                         </Link>
                         {canAttachmentDelete ? (
                           <form action={deleteTaskAttachmentAction.bind(null, taskId, attachment.id)}>
                             <input type="hidden" name="redirectTo" value={`/tasks/${taskId}`} />
-                            <button type="submit" className="rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-700">
+                            <button type="submit" className="crm-button-danger px-3 py-2 text-xs">
                               Delete
                             </button>
                           </form>
@@ -562,7 +567,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
               ) : (
                 <div className="space-y-3">
                   {historyEntries.map((entry) => (
-                    <div key={entry.id} className="rounded-md border border-[var(--border)] px-3 py-3 text-sm">
+                    <div key={entry.id} className="rounded-[20px] border border-[#e8eef8] bg-[#fbfcff] px-4 py-4 text-sm">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium">{entry.action}</p>
                         <p className="text-xs text-[var(--muted)]">{formatDateTime(entry.createdAt)}</p>
@@ -592,7 +597,7 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
               {canDelete ? (
                 <form action={deleteTaskAction.bind(null, taskId)} className="mt-4">
                   <input type="hidden" name="redirectTo" value="/tasks" />
-                  <button type="submit" className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700">
+                  <button type="submit" className="crm-button-danger">
                     Delete task
                   </button>
                 </form>
@@ -645,11 +650,11 @@ export default async function TaskDetailPage({ params, searchParams }: TaskDetai
                 <textarea
                   name="remark"
                   maxLength={1000}
-                  className="min-h-24 w-full rounded-md border border-[var(--border)] px-3 py-2"
+                  className="crm-textarea"
                   placeholder="Add a remark to the task history"
                   required
                 />
-                <button type="submit" className="rounded-md border border-[var(--border)] px-3 py-2 text-sm font-medium">
+                <button type="submit" className="crm-button w-full sm:w-auto">
                   Add remark
                 </button>
               </form>

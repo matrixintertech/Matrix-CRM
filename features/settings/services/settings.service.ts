@@ -51,7 +51,7 @@ export async function getSettingsPageData(session: Session) {
     return null;
   }
 
-  const [servicePartner, settings] = await Promise.all([
+  const [servicePartner, settings, userCount, roleCount, permissionCount, attachmentStats] = await Promise.all([
     prisma.servicePartner.findFirst({
       where: {
         id: servicePartnerId,
@@ -83,6 +83,27 @@ export async function getSettingsPageData(session: Session) {
         isSecret: true,
       },
       orderBy: [{ key: "asc" }],
+    }),
+    prisma.user.count({
+      where: {
+        servicePartnerId,
+        deletedAt: null,
+      },
+    }),
+    prisma.role.count({
+      where: {
+        servicePartnerId,
+      },
+    }),
+    prisma.permission.count(),
+    prisma.attachment.aggregate({
+      where: {
+        servicePartnerId,
+        deletedAt: null,
+      },
+      _sum: {
+        fileSize: true,
+      },
     }),
   ]);
 
@@ -118,9 +139,17 @@ export async function getSettingsPageData(session: Session) {
       taskLocationRequired: env().TASK_LOCATION_REQUIRED,
       taskAttachmentMaxMb: env().TASK_ATTACHMENT_MAX_MB,
       storageDriver: env().STORAGE_DRIVER,
+      storageConfigured: env().STORAGE_CONFIGURED,
       smtpConfigured: env().SMTP_CONFIGURED,
       cacheDriver: env().CACHE_DRIVER,
       rateLimitDriver: env().RATE_LIMIT_DRIVER,
+      activityLogRetentionDays: env().ACTIVITY_LOG_RETENTION_DAYS,
+    },
+    overview: {
+      userCount,
+      roleCount,
+      permissionCount,
+      storageUsedBytes: attachmentStats._sum.fileSize ?? 0,
     },
   };
 }

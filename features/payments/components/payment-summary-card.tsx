@@ -9,7 +9,7 @@ type PaymentSummaryCardProps = {
 
 export function PaymentSummaryCard({ grandTotal, paidAmount, balanceDue, paymentStatus }: PaymentSummaryCardProps) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="crm-panel">
       <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#6f84ab]">Payments Made Summary</h3>
       <div className="space-y-2 text-sm text-[var(--muted)]">
         <p>Grand Total: {formatCurrencyInr(grandTotal)}</p>

@@ -1,4 +1,4 @@
-import { LedgerSourceType, Prisma, type PaymentStatus } from "@prisma/client";
+import { LedgerSourceType, Prisma, type ExpenseStatus, type PaymentStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { LedgerFilterInput } from "@/features/ledger/validations";
@@ -7,6 +7,12 @@ import { prisma } from "@/lib/db/prisma";
 import { getPagination, getTotalPages } from "@/lib/http/pagination";
 
 const countedPaymentStatuses: PaymentStatus[] = ["APPROVED", "PAID", "PARTIALLY_PAID"];
+const completedExpenseStatuses: ExpenseStatus[] = ["APPROVED", "PAID"];
+
+export type LedgerAccountGroup = "receivables" | "payables" | "expenses" | "inventory";
+export type LedgerEntryDirection = "debit" | "credit";
+export type LedgerStatusFilter = "completed" | "pending";
+export type LedgerDateRange = "today" | "this_week" | "this_month" | "overdue";
 
 function roundMoney(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -25,6 +31,180 @@ function endOfDay(value: Date) {
 }
 
 type DbLike = Prisma.TransactionClient | typeof prisma;
+
+function applyLedgerDateRange(where: Prisma.LedgerEntryWhereInput, dateRange?: LedgerDateRange) {
+  if (!dateRange) {
+    return;
+  }
+
+  const now = new Date();
+  const from = startOfDay(now);
+  let to: Date | undefined;
+
+  if (dateRange === "today") {
+    to = endOfDay(now);
+  } else if (dateRange === "this_week") {
+    to = endOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
+  } else if (dateRange === "this_month") {
+    to = endOfDay(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  } else if (dateRange === "overdue") {
+    where.entryDate = {
+      lt: now,
+    };
+    return;
+  }
+
+  where.entryDate = {
+    gte: from,
+    ...(to ? { lte: to } : {}),
+  };
+}
+
+function applyLedgerStatusFilter(where: Prisma.LedgerEntryWhereInput, status?: LedgerStatusFilter) {
+  if (!status) {
+    return;
+  }
+
+  if (status === "completed") {
+    where.OR = [
+      {
+        payment: {
+          status: {
+            in: countedPaymentStatuses,
+          },
+        },
+      },
+      {
+        vendorPayment: {
+          status: {
+            in: countedPaymentStatuses,
+          },
+        },
+      },
+      {
+        expense: {
+          status: {
+            in: completedExpenseStatuses,
+          },
+        },
+      },
+      {
+        inventoryTransaction: {
+          id: {
+            not: undefined,
+          },
+        },
+      },
+    ];
+    return;
+  }
+
+  where.OR = [
+    {
+      payment: {
+        status: {
+          notIn: countedPaymentStatuses,
+        },
+      },
+    },
+    {
+      vendorPayment: {
+        status: {
+          notIn: countedPaymentStatuses,
+        },
+      },
+    },
+    {
+      expense: {
+        status: {
+          notIn: completedExpenseStatuses,
+        },
+      },
+    },
+  ];
+}
+
+function mapAccountGroupToSourceType(accountGroup?: LedgerAccountGroup) {
+  if (accountGroup === "receivables") {
+    return LedgerSourceType.PAYMENT;
+  }
+  if (accountGroup === "payables") {
+    return LedgerSourceType.VENDOR_PAYMENT;
+  }
+  if (accountGroup === "expenses") {
+    return LedgerSourceType.EXPENSE;
+  }
+  if (accountGroup === "inventory") {
+    return LedgerSourceType.INVENTORY;
+  }
+  return undefined;
+}
+
+function buildLedgerWhere(session: Session, input: LedgerFilterInput): Prisma.LedgerEntryWhereInput {
+  const where: Prisma.LedgerEntryWhereInput = {
+    ...scopeByTenant(session, {}),
+  };
+
+  const sourceType = input.sourceType ?? mapAccountGroupToSourceType(input.accountGroup as LedgerAccountGroup | undefined);
+  if (sourceType) {
+    where.sourceType = sourceType;
+  }
+
+  if (input.entryType === "debit") {
+    where.debitAmount = {
+      gt: 0,
+    };
+  }
+  if (input.entryType === "credit") {
+    where.creditAmount = {
+      gt: 0,
+    };
+  }
+
+  if (input.dateFrom || input.dateTo) {
+    where.entryDate = {};
+    if (input.dateFrom) {
+      where.entryDate.gte = startOfDay(input.dateFrom);
+    }
+    if (input.dateTo) {
+      where.entryDate.lte = endOfDay(input.dateTo);
+    }
+  } else {
+    applyLedgerDateRange(where, input.dateRange as LedgerDateRange | undefined);
+  }
+
+  applyLedgerStatusFilter(where, input.status as LedgerStatusFilter | undefined);
+
+  if (input.q?.trim()) {
+    const q = input.q.trim();
+    const queryFilters: Prisma.LedgerEntryWhereInput[] = [
+      { description: { contains: q, mode: "insensitive" } },
+      { payment: { paymentNumber: { contains: q, mode: "insensitive" } } },
+      { payment: { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } } },
+      { payment: { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } } },
+      { payment: { client: { name: { contains: q, mode: "insensitive" } } } },
+      { vendorPayment: { paymentNumber: { contains: q, mode: "insensitive" } } },
+      { vendorPayment: { vendor: { name: { contains: q, mode: "insensitive" } } } },
+      { vendorPayment: { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } } },
+      { expense: { expenseNumber: { contains: q, mode: "insensitive" } } },
+      { expense: { vendor: { name: { contains: q, mode: "insensitive" } } } },
+      { inventoryTransaction: { referenceNo: { contains: q, mode: "insensitive" } } },
+      { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
+    ];
+
+    if (where.OR) {
+      where.AND = [
+        { OR: where.OR as Prisma.LedgerEntryWhereInput[] },
+        { OR: queryFilters },
+      ];
+      delete where.OR;
+    } else {
+      where.OR = queryFilters;
+    }
+  }
+
+  return where;
+}
 
 export async function syncLedgerForInvoicePayment(
   tx: DbLike,
@@ -218,49 +398,25 @@ export async function syncLedgerForVendorPayment(
 
 export async function listLedgerEntries(session: Session, input: LedgerFilterInput) {
   const pagination = getPagination(input);
-  const where: Prisma.LedgerEntryWhereInput = {
-    ...scopeByTenant(session, {}),
-  };
+  const where = buildLedgerWhere(session, input);
 
-  if (input.sourceType) {
-    where.sourceType = input.sourceType;
-  }
-
-  if (input.dateFrom || input.dateTo) {
-    where.entryDate = {};
-    if (input.dateFrom) {
-      where.entryDate.gte = startOfDay(input.dateFrom);
-    }
-    if (input.dateTo) {
-      where.entryDate.lte = endOfDay(input.dateTo);
-    }
-  }
-
-  if (input.q?.trim()) {
-    const q = input.q.trim();
-    where.OR = [
-      { description: { contains: q, mode: "insensitive" } },
-      { payment: { paymentNumber: { contains: q, mode: "insensitive" } } },
-      { payment: { invoice: { vendorInvoiceNumber: { contains: q, mode: "insensitive" } } } },
-      { payment: { invoice: { invoiceNumber: { contains: q, mode: "insensitive" } } } },
-      { vendorPayment: { paymentNumber: { contains: q, mode: "insensitive" } } },
-      { vendorPayment: { vendor: { name: { contains: q, mode: "insensitive" } } } },
-      { vendorPayment: { purchaseOrder: { poNumber: { contains: q, mode: "insensitive" } } } },
-      { serviceRequest: { serviceNumber: { contains: q, mode: "insensitive" } } },
-    ];
-  }
-
-  const [entries, total, aggregate] = await Promise.all([
-    prisma.ledgerEntry.findMany({
+  const allEntries = await prisma.ledgerEntry.findMany({
       where,
-      skip: pagination.skip,
-      take: pagination.take,
       orderBy: [{ entryDate: "desc" }, { createdAt: "desc" }],
       include: {
         payment: {
           select: {
             id: true,
             paymentNumber: true,
+            status: true,
+            mode: true,
+            referenceNumber: true,
+            client: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
             invoiceId: true,
             invoice: {
               select: {
@@ -275,6 +431,7 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
           select: {
             id: true,
             paymentNumber: true,
+            status: true,
             vendor: {
               select: {
                 id: true,
@@ -286,6 +443,33 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
               select: {
                 id: true,
                 poNumber: true,
+              },
+            },
+          },
+        },
+        expense: {
+          select: {
+            id: true,
+            expenseNumber: true,
+            status: true,
+            vendor: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+              },
+            },
+          },
+        },
+        inventoryTransaction: {
+          select: {
+            id: true,
+            referenceNo: true,
+            vendor: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
               },
             },
           },
@@ -306,19 +490,23 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
           },
         },
       },
-    }),
-    prisma.ledgerEntry.count({ where }),
-    prisma.ledgerEntry.aggregate({
-      where,
-      _sum: {
-        debitAmount: true,
-        creditAmount: true,
-      },
-    }),
-  ]);
+    });
 
-  const totalDebit = roundMoney(Number(aggregate._sum.debitAmount ?? 0));
-  const totalCredit = roundMoney(Number(aggregate._sum.creditAmount ?? 0));
+  const total = allEntries.length;
+  const totalDebit = roundMoney(allEntries.reduce((sum, entry) => sum + Number(entry.debitAmount), 0));
+  const totalCredit = roundMoney(allEntries.reduce((sum, entry) => sum + Number(entry.creditAmount), 0));
+  let runningBalance = roundMoney(totalCredit - totalDebit);
+  const runningBalanceMap = new Map<string, number>();
+
+  for (const entry of allEntries) {
+    runningBalanceMap.set(entry.id, runningBalance);
+    runningBalance = roundMoney(runningBalance - (Number(entry.creditAmount) - Number(entry.debitAmount)));
+  }
+
+  const entries = allEntries.slice(pagination.skip, pagination.skip + pagination.take).map((entry) => ({
+    ...entry,
+    runningBalance: runningBalanceMap.get(entry.id) ?? 0,
+  }));
 
   return {
     entries,
@@ -330,8 +518,65 @@ export async function listLedgerEntries(session: Session, input: LedgerFilterInp
       entriesCount: total,
       totalDebit,
       totalCredit,
-      netAmount: roundMoney(totalDebit - totalCredit),
+      netAmount: roundMoney(totalCredit - totalDebit),
     },
+  };
+}
+
+export async function getLedgerOverview(session: Session, input: LedgerFilterInput) {
+  const result = await listLedgerEntries(session, { ...input, page: 1, pageSize: 5000 });
+
+  const accountMap = new Map<
+    LedgerAccountGroup,
+    {
+      label: string;
+      amount: number;
+      color: string;
+    }
+  >([
+    ["receivables", { label: "Accounts Receivable", amount: 0, color: "#315cff" }],
+    ["payables", { label: "Accounts Payable", amount: 0, color: "#8d5bff" }],
+    ["expenses", { label: "Expenses", amount: 0, color: "#ff9a1a" }],
+    ["inventory", { label: "Inventory", amount: 0, color: "#21c16b" }],
+  ]);
+
+  const recentTransactions = result.entries.slice(0, 5).map((entry) => {
+    const net = Number(entry.creditAmount) - Number(entry.debitAmount);
+    return {
+      id: entry.id,
+      description: entry.description?.trim() || "Ledger transaction",
+      entryDate: entry.entryDate,
+      amount: net,
+    };
+  });
+
+  for (const entry of result.entries) {
+    const net = Number(entry.creditAmount) - Number(entry.debitAmount);
+    if (entry.sourceType === LedgerSourceType.PAYMENT) {
+      accountMap.get("receivables")!.amount = roundMoney(accountMap.get("receivables")!.amount + net);
+    } else if (entry.sourceType === LedgerSourceType.VENDOR_PAYMENT) {
+      accountMap.get("payables")!.amount = roundMoney(accountMap.get("payables")!.amount + Math.abs(net));
+    } else if (entry.sourceType === LedgerSourceType.EXPENSE) {
+      accountMap.get("expenses")!.amount = roundMoney(accountMap.get("expenses")!.amount + Math.abs(net));
+    } else if (entry.sourceType === LedgerSourceType.INVENTORY) {
+      accountMap.get("inventory")!.amount = roundMoney(accountMap.get("inventory")!.amount + Math.abs(net));
+    }
+  }
+
+  const accountSummary = Array.from(accountMap.entries()).map(([key, value]) => ({
+    key,
+    ...value,
+  }));
+
+  return {
+    totalBalance: result.summary.netAmount,
+    totalDebit: result.summary.totalDebit,
+    totalCredit: result.summary.totalCredit,
+    netBalance: result.summary.netAmount,
+    transactionCount: result.summary.entriesCount,
+    accountSummary,
+    topAccounts: [...accountSummary].sort((left, right) => right.amount - left.amount),
+    recentTransactions,
   };
 }
 

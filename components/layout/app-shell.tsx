@@ -37,7 +37,7 @@ export function AppShell({ children, navigationItems, session }: AppShellProps) 
   };
 
   return (
-    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top,_rgba(227,236,255,0.7),_transparent_28%),linear-gradient(180deg,#f5f7fc_0%,#f3f6fb_100%)] text-[#0f2447]">
+    <div className="flex min-h-screen bg-[#f6f8fc] text-[#0f2447]">
       {!isDesktopViewport && isSidebarOpen ? (
         <button
           type="button"
@@ -54,8 +54,8 @@ export function AppShell({ children, navigationItems, session }: AppShellProps) 
           navigationItems={navigationItems}
           onToggleSidebar={() => setIsSidebarOpen((current) => !current)}
         />
-        <main className="min-w-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 lg:px-6 xl:px-8 xl:py-6">
-          <div className="mx-auto flex min-w-0 w-full max-w-[1600px] flex-col">{children}</div>
+        <main className="min-w-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 lg:px-6 xl:px-7 xl:py-5">
+          <div className="mx-auto flex min-w-0 w-full max-w-[1660px] flex-col">{children}</div>
         </main>
       </div>
     </div>

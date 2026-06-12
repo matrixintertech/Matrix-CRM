@@ -29,7 +29,7 @@ export function InvoiceSummaryCard({ invoice, paidAmount, balanceDue, paymentSta
   const paidValue = typeof paidAmount === "number" ? paidAmount : 0;
   const balanceValue = typeof balanceDue === "number" ? balanceDue : Number(invoice.grandTotal);
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-white p-5 shadow-sm">
+    <div className="crm-panel">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-[#6f84ab]">Received Invoice Summary</h3>
         <StatusBadge value={invoice.status} />
