@@ -6,6 +6,7 @@ import {
   listCategoriesForItemForm,
   listItemServicePartnersForForm,
   listItems,
+  listSubcategoriesForItemForm,
   type ItemStockStatus,
 } from "@/features/items/services/item.service";
 import { PrefetchLink } from "@/components/admin/prefetch-link";
@@ -31,6 +32,9 @@ function getErrorMessage(code?: string) {
 }
 
 function getSuccessMessage(code?: string) {
+  if (code === "created-all") {
+    return "Item created for all service partners.";
+  }
   if (code === "deleted") {
     return "Item deleted successfully.";
   }
@@ -310,6 +314,7 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
 
   const q = getStringParam(params, "q");
   const categoryId = getStringParam(params, "categoryId");
+  const subcategoryId = getStringParam(params, "subcategoryId");
   const servicePartnerId = getStringParam(params, "servicePartnerId");
   const status = toStatus(getStringParam(params, "status"));
   const page = getNumberParam(params, "page");
@@ -317,18 +322,32 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
   const successMessage = getSuccessMessage(getStringParam(params, "success"));
 
-  const [result, overview] = await Promise.all([
-    listItems(session, { q, categoryId, servicePartnerId, status, page, pageSize }),
-    getItemOverview(session, { categoryId, servicePartnerId }),
+  const [subcategories, result, overview] = await Promise.all([
+    listSubcategoriesForItemForm(session, servicePartnerId ?? undefined, categoryId ?? undefined),
+    listItems(session, { q, categoryId, subcategoryId, servicePartnerId, status, page, pageSize }),
+    getItemOverview(session, { categoryId, subcategoryId, servicePartnerId }),
   ]);
 
   const currentFilters = {
     q,
     categoryId,
+    subcategoryId,
     servicePartnerId,
     status,
     pageSize: result.pageSize,
   };
+  const createItemHref = buildItemsHref({
+    servicePartnerId,
+    categoryId,
+    subcategoryId,
+  }).replace("/items", "/items/new");
+  const createCategoryHref = servicePartnerId ? `/categories/new?servicePartnerId=${servicePartnerId}` : "/categories/new";
+  const createSubcategoryHref = categoryId
+    ? `/subcategories/new?servicePartnerId=${servicePartnerId ?? ""}&categoryId=${categoryId}`
+    : servicePartnerId
+      ? `/subcategories/new?servicePartnerId=${servicePartnerId}`
+      : "/subcategories/new";
+  const createUomHref = servicePartnerId ? `/uoms/new?servicePartnerId=${servicePartnerId}` : "/uoms/new";
   const showingFrom = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
   const showingTo = Math.min(result.page * result.pageSize, result.total);
   const stockDistributionTotal = overview.stockBreakdown.reduce((sum, entry) => sum + entry.count, 0) || 1;
@@ -492,7 +511,7 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
           <div className="grid gap-3 px-5 py-5 sm:grid-cols-2">
             {canCreate ? (
               <QuickActionCard
-                href="/items/new"
+                href={createItemHref}
                 title="Add Item"
                 icon={
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -504,7 +523,7 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
               />
             ) : null}
             <QuickActionCard
-              href="/categories/new"
+              href={createCategoryHref}
               title="Add Category"
               icon={
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
@@ -512,6 +531,27 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
                   <rect x="14" y="4" width="6" height="6" rx="1.5" />
                   <rect x="4" y="14" width="6" height="6" rx="1.5" />
                   <rect x="14" y="14" width="6" height="6" rx="1.5" />
+                </svg>
+                }
+              />
+            <QuickActionCard
+              href={createSubcategoryHref}
+              title="Add Subcategory"
+              icon={
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                  <path d="M5 6h14" />
+                  <path d="M8 12h8" />
+                  <path d="M11 18h2" />
+                </svg>
+              }
+            />
+            <QuickActionCard
+              href={createUomHref}
+              title="Add UOM"
+              icon={
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.9">
+                  <path d="M7 5h10" />
+                  <path d="M10 5v14a2 2 0 0 0 4 0V5" />
                 </svg>
               }
             />
@@ -547,7 +587,7 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
           </div>
 
           <div className="border-b border-[#edf2fb] px-4 py-4 sm:px-5">
-            <form action="" className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_1fr_1fr_1fr_auto] xl:items-end">
+            <form action="" className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_1fr_1fr_1fr_1fr_auto] xl:items-end">
               <input type="hidden" name="pageSize" value={result.pageSize} />
 
               <label className="block">
@@ -594,6 +634,22 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
                   <option value="low_stock">Low Stock</option>
                   <option value="out_of_stock">Out of Stock</option>
                   <option value="inactive">Inactive</option>
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-[#7a8cac]">Subcategory</span>
+                <select
+                  name="subcategoryId"
+                  defaultValue={subcategoryId ?? ""}
+                  className="h-12 w-full rounded-2xl border border-[#d8e2f2] bg-[#fbfcff] px-4 text-sm text-[#13305d] outline-none transition focus:border-[#4b6bff] focus:ring-4 focus:ring-[#e3eaff]"
+                >
+                  <option value="">All</option>
+                  {subcategories.map((subcategory) => (
+                    <option key={subcategory.id} value={subcategory.id}>
+                      {subcategory.name}
+                    </option>
+                  ))}
                 </select>
               </label>
 
@@ -657,6 +713,7 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
                       <th className="px-5 py-4">Item Code</th>
                       <th className="px-4 py-4">Item Name</th>
                       <th className="px-4 py-4">Category</th>
+                      <th className="px-4 py-4">Subcategory</th>
                       <th className="px-4 py-4">Unit</th>
                       <th className="px-4 py-4">Linked Company</th>
                       <th className="px-4 py-4">Status</th>
@@ -679,7 +736,8 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
                           </div>
                         </td>
                         <td className="px-4 py-4 text-sm text-[#24406f]">{item.category.name}</td>
-                        <td className="px-4 py-4 text-sm text-[#24406f]">{item.unit}</td>
+                        <td className="px-4 py-4 text-sm text-[#24406f]">{item.subcategory?.name ?? "Unassigned"}</td>
+                        <td className="px-4 py-4 text-sm text-[#24406f]">{item.uom ? `${item.uom.name} (${item.uom.symbol})` : item.unit}</td>
                         <td className="px-4 py-4 text-sm text-[#24406f]">{item.servicePartner.name}</td>
                         <td className="px-4 py-4">
                           <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusTone(item.metrics.status)}`}>
@@ -736,8 +794,12 @@ export default async function ItemsPage({ searchParams }: ItemsPageProps) {
                         <p className="mt-1 text-sm text-[#16315f]">{item.category.name}</p>
                       </div>
                       <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7e91b2]">Subcategory</p>
+                        <p className="mt-1 text-sm text-[#16315f]">{item.subcategory?.name ?? "Unassigned"}</p>
+                      </div>
+                      <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7e91b2]">Unit</p>
-                        <p className="mt-1 text-sm text-[#16315f]">{item.unit}</p>
+                        <p className="mt-1 text-sm text-[#16315f]">{item.uom ? `${item.uom.name} (${item.uom.symbol})` : item.unit}</p>
                       </div>
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#7e91b2]">Company</p>

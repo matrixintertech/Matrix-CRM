@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/admin/page-header";
 import { updateClientAction } from "@/features/clients/actions/client.actions";
 import { ClientForm } from "@/features/clients/components/client-form";
 import { getClientById, listClientServicePartnersForForm } from "@/features/clients/services/client.service";
+import { listActiveStatesWithCities } from "@/features/locations/services/location.service";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 
@@ -23,13 +24,20 @@ function getErrorMessage(code?: string) {
   if (code === "service-partner") {
     return "Service partner is required.";
   }
+  if (code === "location") {
+    return "Select a valid state and city combination.";
+  }
   return undefined;
 }
 
 export default async function EditClientPage({ params, searchParams }: EditClientPageProps) {
   const session = await requirePermission("clients.update");
   const [{ id }, paramsValue] = await Promise.all([params, resolveSearchParams(searchParams)]);
-  const [client, servicePartners] = await Promise.all([getClientById(session, id), listClientServicePartnersForForm(session)]);
+  const [client, servicePartners, states] = await Promise.all([
+    getClientById(session, id),
+    listClientServicePartnersForForm(session),
+    listActiveStatesWithCities(),
+  ]);
 
   if (!client) {
     notFound();
@@ -49,6 +57,7 @@ export default async function EditClientPage({ params, searchParams }: EditClien
         action={updateClientAction.bind(null, id)}
         cancelHref={`/clients/${id}`}
         servicePartners={servicePartners}
+        states={states}
         canChooseServicePartner={session.user.isSuperAdmin}
         errorMessage={errorMessage}
         client={{

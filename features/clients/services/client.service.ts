@@ -2,6 +2,7 @@ import { Prisma, ClientStatus } from "@prisma/client";
 import type { Session } from "next-auth";
 
 import type { ClientUpsertInput } from "@/features/clients/validations";
+import { resolveStateCitySelection } from "@/features/locations/services/location.service";
 import { scopeByTenant } from "@/lib/auth/tenant";
 import { buildFilterSignature, buildRoleSignature, cachePrefixes } from "@/lib/cache/cache-keys";
 import { invalidateTenantDataCaches } from "@/lib/cache/cache-invalidation";
@@ -430,6 +431,7 @@ export async function createClient(session: Session, input: ClientUpsertInput) {
   if (!servicePartnerId) {
     throw new Error("Service partner is required.");
   }
+  const location = await resolveStateCitySelection(input);
 
   const client = await prisma.client.create({
     data: {
@@ -440,8 +442,8 @@ export async function createClient(session: Session, input: ClientUpsertInput) {
       email: normalizeEmail(input.email),
       phone: normalizeOptionalString(input.phone),
       address: normalizeOptionalString(input.address),
-      city: normalizeOptionalString(input.city),
-      state: normalizeOptionalString(input.state),
+      city: location.city,
+      state: location.state,
       country: normalizeOptionalString(input.country),
       postalCode: normalizeOptionalString(input.postalCode),
       status: input.status,
@@ -462,6 +464,13 @@ export async function updateClient(session: Session, id: string, input: ClientUp
   if (!servicePartnerId) {
     throw new Error("Service partner is required.");
   }
+  const allowLegacyPair = Boolean(
+    normalizeOptionalString(existing.state) === normalizeOptionalString(input.state) &&
+      normalizeOptionalString(existing.city) === normalizeOptionalString(input.city)
+  );
+  const location = await resolveStateCitySelection(input, {
+    allowLegacyPair,
+  });
 
   const client = await prisma.client.update({
     where: { id },
@@ -473,8 +482,8 @@ export async function updateClient(session: Session, id: string, input: ClientUp
       email: normalizeEmail(input.email),
       phone: normalizeOptionalString(input.phone),
       address: normalizeOptionalString(input.address),
-      city: normalizeOptionalString(input.city),
-      state: normalizeOptionalString(input.state),
+      city: location.city,
+      state: location.state,
       country: normalizeOptionalString(input.country),
       postalCode: normalizeOptionalString(input.postalCode),
       status: input.status,

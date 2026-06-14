@@ -16,6 +16,8 @@ type DataTableProps<T> = {
 };
 
 export function DataTable<T>({ rows, columns, getRowHref, getRowKey }: DataTableProps<T>) {
+  const detailColumns = columns.slice(1);
+
   return (
     <div className="overflow-hidden rounded-2xl border border-[#dbe5f4] bg-white shadow-[0_12px_30px_rgba(18,49,105,0.06)]">
       <div className="crm-mobile-card-grid border-b border-[#edf2fb] p-3 md:hidden">
@@ -41,9 +43,9 @@ export function DataTable<T>({ rows, columns, getRowHref, getRowKey }: DataTable
                 ) : null}
               </div>
 
-              {columns.length > 1 ? (
+              {detailColumns.length > 0 ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {columns.slice(1).map((column) => (
+                  {detailColumns.map((column) => (
                     <div key={column.header} className="min-w-0 space-y-1">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7d8eaf]">{column.header}</p>
                       <div className="min-w-0 text-sm text-[#10254b]">{column.cell(row)}</div>
@@ -69,12 +71,6 @@ export function DataTable<T>({ rows, columns, getRowHref, getRowKey }: DataTable
           </thead>
           <tbody className="divide-y divide-[#edf2fb]">
             {rows.map((row) => {
-              const content = columns.map((column) => (
-                <td key={column.header} className={`px-5 py-4 align-top text-[#10254b] ${column.className ?? ""}`}>
-                  {column.cell(row)}
-                </td>
-              ));
-
               const rowKey = getRowKey(row);
               const href = getRowHref?.(row);
 
@@ -84,15 +80,23 @@ export function DataTable<T>({ rows, columns, getRowHref, getRowKey }: DataTable
                     <>
                       {columns.map((column, index) => (
                         <td key={column.header} className={`px-5 py-4 align-top text-[#10254b] ${column.className ?? ""}`}>
-                          <PrefetchLink href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff]">
-                            {column.cell(row)}
-                            {index === 0 ? <span className="sr-only">Open details</span> : null}
-                          </PrefetchLink>
+                          {index === 0 ? (
+                            <PrefetchLink href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9db4ff]">
+                              {column.cell(row)}
+                              <span className="sr-only">Open details</span>
+                            </PrefetchLink>
+                          ) : (
+                            column.cell(row)
+                          )}
                         </td>
                       ))}
                     </>
                   ) : (
-                    content
+                    columns.map((column) => (
+                      <td key={column.header} className={`px-5 py-4 align-top text-[#10254b] ${column.className ?? ""}`}>
+                        {column.cell(row)}
+                      </td>
+                    ))
                   )}
                 </tr>
               );

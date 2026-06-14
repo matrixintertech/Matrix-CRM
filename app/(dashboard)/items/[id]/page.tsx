@@ -52,7 +52,7 @@ export default async function ItemDetailPage({ params, searchParams }: ItemDetai
     <section className="space-y-5">
       <PageHeader
         title={item.name}
-        description="Review item details, category mapping, and status."
+        description="Review item taxonomy, UOM mapping, and status."
         action={canUpdate ? { label: "Edit item", href: `/items/${item.id}/edit` } : undefined}
       />
       <div>
@@ -79,8 +79,8 @@ export default async function ItemDetailPage({ params, searchParams }: ItemDetai
               </dd>
             </div>
             <div>
-              <dt className="text-[var(--muted)]">Unit</dt>
-              <dd>{item.unit}</dd>
+              <dt className="text-[var(--muted)]">UOM</dt>
+              <dd>{item.uom ? `${item.uom.name} (${item.uom.symbol})` : item.unit}</dd>
             </div>
             <div>
               <dt className="text-[var(--muted)]">Category</dt>
@@ -89,6 +89,10 @@ export default async function ItemDetailPage({ params, searchParams }: ItemDetai
                   {item.category.name} ({item.category.code})
                 </Link>
               </dd>
+            </div>
+            <div>
+              <dt className="text-[var(--muted)]">Subcategory</dt>
+              <dd>{item.subcategory ? `${item.subcategory.name} (${item.subcategory.code})` : "Not set"}</dd>
             </div>
             <div className="md:col-span-2">
               <dt className="text-[var(--muted)]">Description</dt>

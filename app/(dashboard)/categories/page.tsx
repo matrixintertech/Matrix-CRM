@@ -37,6 +37,9 @@ function getErrorMessage(code?: string) {
 }
 
 function getSuccessMessage(code?: string) {
+  if (code === "created-all") {
+    return "Category created for all service partners.";
+  }
   if (code === "deleted") {
     return "Category deleted successfully.";
   }
@@ -286,6 +289,7 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
   const pageSize = getNumberParam(params, "pageSize") ?? 8;
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
   const successMessage = getSuccessMessage(getStringParam(params, "success"));
+  const createCategoryHref = session.user.isSuperAdmin && servicePartnerId ? `/categories/new?servicePartnerId=${servicePartnerId}` : "/categories/new";
 
   const [result, overview, recentCategories] = await Promise.all([
     listCategories(session, { q, servicePartnerId, status, sort, page, pageSize }),
@@ -328,7 +332,7 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
         <div className="flex flex-wrap items-center gap-3">
           {canCreate ? (
             <PrefetchLink
-              href="/categories/new"
+              href={createCategoryHref}
               className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#575dff] to-[#3267ff] px-5 text-sm font-semibold text-white shadow-[0_16px_30px_rgba(50,103,255,0.24)] transition hover:brightness-105"
             >
               <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
@@ -741,7 +745,7 @@ export default async function CategoriesPage({ searchParams }: CategoriesPagePro
                 <p>Review high-density categories regularly to avoid oversized catch-all buckets.</p>
               </div>
               <div className="border-t border-[#edf2fb] pt-3">
-                <PrefetchLink href="/categories/new" className="text-sm font-semibold text-[#315cff]">
+                <PrefetchLink href={createCategoryHref} className="text-sm font-semibold text-[#315cff]">
                   Learn more about category management {"->"}
                 </PrefetchLink>
               </div>

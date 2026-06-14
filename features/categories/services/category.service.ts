@@ -329,6 +329,39 @@ export async function createCategory(session: Session, input: CategoryUpsertInpu
   });
 }
 
+export async function createCategoryForAllServicePartners(session: Session, input: CategoryUpsertInput) {
+  if (!session.user.isSuperAdmin) {
+    throw new Error("Only super admins can create categories for all service partners.");
+  }
+
+  const servicePartners = await prisma.servicePartner.findMany({
+    where: {
+      deletedAt: null,
+    },
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+    },
+  });
+
+  if (servicePartners.length === 0) {
+    throw new Error("No service partners found.");
+  }
+
+  return prisma.$transaction(
+    servicePartners.map((servicePartner) =>
+      prisma.category.create({
+        data: {
+          servicePartnerId: servicePartner.id,
+          code: input.code.trim().toUpperCase(),
+          name: input.name.trim(),
+          description: normalizeOptionalString(input.description),
+        },
+      })
+    )
+  );
+}
+
 export async function updateCategory(session: Session, id: string, input: CategoryUpsertInput) {
   const existing = await getCategoryById(session, id);
   if (!existing) {

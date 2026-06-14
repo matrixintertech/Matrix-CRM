@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, startTransition, useEffect, useMemo, useRef, useState } from "react";
 
 type OtpSendResponse =
   | {
@@ -126,8 +126,9 @@ export function LoginForm() {
       }
 
       setMessage("Signed in.");
-      router.replace(callbackUrl);
-      router.refresh();
+      startTransition(() => {
+        router.replace(callbackUrl);
+      });
     } catch {
       setError("Unable to sign in right now.");
     } finally {
@@ -157,8 +158,9 @@ export function LoginForm() {
       }
 
       setMessage("Signed in.");
-      router.replace(callbackUrl);
-      router.refresh();
+      startTransition(() => {
+        router.replace(callbackUrl);
+      });
     } catch {
       setError("Unable to verify OTP right now.");
     } finally {

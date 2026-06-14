@@ -7,8 +7,10 @@ import { redirect } from "next/navigation";
 import { logActivity } from "@/lib/activity/activity-log";
 import { requirePermission } from "@/lib/auth/rbac";
 import { requireTenantAccess } from "@/lib/auth/tenant";
+import { ALL_SERVICE_PARTNERS_OPTION } from "@/lib/service-partners/constants";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 import {
+  createCategoryForAllServicePartners,
   createCategory,
   getCategoryById,
   getServicePartnerIdForCategoryWrite,
@@ -48,6 +50,35 @@ export async function createCategoryAction(formData: FormData) {
     redirect("/categories/new?error=validation");
   }
 
+  if (parsed.data.servicePartnerId === ALL_SERVICE_PARTNERS_OPTION) {
+    if (!session.user.isSuperAdmin) {
+      redirect("/categories/new?error=service-partner");
+    }
+
+    try {
+      const categories = await createCategoryForAllServicePartners(session, parsed.data);
+      await Promise.all(
+        categories.map((category) =>
+          logActivity({
+            action: "category.create",
+            module: "categories",
+            entityType: "OTHER",
+            entityId: category.id,
+            message: "Category created",
+            servicePartnerId: category.servicePartnerId,
+          })
+        )
+      );
+      revalidatePath("/categories");
+      redirect("/categories?success=created-all");
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        redirect("/categories/new?error=duplicate");
+      }
+      throw error;
+    }
+  }
+
   const servicePartnerId = getServicePartnerIdForCategoryWrite(session, parsed.data.servicePartnerId);
   if (!servicePartnerId) {
     redirect("/categories/new?error=service-partner");
@@ -81,6 +112,10 @@ export async function updateCategoryAction(id: string, formData: FormData) {
 
   if (!parsed.success) {
     redirect(`/categories/${id}/edit?error=validation`);
+  }
+
+  if (!parsed.data.servicePartnerId || parsed.data.servicePartnerId === ALL_SERVICE_PARTNERS_OPTION) {
+    redirect(`/categories/${id}/edit?error=service-partner`);
   }
 
   const servicePartnerId = getServicePartnerIdForCategoryWrite(session, parsed.data.servicePartnerId);
@@ -133,4 +168,3 @@ export async function deleteCategoryAction(id: string, formData: FormData) {
   revalidateCategoryPaths(id);
   redirect(getSafeRedirectPath(formData.get("redirectTo"), "/categories?success=deleted"));
 }
-

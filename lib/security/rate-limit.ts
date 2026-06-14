@@ -17,6 +17,8 @@ const globalBucketStore = globalThis as unknown as {
   __matrixRateLimitMemoryWarningShown?: boolean;
 };
 
+const UPSTASH_RATE_LIMIT_TIMEOUT_MS = 1_200;
+
 const buckets = globalBucketStore.__matrixRateLimitBuckets ?? new Map<string, RateLimitBucket>();
 
 if (!globalBucketStore.__matrixRateLimitBuckets) {
@@ -90,6 +92,7 @@ async function runUpstashCommand<T>(segments: Array<string | number>): Promise<T
       Authorization: `Bearer ${token}`,
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(UPSTASH_RATE_LIMIT_TIMEOUT_MS),
   });
 
   if (!response.ok) {

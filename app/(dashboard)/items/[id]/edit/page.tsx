@@ -4,7 +4,13 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/admin/page-header";
 import { updateItemAction } from "@/features/items/actions/item.actions";
 import { ItemForm } from "@/features/items/components/item-form";
-import { getItemById, listCategoriesForItemForm, listItemServicePartnersForForm } from "@/features/items/services/item.service";
+import {
+  getItemById,
+  listCategoriesForItemForm,
+  listItemServicePartnersForForm,
+  listSubcategoriesForItemForm,
+  listUomsForItemForm,
+} from "@/features/items/services/item.service";
 import { requirePermission } from "@/lib/auth/rbac";
 import { getStringParam, resolveSearchParams, type SearchParamsInput } from "@/lib/http/search-params";
 
@@ -24,7 +30,7 @@ function getErrorMessage(code?: string) {
     return "Service partner is required.";
   }
   if (code === "mismatch") {
-    return "Category must belong to the selected service partner.";
+    return "Category, subcategory, and UOM must belong to the selected service partner.";
   }
   return undefined;
 }
@@ -38,10 +44,17 @@ export default async function EditItemPage({ params, searchParams }: EditItemPag
     notFound();
   }
 
-  const [servicePartners, categories] = await Promise.all([
+  const [servicePartners, categories, subcategories, uoms] = await Promise.all([
     listItemServicePartnersForForm(session),
     listCategoriesForItemForm(session),
+    listSubcategoriesForItemForm(session),
+    listUomsForItemForm(session),
   ]);
+  const requestedServicePartnerId = getStringParam(paramsValue, "servicePartnerId");
+  const requestedCategoryId = getStringParam(paramsValue, "categoryId");
+  const requestedSubcategoryId = getStringParam(paramsValue, "subcategoryId");
+  const requestedUomId = getStringParam(paramsValue, "uomId");
+  const requestedUomCode = getStringParam(paramsValue, "uomCode");
   const errorMessage = getErrorMessage(getStringParam(paramsValue, "error"));
 
   return (
@@ -55,13 +68,23 @@ export default async function EditItemPage({ params, searchParams }: EditItemPag
       <ItemForm
         action={updateItemAction.bind(null, id)}
         cancelHref={`/items/${id}`}
+        returnToPath={`/items/${id}/edit`}
         servicePartners={servicePartners}
         categories={categories}
+        subcategories={subcategories}
+        uoms={uoms}
         canChooseServicePartner={session.user.isSuperAdmin}
         errorMessage={errorMessage}
+        defaultServicePartnerId={requestedServicePartnerId ?? item.servicePartnerId}
+        defaultCategoryId={requestedCategoryId}
+        defaultSubcategoryId={requestedSubcategoryId}
+        defaultUomId={requestedUomId}
+        defaultUomCode={requestedUomCode}
         item={{
           servicePartnerId: item.servicePartnerId,
           categoryId: item.categoryId,
+          subcategoryId: item.subcategoryId,
+          uomId: item.uomId,
           code: item.code,
           name: item.name,
           unit: item.unit,
@@ -72,4 +95,3 @@ export default async function EditItemPage({ params, searchParams }: EditItemPag
     </section>
   );
 }
-

@@ -32,6 +32,7 @@ export default async function NewCategoryPage({ searchParams }: NewCategoryPageP
     listCategoryServicePartnersForForm(session),
   ]);
 
+  const requestedServicePartnerId = getStringParam(params, "servicePartnerId");
   const errorMessage = getErrorMessage(getStringParam(params, "error"));
 
   return (
@@ -52,6 +53,7 @@ export default async function NewCategoryPage({ searchParams }: NewCategoryPageP
           servicePartners={servicePartners}
           canChooseServicePartner={session.user.isSuperAdmin}
           errorMessage={errorMessage}
+          defaultServicePartnerId={session.user.isSuperAdmin ? requestedServicePartnerId : session.user.servicePartnerId}
         />
       )}
     </section>

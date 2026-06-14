@@ -42,6 +42,7 @@ const OPEN_STATUSES = [
 const IN_PROGRESS_STATUSES = ["IN_PROGRESS", "BLOCKED"] as const satisfies ServiceRequestStatus[];
 const RESOLVED_STATUSES = ["COMPLETED"] as const satisfies ServiceRequestStatus[];
 const CLOSED_STATUSES = ["CLOSED", "CANCELLED"] as const satisfies ServiceRequestStatus[];
+const CLOSED_LIKE_STATUSES: ServiceRequestStatus[] = [...RESOLVED_STATUSES, ...CLOSED_STATUSES];
 
 function normalizeOptionalString(value?: string | null) {
   return value?.trim() || null;
@@ -173,51 +174,158 @@ function endOfDay(value: Date) {
   return date;
 }
 
-async function fetchServiceRequestsBase(session: Session, input: ServiceRequestFilterInput) {
-  const where = buildServiceRequestWhere(session, input);
+function combineServiceRequestWhere(
+  ...conditions: Array<Prisma.ServiceRequestWhereInput | undefined>
+): Prisma.ServiceRequestWhereInput {
+  const filtered = conditions.filter((condition): condition is Prisma.ServiceRequestWhereInput => Boolean(condition));
+  if (filtered.length === 0) {
+    return {};
+  }
+  if (filtered.length === 1) {
+    return filtered[0]!;
+  }
+  return {
+    AND: filtered,
+  };
+}
 
+function buildServiceRequestStatusGroupWhere(statusGroup: ServiceRequestStatusGroup | undefined, now: Date) {
+  if (!statusGroup) {
+    return undefined;
+  }
+
+  if (statusGroup === "open") {
+    return {
+      status: {
+        in: [...OPEN_STATUSES],
+      },
+    } satisfies Prisma.ServiceRequestWhereInput;
+  }
+
+  if (statusGroup === "in_progress") {
+    return {
+      status: {
+        in: [...IN_PROGRESS_STATUSES],
+      },
+    } satisfies Prisma.ServiceRequestWhereInput;
+  }
+
+  if (statusGroup === "resolved") {
+    return {
+      status: {
+        in: [...RESOLVED_STATUSES],
+      },
+    } satisfies Prisma.ServiceRequestWhereInput;
+  }
+
+  if (statusGroup === "closed") {
+    return {
+      status: {
+        in: [...CLOSED_STATUSES],
+      },
+    } satisfies Prisma.ServiceRequestWhereInput;
+  }
+
+  return {
+    targetDate: {
+      lt: now,
+    },
+    NOT: {
+      status: {
+        in: CLOSED_LIKE_STATUSES,
+      },
+    },
+  } satisfies Prisma.ServiceRequestWhereInput;
+}
+
+function buildHighPriorityWhere(highThreshold: Date) {
+  return {
+    targetDate: {
+      lte: highThreshold,
+    },
+  } satisfies Prisma.ServiceRequestWhereInput;
+}
+
+function buildMediumPriorityWhere(highThreshold: Date, mediumThreshold: Date) {
+  return {
+    AND: [
+      {
+        NOT: buildHighPriorityWhere(highThreshold),
+      },
+      {
+        OR: [
+          {
+            status: {
+              in: [...IN_PROGRESS_STATUSES],
+            },
+          },
+          {
+            targetDate: {
+              lte: mediumThreshold,
+            },
+          },
+        ],
+      },
+    ],
+  } satisfies Prisma.ServiceRequestWhereInput;
+}
+
+function getServiceRequestListSelect() {
+  return {
+    id: true,
+    serviceNumber: true,
+    title: true,
+    serviceType: true,
+    status: true,
+    requestedAt: true,
+    targetDate: true,
+    completedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    client: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    },
+    branch: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    },
+    servicePartner: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    },
+    _count: {
+      select: {
+        statusHistory: true,
+      },
+    },
+  } satisfies Prisma.ServiceRequestSelect;
+}
+
+async function fetchServiceRequestsBaseByWhere(where: Prisma.ServiceRequestWhereInput) {
   return prisma.serviceRequest.findMany({
     where,
     orderBy: [{ createdAt: "desc" }],
-    select: {
-      id: true,
-      serviceNumber: true,
-      title: true,
-      serviceType: true,
-      status: true,
-      requestedAt: true,
-      targetDate: true,
-      completedAt: true,
-      createdAt: true,
-      updatedAt: true,
-      client: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-      },
-      branch: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-      },
-      servicePartner: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-        },
-      },
-      _count: {
-        select: {
-          statusHistory: true,
-        },
-      },
-    },
+    select: getServiceRequestListSelect(),
   });
+}
+
+async function fetchServiceRequestsBase(session: Session, input: ServiceRequestFilterInput, statusGroup?: ServiceRequestStatusGroup) {
+  const now = new Date();
+  const where = combineServiceRequestWhere(
+    buildServiceRequestWhere(session, input),
+    buildServiceRequestStatusGroupWhere(statusGroup, now)
+  );
+  return fetchServiceRequestsBaseByWhere(where);
 }
 
 function enrichServiceRequestRow<
@@ -242,6 +350,7 @@ function enrichServiceRequestRow<
 export async function listServiceRequests(session: Session, input: ListServiceRequestsInput) {
   return measurePerf("service_requests.list", async () => {
     const pagination = getPagination(input);
+    const now = new Date();
     const cacheKey = [
       session.user.id,
       session.user.servicePartnerId,
@@ -260,7 +369,32 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
     ].join(":");
 
     const loadServiceRequests = async () => {
-      const rows = await fetchServiceRequestsBase(session, input);
+      const baseWhere = buildServiceRequestWhere(session, input);
+      const derivedWhere = buildServiceRequestStatusGroupWhere(input.statusGroup, now);
+
+      if (!input.priority) {
+        const where = combineServiceRequestWhere(baseWhere, derivedWhere);
+        const [rows, total] = await Promise.all([
+          prisma.serviceRequest.findMany({
+            where,
+            skip: pagination.skip,
+            take: pagination.take,
+            orderBy: [{ createdAt: "desc" }],
+            select: getServiceRequestListSelect(),
+          }),
+          prisma.serviceRequest.count({ where }),
+        ]);
+
+        return {
+          serviceRequests: rows.map(enrichServiceRequestRow),
+          total,
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+          totalPages: getTotalPages(total, pagination.pageSize),
+        };
+      }
+
+      const rows = await fetchServiceRequestsBaseByWhere(combineServiceRequestWhere(baseWhere, derivedWhere));
       const enriched = rows.map(enrichServiceRequestRow);
       const filtered = enriched.filter((row) => matchesDerivedFilters(row, input.statusGroup, input.priority));
       const paged = filtered.slice(pagination.skip, pagination.skip + pagination.take);
@@ -286,32 +420,77 @@ export async function listServiceRequests(session: Session, input: ListServiceRe
 }
 
 export async function getServiceRequestOverview(session: Session, input: ServiceRequestFilterInput) {
-  const rows = await fetchServiceRequestsBase(session, input);
-  const enriched = rows.map(enrichServiceRequestRow);
-  const totalRequests = enriched.length;
-  const openRequests = enriched.filter((row) => row.derived.statusGroup === "open").length;
-  const inProgressRequests = enriched.filter((row) => row.derived.statusGroup === "in_progress").length;
-  const resolvedRequests = enriched.filter((row) => row.derived.statusGroup === "resolved").length;
-  const closedRequests = enriched.filter((row) => row.derived.statusGroup === "closed").length;
-  const overdueRequests = enriched.filter((row) => row.derived.overdue).length;
-  const latestUpdatedAt = enriched.reduce<Date | null>((latest, row) => (!latest || row.updatedAt > latest ? row.updatedAt : latest), null);
+  const now = new Date();
+  const highThreshold = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const mediumThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const where = buildServiceRequestWhere(session, input);
 
-  const resolutionDurations = enriched
-    .filter((row) => row.completedAt && row.derived.statusGroup !== "open" && row.derived.statusGroup !== "in_progress")
-    .map((row) => {
-      const start = row.requestedAt ?? row.createdAt;
-      return Math.max((row.completedAt!.getTime() - start.getTime()) / (1000 * 60 * 60 * 24), 0);
-    });
+  const [
+    totalRequests,
+    openRequests,
+    inProgressRequests,
+    resolvedRequests,
+    closedRequests,
+    overdueRequests,
+    highPriorityRequests,
+    mediumPriorityRequests,
+    latestUpdatedRequest,
+    resolutionRows,
+  ] = await Promise.all([
+    prisma.serviceRequest.count({ where }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildServiceRequestStatusGroupWhere("open", now)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildServiceRequestStatusGroupWhere("in_progress", now)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildServiceRequestStatusGroupWhere("resolved", now)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildServiceRequestStatusGroupWhere("closed", now)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildServiceRequestStatusGroupWhere("overdue", now)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildHighPriorityWhere(highThreshold)),
+    }),
+    prisma.serviceRequest.count({
+      where: combineServiceRequestWhere(where, buildMediumPriorityWhere(highThreshold, mediumThreshold)),
+    }),
+    prisma.serviceRequest.findFirst({
+      where,
+      orderBy: [{ updatedAt: "desc" }],
+      select: {
+        updatedAt: true,
+      },
+    }),
+    prisma.serviceRequest.findMany({
+      where: combineServiceRequestWhere(where, {
+        status: {
+          in: CLOSED_LIKE_STATUSES,
+        },
+        completedAt: {
+          not: null,
+        },
+      }),
+      select: {
+        requestedAt: true,
+        createdAt: true,
+        completedAt: true,
+      },
+    }),
+  ]);
+
+  const latestUpdatedAt = latestUpdatedRequest?.updatedAt ?? null;
+  const resolutionDurations = resolutionRows.map((row) => {
+    const start = row.requestedAt ?? row.createdAt;
+    return Math.max((row.completedAt!.getTime() - start.getTime()) / (1000 * 60 * 60 * 24), 0);
+  });
   const avgResolutionDays =
     resolutionDurations.length > 0 ? resolutionDurations.reduce((sum, value) => sum + value, 0) / resolutionDurations.length : null;
-
-  const priorityCounts = enriched.reduce(
-    (accumulator, row) => {
-      accumulator[row.derived.priority] += 1;
-      return accumulator;
-    },
-    { high: 0, medium: 0, low: 0 }
-  );
+  const lowPriorityRequests = Math.max(totalRequests - highPriorityRequests - mediumPriorityRequests, 0);
 
   return {
     totalRequests,
@@ -329,24 +508,23 @@ export async function getServiceRequestOverview(session: Session, input: Service
       { key: "closed", label: "Closed", count: closedRequests, color: "#9aa8bf" },
     ],
     priorityBreakdown: [
-      { key: "high", label: "High", count: priorityCounts.high, color: "#ff4f5e" },
-      { key: "medium", label: "Medium", count: priorityCounts.medium, color: "#ffab1f" },
-      { key: "low", label: "Low", count: priorityCounts.low, color: "#28b463" },
+      { key: "high", label: "High", count: highPriorityRequests, color: "#ff4f5e" },
+      { key: "medium", label: "Medium", count: mediumPriorityRequests, color: "#ffab1f" },
+      { key: "low", label: "Low", count: lowPriorityRequests, color: "#28b463" },
     ],
   };
 }
 
 export async function listRecentOverdueServiceRequests(session: Session, input: ServiceRequestFilterInput) {
-  const rows = await fetchServiceRequestsBase(session, input);
-  return rows
-    .map(enrichServiceRequestRow)
-    .filter((row) => row.derived.overdue)
-    .sort((left, right) => {
-      const leftDate = left.targetDate?.getTime() ?? 0;
-      const rightDate = right.targetDate?.getTime() ?? 0;
-      return leftDate - rightDate;
-    })
-    .slice(0, 5);
+  const now = new Date();
+  const rows = await prisma.serviceRequest.findMany({
+    where: combineServiceRequestWhere(buildServiceRequestWhere(session, input), buildServiceRequestStatusGroupWhere("overdue", now)),
+    orderBy: [{ targetDate: "asc" }, { createdAt: "desc" }],
+    take: 5,
+    select: getServiceRequestListSelect(),
+  });
+
+  return rows.map(enrichServiceRequestRow);
 }
 
 export async function getServiceRequestById(session: Session, id: string) {

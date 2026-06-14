@@ -7,6 +7,12 @@ import { maskTarget } from "@/lib/security/mask";
 
 type OtpChannel = "EMAIL" | "SMS";
 
+const SMTP_POOL_MAX_CONNECTIONS = 5;
+const SMTP_POOL_MAX_MESSAGES = 100;
+const SMTP_CONNECTION_TIMEOUT_MS = 5_000;
+const SMTP_GREETING_TIMEOUT_MS = 5_000;
+const SMTP_SOCKET_TIMEOUT_MS = 10_000;
+
 type SendOtpMessageInput = {
   channel: OtpChannel;
   target: string;
@@ -51,7 +57,7 @@ export type OtpProviderConfigurationStatus = {
 const globalMailer = globalThis as unknown as {
   __matrixOtpTransport?: {
     cacheKey: string;
-    transport: ReturnType<typeof nodemailer.createTransport>;
+    transport: nodemailer.Transporter;
   };
 };
 
@@ -96,9 +102,15 @@ function buildEmailTransport() {
   }
 
   const transport = nodemailer.createTransport({
+    pool: true,
+    maxConnections: SMTP_POOL_MAX_CONNECTIONS,
+    maxMessages: SMTP_POOL_MAX_MESSAGES,
     host: config.SMTP_HOST,
     port: config.SMTP_PORT,
     secure: config.SMTP_SECURE,
+    connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+    greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+    socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
     auth: {
       user: config.SMTP_USER,
       pass: config.SMTP_PASSWORD,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 
 export type SearchableSelectOption = {
   value: string;
@@ -42,6 +42,7 @@ export function SearchableSelect({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
 
   const selectedOption = useMemo(
     () => options.find((option) => normalizeValue(option.value) === normalizeValue(value)),
@@ -49,13 +50,13 @@ export function SearchableSelect({
   );
 
   const filteredOptions = useMemo(() => {
-    const normalizedQuery = normalizeValue(query);
+    const normalizedQuery = normalizeValue(deferredQuery);
     if (!normalizedQuery) {
       return options;
     }
 
     return options.filter((option) => normalizeValue(option.label).includes(normalizedQuery));
-  }, [options, query]);
+  }, [deferredQuery, options]);
 
   useEffect(() => {
     if (!isOpen) {

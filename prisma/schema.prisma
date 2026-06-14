@@ -266,6 +266,8 @@ model ServicePartner {
   clientUsers           ClientUser[]
   branches              Branch[]
   categories            Category[]
+  subcategories         Subcategory[]
+  uoms                  Uom[]
   items                 Item[]
   rateCards             RateCard[]
   serviceRequests       ServiceRequest[]
@@ -671,6 +673,7 @@ model Category {
   deletedAt        DateTime?
 
   servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  subcategories  Subcategory[]
   items          Item[]
   rfqItems       RfqItem[]
 
@@ -678,10 +681,54 @@ model Category {
   @@index([servicePartnerId])
 }
 
+model Subcategory {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  categoryId       String
+  code             String
+  name             String
+  description      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  category       Category       @relation(fields: [categoryId], references: [id])
+  items          Item[]
+
+  @@unique([servicePartnerId, categoryId, code])
+  @@index([servicePartnerId])
+  @@index([categoryId])
+  @@index([servicePartnerId, deletedAt])
+}
+
+model Uom {
+  id               String   @id @default(uuid())
+  servicePartnerId String
+  code             String
+  name             String
+  symbol           String
+  description      String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
+  items          Item[]
+
+  @@unique([servicePartnerId, code])
+  @@index([servicePartnerId])
+  @@index([active])
+  @@index([servicePartnerId, deletedAt])
+}
+
 model Item {
   id               String   @id @default(uuid())
   servicePartnerId String
   categoryId       String
+  subcategoryId    String?
+  uomId            String?
   code             String
   name             String
   unit             String
@@ -693,6 +740,8 @@ model Item {
 
   servicePartner ServicePartner @relation(fields: [servicePartnerId], references: [id])
   category       Category       @relation(fields: [categoryId], references: [id])
+  subcategory    Subcategory?   @relation(fields: [subcategoryId], references: [id])
+  uom            Uom?           @relation(fields: [uomId], references: [id])
 
   rateCardLines             RateCardLine[]
   quotationItems            QuotationItem[]
@@ -708,6 +757,8 @@ model Item {
   @@unique([servicePartnerId, code])
   @@index([servicePartnerId])
   @@index([categoryId])
+  @@index([subcategoryId])
+  @@index([uomId])
   @@index([active])
 }
 

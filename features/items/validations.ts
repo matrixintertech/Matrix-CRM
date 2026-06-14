@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ALL_SERVICE_PARTNERS_OPTION } from "@/lib/service-partners/constants";
+
 const optionalString = (max: number) =>
   z.preprocess(
     (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -23,11 +25,15 @@ const booleanFromForm = z.preprocess((value) => {
 }, z.boolean());
 
 export const itemUpsertSchema = z.object({
-  servicePartnerId: z.string().uuid(),
+  servicePartnerId: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.union([z.string().uuid(), z.literal(ALL_SERVICE_PARTNERS_OPTION)]).optional()
+  ),
   categoryId: z.string().uuid(),
+  subcategoryId: z.string().uuid(),
+  uomId: z.string().uuid(),
   code: z.string().trim().min(2).max(40),
   name: z.string().trim().min(2).max(180),
-  unit: z.string().trim().min(1).max(40),
   description: optionalString(300),
   active: booleanFromForm.default(true),
 });

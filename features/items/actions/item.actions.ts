@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import {
   createItem,
+  createItemForAllServicePartners,
   getItemById,
   getServicePartnerIdForItemWrite,
   softDeleteItem,
@@ -16,6 +17,7 @@ import { itemActiveSchema, itemUpsertSchema } from "@/features/items/validations
 import { logActivity } from "@/lib/activity/activity-log";
 import { requirePermission } from "@/lib/auth/rbac";
 import { requireTenantAccess } from "@/lib/auth/tenant";
+import { ALL_SERVICE_PARTNERS_OPTION } from "@/lib/service-partners/constants";
 import { getSafeRedirectPath } from "@/lib/utils/safe-redirect";
 
 function getFormString(formData: FormData, key: string) {
@@ -27,9 +29,10 @@ function parseItemInput(formData: FormData) {
   return itemUpsertSchema.safeParse({
     servicePartnerId: getFormString(formData, "servicePartnerId"),
     categoryId: getFormString(formData, "categoryId"),
+    subcategoryId: getFormString(formData, "subcategoryId"),
+    uomId: getFormString(formData, "uomId"),
     code: getFormString(formData, "code"),
     name: getFormString(formData, "name"),
-    unit: getFormString(formData, "unit"),
     description: getFormString(formData, "description"),
     active: getFormString(formData, "active"),
   });
@@ -40,7 +43,14 @@ function isUniqueConstraintError(error: unknown) {
 }
 
 function isCategoryTenantError(error: unknown) {
-  return error instanceof Error && (error.message.includes("mismatch") || error.message.includes("Category not found"));
+  return (
+    error instanceof Error &&
+    (error.message.includes("mismatch") ||
+      error.message.includes("Category not found") ||
+      error.message.includes("Subcategory") ||
+      error.message.includes("UOM") ||
+      error.message.includes("taxonomy"))
+  );
 }
 
 function revalidateItemPaths(itemId: string) {
@@ -54,6 +64,38 @@ export async function createItemAction(formData: FormData) {
 
   if (!parsed.success) {
     redirect("/items/new?error=validation");
+  }
+
+  if (parsed.data.servicePartnerId === ALL_SERVICE_PARTNERS_OPTION) {
+    if (!session.user.isSuperAdmin) {
+      redirect("/items/new?error=service-partner");
+    }
+
+    try {
+      const items = await createItemForAllServicePartners(session, parsed.data);
+      await Promise.all(
+        items.map((item) =>
+          logActivity({
+            action: "item.create",
+            module: "items",
+            entityType: "OTHER",
+            entityId: item.id,
+            message: "Item created",
+            servicePartnerId: item.servicePartnerId,
+          })
+        )
+      );
+      revalidatePath("/items");
+      redirect("/items?success=created-all");
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        redirect("/items/new?error=duplicate");
+      }
+      if (isCategoryTenantError(error)) {
+        redirect("/items/new?error=mismatch");
+      }
+      throw error;
+    }
   }
 
   const servicePartnerId = getServicePartnerIdForItemWrite(session, parsed.data.servicePartnerId);
@@ -92,6 +134,10 @@ export async function updateItemAction(id: string, formData: FormData) {
 
   if (!parsed.success) {
     redirect(`/items/${id}/edit?error=validation`);
+  }
+
+  if (!parsed.data.servicePartnerId || parsed.data.servicePartnerId === ALL_SERVICE_PARTNERS_OPTION) {
+    redirect(`/items/${id}/edit?error=service-partner`);
   }
 
   const servicePartnerId = getServicePartnerIdForItemWrite(session, parsed.data.servicePartnerId);
@@ -178,4 +224,3 @@ export async function deleteItemAction(id: string, formData: FormData) {
   revalidateItemPaths(id);
   redirect(getSafeRedirectPath(formData.get("redirectTo"), "/items?success=deleted"));
 }
-
